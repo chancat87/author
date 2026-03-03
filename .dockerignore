@@ -1,0 +1,15 @@
+node_modules
+.next
+dist
+.git
+.gitignore
+*.md
+.env
+.env.local
+.env.*.local
+electron
+afterPack.js
+.vscode
+.idea
+.antigravityignore
+.agents

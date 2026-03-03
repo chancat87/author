@@ -1,0 +1,29 @@
+# ============================================
+#  Author App — Docker Compose
+# ============================================
+#
+#  快速开始:
+#    1. 复制 .env.example 为 .env（可选，配置 API Key）
+#    2. docker compose up -d
+#    3. 浏览器访问 http://localhost:3000
+#
+#  更新:
+#    docker compose down && docker compose up -d --build
+#
+# ============================================
+
+services:
+  author-app:
+    build: .
+    container_name: author-studio
+    ports:
+      - "${PORT:-3000}:3000"
+    env_file:
+      - path: .env
+        required: false
+      - path: .env.local
+        required: false
+    environment:
+      - NODE_ENV=production
+      - HOSTNAME=0.0.0.0
+    restart: unless-stopped

@@ -276,7 +276,6 @@ export default function SettingsPanel() {
                 workName: workNode.name,
                 exportedAt: new Date().toISOString(),
                 nodes: exportNodes,
-                bookInfo: projectSettings.bookInfo || {},
                 writingMode: projectSettings.writingMode || 'webnovel',
             };
             await downloadFile(JSON.stringify(data, null, 2), `${baseName}-设定集.json`, 'application/json');
@@ -315,12 +314,22 @@ export default function SettingsPanel() {
                 if (!workNode) { alert(t('settings.importNoWork')); return; }
 
                 const restorePS = () => {
-                    if (data.bookInfo || data.writingMode) {
+                    if (data.writingMode) {
                         const ps = getProjectSettings();
-                        if (data.bookInfo) ps.bookInfo = data.bookInfo;
                         if (data.writingMode) ps.writingMode = data.writingMode;
                         saveProjectSettings(ps); setSettings(ps);
                         if (data.writingMode) { setWritingModeState(data.writingMode); setWritingMode(data.writingMode); }
+                    }
+                    // 兼容旧版导出：如果 JSON 中有 bookInfo，写入作品的 bookInfo 节点
+                    if (data.bookInfo && Object.values(data.bookInfo).some(v => v)) {
+                        const importedNodes = data.nodes;
+                        const importedWork = importedNodes.find(n => n.type === 'work');
+                        if (importedWork) {
+                            const biNode = importedNodes.find(n => n.parentId === importedWork.id && n.category === 'bookInfo');
+                            if (biNode && (!biNode.content || Object.keys(biNode.content).length === 0)) {
+                                biNode.content = data.bookInfo;
+                            }
+                        }
                     }
                 };
                 const existingWork = nodes.find(n => n.type === 'work' && n.name === workNode.name);
@@ -748,7 +757,7 @@ export default function SettingsPanel() {
                             <div style={{ flex: 1, overflow: 'auto' }}>
                                 {showBookInfo ? (
                                     <div style={{ padding: '20px 24px' }}>
-                                        <BookInfoForm data={settings.bookInfo} onChange={data => handleSettingsSave('bookInfo', data)} />
+                                        <BookInfoForm data={selectedNode.content || {}} onChange={data => handleUpdateNode(selectedNode.id, { content: data })} />
                                     </div>
                                 ) : (
                                     <SettingsItemEditor

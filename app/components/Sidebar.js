@@ -7,6 +7,7 @@ import { createChapter, deleteChapter, updateChapter, saveChapters, getChapters 
 import { exportProject, importProject, importWork, exportWorkAsTxt, exportWorkAsMarkdown, exportWorkAsDocx, exportWorkAsEpub, exportWorkAsPdf } from '../lib/project-io';
 import { WRITING_MODES, getAllWorks, getSettingsNodes, createWorkNode, saveSettingsNodes, setActiveWorkId as setActiveWorkIdSetting } from '../lib/settings';
 import { detectConflicts, mergeChapters } from '../lib/chapter-number';
+import { estimateTokens } from '../lib/context-engine';
 
 export default function Sidebar({ onOpenHelp, onToggle, editorRef }) {
     const {
@@ -331,7 +332,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef }) {
                                                 <span className="gdocs-tab-title">{ch.title}</span>
                                                 {(ch.wordCount || 0) > 0 && (
                                                     <span style={{ display: 'block', fontSize: '10px', color: 'var(--text-muted)', marginTop: '1px' }}>
-                                                        {ch.wordCount.toLocaleString()}字 · ~{Math.ceil((ch.wordCount || 0) * 1.5).toLocaleString()} tokens
+                                                        {ch.wordCount.toLocaleString()}字 · ~{estimateTokens((ch.content || '').replace(/<[^>]*>/g, '')).toLocaleString()} tokens
                                                     </span>
                                                 )}
                                             </span>
