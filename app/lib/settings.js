@@ -390,6 +390,7 @@ export async function getSettingsNodes() {
         nodes = await migrateToWorkStructure(nodes);
         nodes = await migrateGlobalRulesToWork(nodes);
         nodes = await ensureWorkExists(nodes);
+        nodes = await migrateBookInfoToNode(nodes);
         return nodes;
     } catch {
         return getDefaultNodes();
@@ -659,6 +660,43 @@ export async function getNodePath(id) {
         current = current.parentId ? nodes.find(n => n.id === current.parentId) : null;
     }
     return path;
+}
+
+// ==================== bookInfo 迁移到作品节点 ====================
+
+/**
+ * 将全局 settings.bookInfo 迁移到默认作品的 bookInfo 节点 content 中
+ * 只执行一次：检查全局 bookInfo 是否有内容，迁移后清空
+ */
+async function migrateBookInfoToNode(nodes) {
+    if (typeof window === 'undefined') return nodes;
+    try {
+        const settings = getProjectSettings();
+        const bi = settings.bookInfo;
+        // 检查是否有需要迁移的全局 bookInfo 数据
+        if (!bi || !Object.values(bi).some(v => v)) return nodes;
+
+        // 找到当前活动作品（或默认作品）的 bookInfo 节点
+        const activeWid = getActiveWorkId();
+        const targetWorkId = activeWid || nodes.find(n => n.type === 'work')?.id;
+        if (!targetWorkId) return nodes;
+
+        const biNode = nodes.find(n => n.parentId === targetWorkId && n.category === 'bookInfo' && n.type === 'special');
+        if (!biNode) return nodes;
+
+        // 只在节点内容为空时迁移（避免覆盖已有数据）
+        if (!biNode.content || Object.keys(biNode.content).length === 0) {
+            biNode.content = { ...bi };
+            await saveSettingsNodes(nodes);
+        }
+
+        // 清空全局 bookInfo，防止重复迁移
+        settings.bookInfo = {};
+        saveProjectSettings(settings);
+    } catch (e) {
+        console.warn('[Settings] bookInfo migration failed:', e);
+    }
+    return nodes;
 }
 
 // ==================== 旧数据迁移 ====================

@@ -10,12 +10,44 @@ import { getEmbedding, cosineSimilarity } from './embeddings';
 export const INPUT_TOKEN_BUDGET = 200000;  // 输入预算（发送给AI的上下文）
 export const OUTPUT_TOKEN_BUDGET = 6000;   // 输出预算（AI生成的回复长度，约4500字）
 
-// 中文 token 估算：约 1.5 个中文字符 = 1 个 token
+// 各 provider 的中文 token 比例（中文字符数 / token 数）
+// 比例越大 = tokenizer 越高效 = 同样文字消耗越少 token
+const PROVIDER_CN_RATIO = {
+    // 国产模型 — tokenizer 对中文优化，约 2.5~3 字/token
+    zhipu: 2.5,
+    deepseek: 2.5,
+    siliconflow: 2.5,
+    volcengine: 2.5,
+    moonshot: 2.5,
+    // 西方模型 — 中文效率较低
+    openai: 1.5,
+    'openai-responses': 1.5,
+    claude: 1.8,
+    // Gemini — 中间水平
+    gemini: 2.0,
+    'gemini-native': 2.0,
+    // 默认 / 自定义
+    custom: 2.0,
+};
+
+// 获取当前 provider 的中文 token 比例
+function getCnRatio() {
+    try {
+        const settings = getProjectSettings();
+        const provider = settings.apiConfig?.provider || 'custom';
+        return PROVIDER_CN_RATIO[provider] || 2.0;
+    } catch {
+        return 2.0;
+    }
+}
+
+// 基于当前 provider 的 token 估算
 export function estimateTokens(text) {
     if (!text) return 0;
+    const cnRatio = getCnRatio();
     const chineseChars = (text.match(/[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/g) || []).length;
     const otherChars = text.length - chineseChars;
-    return Math.ceil(chineseChars / 1.5 + otherChars / 4);
+    return Math.ceil(chineseChars / cnRatio + otherChars / 4);
 }
 
 // 上下文模块优先级（数字越小越优先）
@@ -103,8 +135,9 @@ export async function getContextItems(activeChapterId) {
         }
     }
 
-    // 作品信息
-    const bookInfo = settings.bookInfo;
+    // 作品信息 — 从当前作品的 bookInfo 特殊节点读取
+    const bookInfoNode = nodes.find(n => n.category === 'bookInfo' && n.type === 'special');
+    const bookInfo = bookInfoNode?.content || {};
     if (bookInfo && (bookInfo.title || bookInfo.author || bookInfo.genre || bookInfo.synopsis)) {
         items.push({
             id: 'bookinfo',
@@ -231,9 +264,13 @@ export async function buildContext(activeChapterId, selectedText, selectedIds = 
 
     const writingMode = getWritingMode();
 
+    // 从当前作品的 bookInfo 特殊节点读取
+    const bookInfoNode = nodes.find(n => n.category === 'bookInfo' && n.type === 'special');
+    const bookInfoData = bookInfoNode?.content || {};
+
     // 先构建各模块的原始文本
     const rawModules = {
-        bookInfo: (!selectedIds || selectedIds.has('bookinfo')) ? buildBookInfoContext(settings.bookInfo) : '',
+        bookInfo: (!selectedIds || selectedIds.has('bookinfo')) ? buildBookInfoContext(bookInfoData) : '',
         characters: buildCharactersContext(finalItemNodes.filter(n => n.category === 'character')),
         locations: buildLocationsContext(finalItemNodes.filter(n => n.category === 'location'), nodes),
         worldbuilding: buildWorldContext(finalItemNodes.filter(n => n.category === 'world'), nodes),
@@ -375,9 +412,9 @@ export async function getContextPreview(activeChapterId, selectedText) {
         {
             key: 'bookInfo',
             label: '📖 作品信息',
-            count: settings.bookInfo?.title ? 1 : 0,
+            count: (() => { const bi = nodes.find(n => n.category === 'bookInfo' && n.type === 'special'); return bi?.content?.title ? 1 : 0; })(),
             totalCount: 1,
-            tokens: estimateTokens(buildBookInfoContext(settings.bookInfo)),
+            tokens: (() => { const bi = nodes.find(n => n.category === 'bookInfo' && n.type === 'special'); return estimateTokens(buildBookInfoContext(bi?.content || {})); })(),
             priority: PRIORITY.bookInfo,
         },
         {

@@ -1,0 +1,46 @@
+# ============================================
+#  自动构建并发布 Docker 镜像到 Docker Hub
+# ============================================
+#  触发条件: 发布 Release 或手动触发
+#  需要在 GitHub Secrets 中配置:
+#    - DOCKERHUB_USERNAME
+#    - DOCKERHUB_TOKEN
+# ============================================
+
+name: Docker Publish
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract version from package.json
+        id: version
+        run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            yuanshijiloong/author:latest
+            yuanshijiloong/author:${{ steps.version.outputs.VERSION }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
