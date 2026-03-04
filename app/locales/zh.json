@@ -469,7 +469,11 @@
         "maxOutputTokensDesc": "模型单次回复的最大 token 数",
         "reasoningEffort": "思考层级",
         "reasoningAuto": "自动（不干预）",
-        "reasoningEffortDesc": "控制模型的推理深度，仅对支持推理的模型生效"
+        "reasoningEffortDesc": "控制模型的推理深度，仅对支持推理的模型生效",
+        "balance": "API 余额",
+        "balanceQuery": "查询余额",
+        "balanceQuerying": "查询中…",
+        "balanceNotSupported": "当前供应商不支持余额查询"
     },
     "preferences": {
         "intro": "在这里可以随时更改应用程序的语言和视觉主题偏好。所有的更改都会实时生效并保存在本地。",

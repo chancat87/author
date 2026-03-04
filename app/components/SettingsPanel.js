@@ -810,6 +810,8 @@ const PROVIDERS = [
     { key: 'volcengine', label: '火山引擎 (豆包)', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', models: [] },
     { key: 'moonshot', label: 'Moonshot (Kimi)', baseUrl: 'https://api.moonshot.cn/v1', models: ['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'] },
     { key: 'custom', label: '自定义 (OpenAI兼容)', baseUrl: '', models: [] },
+    { key: 'custom-gemini', label: '自定义 (Gemini格式)', baseUrl: '', models: [] },
+    { key: 'custom-claude', label: '自定义 (Claude格式)', baseUrl: '', models: [] },
 ];
 
 function PreferencesForm() {
@@ -880,6 +882,7 @@ function ApiConfigForm({ data, onChange }) {
     const [fetchedModels, setFetchedModels] = useState(null);
     const [fetchedEmbedModels, setFetchedEmbedModels] = useState(null);
     const [rebuildStatus, setRebuildStatus] = useState(null); // null | 'loading' | {done, total, failed}
+    const [balanceInfo, setBalanceInfo] = useState(null); // null | 'loading' | { supported, balance, currency, ... } | { error }
     const [savedProfiles, setSavedProfiles] = useState([]);
     const [profileName, setProfileName] = useState('');
     const [showSaveInput, setShowSaveInput] = useState(false);
@@ -895,6 +898,7 @@ function ApiConfigForm({ data, onChange }) {
     const persistProfiles = (profiles) => {
         setSavedProfiles(profiles);
         localStorage.setItem('author-api-profiles', JSON.stringify(profiles));
+        import('../lib/persistence').then(m => m.persistSet('author-api-profiles', profiles).catch(() => { }));
     };
 
     const handleSaveProfile = () => {
@@ -919,6 +923,7 @@ function ApiConfigForm({ data, onChange }) {
         setTestStatus(null);
         setFetchedModels(null);
         setFetchedEmbedModels(null);
+        setBalanceInfo(null);
     };
 
     const handleTestConnection = async () => {
@@ -966,7 +971,27 @@ function ApiConfigForm({ data, onChange }) {
     };
 
     const currentProvider = PROVIDERS.find(p => p.key === data.provider) || PROVIDERS[7];
-    const isCustom = data.provider === 'custom';
+    const isCustom = ['custom', 'custom-gemini', 'custom-claude'].includes(data.provider);
+
+    // 余额查询
+    const handleQueryBalance = async () => {
+        setBalanceInfo('loading');
+        try {
+            const res = await fetch('/api/balance', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ provider: data.provider, apiKey: data.apiKey, baseUrl: data.baseUrl }),
+            });
+            const result = await res.json();
+            if (res.ok) {
+                setBalanceInfo(result);
+            } else {
+                setBalanceInfo({ error: result.error || '查询失败' });
+            }
+        } catch (e) {
+            setBalanceInfo({ error: e.message || '网络错误' });
+        }
+    };
 
     return (
         <div>
@@ -1020,6 +1045,52 @@ function ApiConfigForm({ data, onChange }) {
             <FieldInput label="API Key" value={data.apiKey} onChange={v => update('apiKey', v)} placeholder={t('apiConfig.apiKeyPlaceholder')} secret />
             {data.apiKey && <div style={{ fontSize: 11, color: 'var(--success)', marginTop: -10, marginBottom: 10 }}>{t('apiConfig.apiKeyConfigured')}</div>}
 
+            {/* 余额查询卡片 */}
+            {data.apiKey && (
+                <div style={{
+                    marginBottom: 14, padding: '10px 14px', borderRadius: 'var(--radius-md)',
+                    background: 'var(--bg-secondary)', border: '1px solid var(--border-light)',
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                        <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}>💰 {t('apiConfig.balance') || 'API 余额'}</span>
+                        <button
+                            className="btn btn-ghost btn-sm"
+                            style={{ fontSize: 11, padding: '3px 10px' }}
+                            onClick={handleQueryBalance}
+                            disabled={balanceInfo === 'loading'}
+                        >
+                            {balanceInfo === 'loading' ? (t('apiConfig.balanceQuerying') || '查询中...') : (t('apiConfig.balanceQuery') || '查询余额')}
+                        </button>
+                    </div>
+                    {balanceInfo && balanceInfo !== 'loading' && (
+                        <div style={{ marginTop: 8 }}>
+                            {balanceInfo.error ? (
+                                <div style={{ fontSize: 12, color: 'var(--error)' }}>❌ {balanceInfo.error}</div>
+                            ) : balanceInfo.supported === false ? (
+                                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>⚠️ {balanceInfo.message || t('apiConfig.balanceNotSupported') || '当前供应商不支持余额查询'}</div>
+                            ) : (
+                                <div>
+                                    <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--accent)', lineHeight: 1.2 }}>
+                                        {balanceInfo.currency === 'CNY' ? '¥' : '$'}{balanceInfo.balance?.toFixed(2)}
+                                        <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-muted)', marginLeft: 6 }}>{balanceInfo.currency}</span>
+                                    </div>
+                                    {balanceInfo.detail && (
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', marginTop: 6, fontSize: 11, color: 'var(--text-muted)' }}>
+                                            {balanceInfo.detail.granted != null && balanceInfo.detail.granted > 0 && <span>赠送: {balanceInfo.detail.granted.toFixed(2)}</span>}
+                                            {balanceInfo.detail.topped_up != null && balanceInfo.detail.topped_up > 0 && <span>充值: {balanceInfo.detail.topped_up.toFixed(2)}</span>}
+                                            {balanceInfo.detail.used != null && <span>已用: {balanceInfo.detail.used.toFixed(2)}</span>}
+                                            {balanceInfo.detail.total_limit != null && <span>额度: {balanceInfo.detail.total_limit.toFixed(2)}</span>}
+                                            {balanceInfo.detail.remaining != null && balanceInfo.detail.total_limit != null && <span>剩余: {balanceInfo.detail.remaining.toFixed(2)}</span>}
+                                        </div>
+                                    )}
+                                    {balanceInfo.source && <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>via {balanceInfo.source}</div>}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+
             <FieldInput label={isCustom ? t('apiConfig.apiAddress') : t('apiConfig.apiAddressAuto')} value={data.baseUrl} onChange={v => update('baseUrl', v)} placeholder={t('apiConfig.apiAddressPlaceholder')} />
 
             {/* 模型选择 */}
@@ -1033,7 +1104,7 @@ function ApiConfigForm({ data, onChange }) {
                             </button>
                         )}
                     </label>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, ...(Array.isArray(fetchedModels) && fetchedModels.length > 20 ? { maxHeight: 200, overflowY: 'auto', padding: 4, border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)' } : {}) }}>
                         {(Array.isArray(fetchedModels) ? fetchedModels.map(m => m.id) : currentProvider.models).map(m => (
                             <button key={m} style={{ padding: '5px 12px', border: data.model === m ? '2px solid var(--accent)' : '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', background: data.model === m ? 'var(--accent-light)' : 'var(--bg-primary)', cursor: 'pointer', fontSize: 12, color: data.model === m ? 'var(--accent)' : 'var(--text-primary)', fontFamily: 'monospace' }} onClick={() => update('model', m)}>{m}</button>
                         ))}

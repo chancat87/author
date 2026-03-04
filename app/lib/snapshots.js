@@ -1,4 +1,4 @@
-import { get, set } from 'idb-keyval';
+import { persistGet, persistSet } from './persistence';
 import { getChapters, saveChapters } from './storage';
 import { getSettingsNodes, saveSettingsNodes, getActiveWorkId } from './settings';
 
@@ -10,7 +10,7 @@ const SNAPSHOTS_KEY = 'author-snapshots';
  */
 export async function getSnapshots() {
     try {
-        const snapshots = await get(SNAPSHOTS_KEY);
+        const snapshots = await persistGet(SNAPSHOTS_KEY);
         return Array.isArray(snapshots) ? snapshots : [];
     } catch (e) {
         console.error('Failed to get snapshots:', e);
@@ -57,7 +57,7 @@ export async function createSnapshot(label, type = 'auto') {
             finalSnapshots = existing.filter(s => !toRemove.includes(s.id));
         }
 
-        await set(SNAPSHOTS_KEY, finalSnapshots);
+        await persistSet(SNAPSHOTS_KEY, finalSnapshots);
         return snapshot;
     } catch (e) {
         console.error('Failed to create snapshot:', e);
@@ -96,6 +96,6 @@ export async function restoreSnapshot(snapshotId) {
 export async function deleteSnapshot(snapshotId) {
     const snapshots = await getSnapshots();
     const remaining = snapshots.filter(s => s.id !== snapshotId);
-    await set(SNAPSHOTS_KEY, remaining);
+    await persistSet(SNAPSHOTS_KEY, remaining);
     return remaining;
 }

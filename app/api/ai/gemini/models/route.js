@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-// 拉取 Gemini 可用模型列表
+// 拉取 Gemini 可用模型列表（支持分页，兼容中转）
 export async function POST(request) {
     try {
         const { apiKey, baseUrl } = await request.json();
@@ -13,41 +13,74 @@ export async function POST(request) {
         }
 
         const base = (baseUrl || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/$/, '');
-        const url = `${base}/models?key=${apiKey}`;
+        let allModels = [];
+        let pageToken = '';
 
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' },
-        });
+        // 循环分页拉取
+        do {
+            const url = `${base}/models?key=${apiKey}&pageSize=1000${pageToken ? `&pageToken=${pageToken}` : ''}`;
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('拉取模型列表失败:', response.status, errorText);
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: { 'Content-Type': 'application/json' },
+            });
 
-            if (response.status === 401 || response.status === 403) {
-                return NextResponse.json(
-                    { error: 'API Key 无效或无权限' },
-                    { status: 401 }
-                );
+            if (!response.ok) {
+                // 首页失败时，不带 pageSize 重试（有些中转不支持分页参数）
+                if (allModels.length === 0) {
+                    const fallbackUrl = `${base}/models?key=${apiKey}`;
+                    const fallbackRes = await fetch(fallbackUrl, {
+                        method: 'GET',
+                        headers: { 'Content-Type': 'application/json' },
+                    });
+                    if (!fallbackRes.ok) {
+                        const errorText = await fallbackRes.text();
+                        console.error('拉取模型列表失败:', fallbackRes.status, errorText);
+                        if (fallbackRes.status === 401 || fallbackRes.status === 403) {
+                            return NextResponse.json(
+                                { error: 'API Key 无效或无权限' },
+                                { status: 401 }
+                            );
+                        }
+                        return NextResponse.json(
+                            { error: `拉取失败(${fallbackRes.status})` },
+                            { status: fallbackRes.status }
+                        );
+                    }
+                    const fallbackData = await fallbackRes.json();
+                    allModels = extractModelArray(fallbackData);
+                    break;
+                }
+                break;
             }
-            return NextResponse.json(
-                { error: `拉取失败(${response.status})` },
-                { status: response.status }
-            );
-        }
 
-        const data = await response.json();
+            const data = await response.json();
+            allModels = allModels.concat(extractModelArray(data));
+            pageToken = data.nextPageToken || '';
+        } while (pageToken);
 
         // 过滤出支持 generateContent 的模型
-        const models = (data.models || [])
-            .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
-            .map(m => ({
-                id: m.name?.replace('models/', '') || m.name,
-                displayName: m.displayName || m.name,
-                description: m.description || '',
-                inputTokenLimit: m.inputTokenLimit,
-                outputTokenLimit: m.outputTokenLimit,
-            }))
+        // 如果中转没有返回 supportedGenerationMethods，则保留全部模型
+        const hasCapabilityInfo = allModels.some(m => m.supportedGenerationMethods?.length > 0);
+
+        let models;
+        if (hasCapabilityInfo) {
+            models = allModels.filter(m =>
+                !m.supportedGenerationMethods ||
+                m.supportedGenerationMethods.includes('generateContent')
+            );
+        } else {
+            models = allModels;
+        }
+
+        models = models.map(m => ({
+            id: (m.name?.replace('models/', '') || m.id || m.name || '').trim(),
+            displayName: m.displayName || m.display_name || m.name?.replace('models/', '') || m.id || '',
+            description: m.description || '',
+            inputTokenLimit: m.inputTokenLimit,
+            outputTokenLimit: m.outputTokenLimit,
+        }))
+            .filter(m => m.id)
             .sort((a, b) => a.id.localeCompare(b.id));
 
         return NextResponse.json({ models });
@@ -59,4 +92,12 @@ export async function POST(request) {
             { status: 500 }
         );
     }
+}
+
+// 从不同格式的响应中提取模型数组
+function extractModelArray(data) {
+    if (Array.isArray(data.models)) return data.models;
+    if (Array.isArray(data.data)) return data.data;
+    if (Array.isArray(data)) return data;
+    return [];
 }

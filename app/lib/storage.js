@@ -1,6 +1,8 @@
-// 本地存储工具 - 使用 IndexedDB 管理核心数据 (章节、摘要)
+// 本地存储工具 - 使用持久化适配器管理核心数据 (章节、摘要)
+// 优先服务端文件系统，fallback 到浏览器 IndexedDB
 // 章节按作品(workId)隔离存储
-import { get, set, del } from 'idb-keyval';
+
+import { persistGet, persistSet, persistDel } from './persistence';
 
 const LEGACY_STORAGE_KEY = 'author-chapters';
 
@@ -20,25 +22,14 @@ export function generateId() {
 export async function migrateGlobalChapters(workId) {
     if (typeof window === 'undefined' || !workId) return;
     try {
-        const perWorkData = await get(getStorageKey(workId));
+        const perWorkData = await persistGet(getStorageKey(workId));
         if (perWorkData) return; // 该作品已有数据，不迁移
 
-        const globalData = await get(LEGACY_STORAGE_KEY);
-        if (!globalData || !Array.isArray(globalData) || globalData.length === 0) {
-            // 也检查 localStorage fallback
-            const legacyLocal = localStorage.getItem(LEGACY_STORAGE_KEY);
-            if (legacyLocal) {
-                const parsed = JSON.parse(legacyLocal);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    await set(getStorageKey(workId), parsed);
-                    localStorage.removeItem(LEGACY_STORAGE_KEY);
-                }
-            }
-            return;
+        const globalData = await persistGet(LEGACY_STORAGE_KEY);
+        if (globalData && Array.isArray(globalData) && globalData.length > 0) {
+            await persistSet(getStorageKey(workId), globalData);
+            await persistDel(LEGACY_STORAGE_KEY);
         }
-        // 剪切到新 key
-        await set(getStorageKey(workId), globalData);
-        await del(LEGACY_STORAGE_KEY);
     } catch (e) {
         console.warn('[迁移] 章节迁移失败：', e);
     }
@@ -49,7 +40,7 @@ export async function getChapters(workId) {
     if (typeof window === 'undefined') return [];
     const key = getStorageKey(workId);
     try {
-        let chapters = await get(key);
+        let chapters = await persistGet(key);
         if (!chapters) {
             chapters = [];
         }
@@ -62,7 +53,7 @@ export async function getChapters(workId) {
 // 保存所有章节 (Async)
 export async function saveChapters(chapters, workId) {
     if (typeof window === 'undefined') return;
-    await set(getStorageKey(workId), chapters);
+    await persistSet(getStorageKey(workId), chapters);
 }
 
 // 创建新章节 (Async)
@@ -166,14 +157,7 @@ const SUMMARY_PREFIX = 'author-chapter-summary-';
 export async function getChapterSummary(id) {
     if (typeof window === 'undefined') return null;
     try {
-        let summary = await get(SUMMARY_PREFIX + id);
-        if (!summary) {
-            // Fallback
-            summary = localStorage.getItem(SUMMARY_PREFIX + id);
-            if (summary) {
-                await set(SUMMARY_PREFIX + id, summary);
-            }
-        }
+        const summary = await persistGet(SUMMARY_PREFIX + id);
         return summary || null;
     } catch {
         return null;
@@ -183,5 +167,5 @@ export async function getChapterSummary(id) {
 // 保存章节摘要 (Async)
 export async function saveChapterSummary(id, summary) {
     if (typeof window === 'undefined') return;
-    await set(SUMMARY_PREFIX + id, summary);
+    await persistSet(SUMMARY_PREFIX + id, summary);
 }

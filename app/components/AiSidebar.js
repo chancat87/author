@@ -294,9 +294,9 @@ export default function AiSidebar({ onInsertText }) {
 
         try {
             const { apiConfig } = getProjectSettings();
-            const apiEndpoint = apiConfig?.provider === 'gemini-native' ? '/api/ai/gemini'
+            const apiEndpoint = ['gemini-native', 'custom-gemini'].includes(apiConfig?.provider) ? '/api/ai/gemini'
                 : apiConfig?.provider === 'openai-responses' ? '/api/ai/responses'
-                    : apiConfig?.provider === 'claude' ? '/api/ai/claude'
+                    : ['claude', 'custom-claude'].includes(apiConfig?.provider) ? '/api/ai/claude'
                         : '/api/ai';
 
             const context = await buildContext(activeChapterId, text, contextSelection.size > 0 ? contextSelection : null);
@@ -361,9 +361,9 @@ export default function AiSidebar({ onInsertText }) {
 
         try {
             const { apiConfig } = getProjectSettings();
-            const apiEndpoint = apiConfig?.provider === 'gemini-native' ? '/api/ai/gemini'
+            const apiEndpoint = ['gemini-native', 'custom-gemini'].includes(apiConfig?.provider) ? '/api/ai/gemini'
                 : apiConfig?.provider === 'openai-responses' ? '/api/ai/responses'
-                    : apiConfig?.provider === 'claude' ? '/api/ai/claude'
+                    : ['claude', 'custom-claude'].includes(apiConfig?.provider) ? '/api/ai/claude'
                         : '/api/ai';
 
             const context = await buildContext(activeChapterId, userMsg.content, contextSelection.size > 0 ? contextSelection : null);

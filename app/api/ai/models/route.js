@@ -13,13 +13,13 @@ export async function POST(request) {
         }
 
         // Gemini 原生格式
-        if (provider === 'gemini-native') {
+        if (['gemini-native', 'custom-gemini'].includes(provider)) {
             return await fetchGeminiModels(apiKey, baseUrl, embedOnly);
         }
 
-        // Claude/Anthropic（无 /models 端点，返回预定义列表）
-        if (provider === 'claude') {
-            return fetchClaudeModels();
+        // Claude/Anthropic（多策略拉取）
+        if (['claude', 'custom-claude'].includes(provider)) {
+            return await fetchClaudeModels(apiKey, baseUrl);
         }
 
         // OpenAI 兼容格式（适用于所有其他供应商）
@@ -34,36 +34,87 @@ export async function POST(request) {
     }
 }
 
-// Gemini 原生格式拉取模型
+// Gemini 原生格式拉取模型 — 支持分页，兼容中转
 async function fetchGeminiModels(apiKey, baseUrl, embedOnly) {
     const base = (baseUrl || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/$/, '');
-    const url = `${base}/models?key=${apiKey}`;
+    let allModels = [];
+    let pageToken = '';
 
-    const response = await fetch(url, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-    });
+    // 循环分页拉取
+    do {
+        const url = `${base}/models?key=${apiKey}&pageSize=1000${pageToken ? `&pageToken=${pageToken}` : ''}`;
 
-    if (!response.ok) {
-        return handleFetchError(response);
-    }
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' },
+        });
 
-    const data = await response.json();
-    let models = (data.models || []);
+        if (!response.ok) {
+            // 分页请求失败时，尝试不带 pageSize 参数（有些中转不支持）
+            if (allModels.length === 0) {
+                const fallbackUrl = `${base}/models?key=${apiKey}`;
+                const fallbackRes = await fetch(fallbackUrl, {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' },
+                });
+                if (!fallbackRes.ok) {
+                    return handleFetchError(fallbackRes);
+                }
+                const fallbackData = await fallbackRes.json();
+                allModels = extractModelArray(fallbackData);
+                break;
+            }
+            break;
+        }
 
-    if (embedOnly) {
-        models = models.filter(m => m.supportedGenerationMethods?.includes('embedContent'));
-    } else {
-        models = models.filter(m => m.supportedGenerationMethods?.includes('generateContent') || m.supportedGenerationMethods?.includes('embedContent'));
+        const data = await response.json();
+        // 兼容不同中转返回格式：models[] 或 data[]
+        allModels = allModels.concat(extractModelArray(data));
+        pageToken = data.nextPageToken || '';
+    } while (pageToken);
+
+    let models = allModels;
+
+    // 过滤逻辑：有 supportedGenerationMethods 时按能力过滤，没有时全部保留
+    const hasCapabilityInfo = models.some(m => m.supportedGenerationMethods?.length > 0);
+
+    if (hasCapabilityInfo) {
+        if (embedOnly) {
+            models = models.filter(m => m.supportedGenerationMethods?.includes('embedContent'));
+        } else {
+            models = models.filter(m =>
+                !m.supportedGenerationMethods ||
+                m.supportedGenerationMethods.includes('generateContent') ||
+                m.supportedGenerationMethods.includes('embedContent')
+            );
+        }
+    } else if (embedOnly) {
+        // 无能力信息时，按名称匹配嵌入模型
+        models = models.filter(m => {
+            const id = (m.name || m.id || '').toLowerCase();
+            return /embed|text-embed/i.test(id);
+        });
     }
 
     models = models.map(m => ({
-        id: m.name?.replace('models/', '') || m.name,
-        displayName: m.displayName || m.name,
+        id: (m.name?.replace('models/', '') || m.id || m.name || '').trim(),
+        displayName: m.displayName || m.display_name || m.name?.replace('models/', '') || m.id || '',
     }))
+        .filter(m => m.id) // 过滤掉空 ID
         .sort((a, b) => a.id.localeCompare(b.id));
 
     return NextResponse.json({ models });
+}
+
+// 从不同格式的响应中提取模型数组
+function extractModelArray(data) {
+    // Gemini 原生格式: { models: [...] }
+    if (Array.isArray(data.models)) return data.models;
+    // OpenAI 兼容格式: { data: [...] }
+    if (Array.isArray(data.data)) return data.data;
+    // 直接是数组
+    if (Array.isArray(data)) return data;
+    return [];
 }
 
 // OpenAI 兼容格式拉取模型（/v1/models）
@@ -94,7 +145,8 @@ async function fetchOpenAIModels(apiKey, baseUrl, embedOnly) {
     let models = (data.data || []);
 
     if (embedOnly) {
-        models = models.filter(m => /embed/i.test(m.id));
+        // 匹配常见嵌入模型：embed*, bge-*, bce-*, e5-*, gte-* 等
+        models = models.filter(m => /embed|\/bge[-_]|\/bce[-_]|\/e5[-_]|\/gte[-_]|text-embedding/i.test(m.id));
     }
 
     models = models.map(m => ({
@@ -125,9 +177,38 @@ async function handleFetchError(response) {
     );
 }
 
-// Claude/Anthropic 模型列表（预定义，无 API 端点）
-function fetchClaudeModels() {
+// Claude/Anthropic 模型列表 — 多策略拉取
+// 策略1: Anthropic 原生 API（直连 api.anthropic.com）
+// 策略2: OpenAI 兼容格式（中转/代理）
+// 策略3: 预定义列表（兜底）
+async function fetchClaudeModels(apiKey, baseUrl) {
+    const base = (baseUrl || 'https://api.anthropic.com').replace(/\/$/, '');
+
+    // 策略1: 尝试 Anthropic 原生 /v1/models
+    if (apiKey) {
+        try {
+            const models = await tryAnthropicNativeModels(apiKey, base);
+            if (models.length > 0) {
+                return NextResponse.json({ models });
+            }
+        } catch (err) {
+            console.warn('Claude native API failed:', err.message);
+        }
+
+        // 策略2: 尝试 OpenAI 兼容格式 /v1/models（很多中转用这种格式）
+        try {
+            const models = await tryOpenAICompatModels(apiKey, base);
+            if (models.length > 0) {
+                return NextResponse.json({ models });
+            }
+        } catch (err) {
+            console.warn('Claude OpenAI-compat API failed:', err.message);
+        }
+    }
+
+    // 策略3: 预定义列表
     const models = [
+        { id: 'claude-opus-4-20250514', displayName: 'Claude Opus 4' },
         { id: 'claude-sonnet-4-20250514', displayName: 'Claude Sonnet 4' },
         { id: 'claude-3-7-sonnet-20250219', displayName: 'Claude 3.7 Sonnet' },
         { id: 'claude-3-5-haiku-20241022', displayName: 'Claude 3.5 Haiku' },
@@ -137,4 +218,75 @@ function fetchClaudeModels() {
         { id: 'claude-3-haiku-20240307', displayName: 'Claude 3 Haiku' },
     ];
     return NextResponse.json({ models });
+}
+
+// Anthropic 原生格式：x-api-key + anthropic-version header
+async function tryAnthropicNativeModels(apiKey, base) {
+    let allModels = [];
+    let hasMore = true;
+    let afterId = null;
+
+    while (hasMore) {
+        let url = `${base}/v1/models?limit=100`;
+        if (afterId) url += `&after_id=${afterId}`;
+
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'x-api-key': apiKey,
+                'anthropic-version': '2023-06-01',
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) return [];
+
+        const data = await response.json();
+        const pageModels = data.data || [];
+        allModels = allModels.concat(pageModels);
+
+        hasMore = data.has_more === true;
+        if (hasMore && pageModels.length > 0) {
+            afterId = pageModels[pageModels.length - 1].id;
+        } else {
+            hasMore = false;
+        }
+    }
+
+    return allModels.map(m => ({
+        id: m.id,
+        displayName: m.display_name || m.id,
+    })).sort((a, b) => a.id.localeCompare(b.id));
+}
+
+// OpenAI 兼容格式：Bearer token + /v1/models（多数中转使用此格式）
+async function tryOpenAICompatModels(apiKey, base) {
+    // 尝试 /v1/models 和 /models 两种路径
+    for (const path of ['/v1/models', '/models']) {
+        try {
+            const url = `${base}${path}`;
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`,
+                },
+            });
+
+            if (!response.ok) continue;
+
+            const data = await response.json();
+            const rawModels = data.data || [];
+            if (rawModels.length === 0) continue;
+
+            return rawModels.map(m => ({
+                id: m.id,
+                displayName: m.id,
+            })).sort((a, b) => a.id.localeCompare(b.id));
+        } catch {
+            continue;
+        }
+    }
+
+    return [];
 }

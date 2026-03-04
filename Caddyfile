@@ -1,0 +1,6 @@
+# 将 author.example.com 替换为你的域名
+# Replace author.example.com with your domain
+
+author.example.com {
+    reverse_proxy author-app:3000
+}

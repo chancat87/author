@@ -14,7 +14,7 @@ export async function POST(request) {
         }
 
         // Gemini 原生格式的测试
-        if (provider === 'gemini-native') {
+        if (['gemini-native', 'custom-gemini'].includes(provider)) {
             return await testGeminiNative(apiKey, baseUrl, model);
         }
 
@@ -24,7 +24,7 @@ export async function POST(request) {
         }
 
         // Claude/Anthropic 格式的测试
-        if (provider === 'claude') {
+        if (['claude', 'custom-claude'].includes(provider)) {
             return await testClaude(apiKey, baseUrl, model);
         }
 

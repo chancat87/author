@@ -1,0 +1,45 @@
+# ============================================
+#  Author App — Docker Compose（含反向代理）
+# ============================================
+#
+#  带域名访问（自动 HTTPS）:
+#    1. 将 author.example.com 替换为你的域名
+#    2. 确保域名已解析到服务器 IP
+#    3. docker compose -f docker-compose.caddy.yml up -d
+#    4. 浏览器访问 https://你的域名
+#
+# ============================================
+
+services:
+  author-app:
+    image: yuanshijiloong/author:latest
+    container_name: author-studio
+    expose:
+      - "3000"
+    env_file:
+      - path: .env
+        required: false
+      - path: .env.local
+        required: false
+    environment:
+      - NODE_ENV=production
+      - HOSTNAME=0.0.0.0
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: author-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - author-app
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

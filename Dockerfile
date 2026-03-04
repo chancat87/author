@@ -33,6 +33,12 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
+# 创建数据持久化目录
+RUN mkdir -p /app/data && chown -R node:node /app/data
+VOLUME /app/data
+
+USER node
+
 EXPOSE 3000
 
 CMD ["node", "server.js"]

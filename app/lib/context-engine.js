@@ -28,6 +28,8 @@ const PROVIDER_CN_RATIO = {
     'gemini-native': 2.0,
     // 默认 / 自定义
     custom: 2.0,
+    'custom-gemini': 2.0,
+    'custom-claude': 1.8,
 };
 
 // 获取当前 provider 的中文 token 比例

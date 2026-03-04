@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persistSet } from '../lib/persistence';
 
 export const useAppStore = create((set, get) => ({
     // --- Chapter State ---
@@ -41,13 +42,19 @@ export const useAppStore = create((set, get) => ({
     // --- Localization & Theming ---
     language: typeof window !== 'undefined' ? localStorage.getItem('author-lang') || null : null,
     setLanguage: (lang) => set(() => {
-        if (typeof window !== 'undefined') localStorage.setItem('author-lang', lang);
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('author-lang', lang);
+            persistSet('author-lang', lang).catch(() => { });
+        }
         return { language: lang };
     }),
 
     visualTheme: typeof window !== 'undefined' ? localStorage.getItem('author-visual') || null : null,
     setVisualTheme: (vTheme) => set(() => {
-        if (typeof window !== 'undefined') localStorage.setItem('author-visual', vTheme);
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('author-visual', vTheme);
+            persistSet('author-visual', vTheme).catch(() => { });
+        }
         return { visualTheme: vTheme };
     }),
 
@@ -71,7 +78,9 @@ export const useAppStore = create((set, get) => ({
     setContextSelection: (selection) => set((state) => {
         const newSelection = typeof selection === 'function' ? selection(state.contextSelection) : selection;
         if (typeof window !== 'undefined') {
-            localStorage.setItem('author-context-selection', JSON.stringify(Array.from(newSelection)));
+            const arr = Array.from(newSelection);
+            localStorage.setItem('author-context-selection', JSON.stringify(arr));
+            persistSet('author-context-selection', arr).catch(() => { });
         }
         return { contextSelection: newSelection };
     }),

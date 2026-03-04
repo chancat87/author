@@ -223,9 +223,9 @@ export default function Home() {
       const userPrompt = compileUserPrompt(mode, text, instruction);
 
       const { apiConfig } = getProjectSettings();
-      const apiEndpoint = apiConfig?.provider === 'gemini-native' ? '/api/ai/gemini'
+      const apiEndpoint = ['gemini-native', 'custom-gemini'].includes(apiConfig?.provider) ? '/api/ai/gemini'
         : apiConfig?.provider === 'openai-responses' ? '/api/ai/responses'
-          : apiConfig?.provider === 'claude' ? '/api/ai/claude'
+          : ['claude', 'custom-claude'].includes(apiConfig?.provider) ? '/api/ai/claude'
             : '/api/ai';
 
       const res = await fetch(apiEndpoint, {

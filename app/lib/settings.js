@@ -2,7 +2,7 @@
 // 这些信息会在每次AI调用时作为上下文传入，让AI像Cursor一样了解整个项目
 // 基于「叙事引擎」架构 — 支持网络小说、传统文学、剧本/脚本三种创作模式
 
-import { get, set } from 'idb-keyval';
+import { persistGet, persistSet } from './persistence';
 import { getEmbedding } from './embeddings';
 
 const SETTINGS_KEY = 'author-project-settings';
@@ -204,10 +204,12 @@ export function getProjectSettings() {
     }
 }
 
-// 保存项目设定
+// 保存项目设定（同步写 localStorage + 异步写服务端）
 export function saveProjectSettings(settings) {
     if (typeof window === 'undefined') return;
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    // 异步写入服务端（不阻塞 UI）
+    persistSet(SETTINGS_KEY, settings).catch(() => { });
 }
 
 // 添加角色
@@ -345,6 +347,7 @@ export function setActiveWorkId(workId) {
     if (typeof window === 'undefined') return;
     if (workId) {
         localStorage.setItem(ACTIVE_WORK_KEY, workId);
+        persistSet(ACTIVE_WORK_KEY, workId).catch(() => { });
     } else {
         localStorage.removeItem(ACTIVE_WORK_KEY);
     }
@@ -367,24 +370,17 @@ function getDefaultNodes() {
 export async function getSettingsNodes() {
     if (typeof window === 'undefined') return getDefaultNodes();
     try {
-        let nodes = await get(NODES_KEY);
+        let nodes = await persistGet(NODES_KEY);
         if (!nodes) {
-            // 首次使用：尝试从 localStorage fallback 或迁移旧数据
-            const legacyData = localStorage.getItem(NODES_KEY);
-            if (legacyData) {
-                nodes = JSON.parse(legacyData);
-                await set(NODES_KEY, nodes); // 写入 IndexedDB
-            } else {
-                const migrated = await migrateOldSettings();
-                if (migrated) {
-                    nodes = await migrateToWorkStructure(migrated);
-                    return nodes;
-                }
-                const defaults = getDefaultNodes();
-                await saveSettingsNodes(defaults);
-                if (!getActiveWorkId()) setActiveWorkId('work-default');
-                return defaults;
+            const migrated = await migrateOldSettings();
+            if (migrated) {
+                nodes = await migrateToWorkStructure(migrated);
+                return nodes;
             }
+            const defaults = getDefaultNodes();
+            await saveSettingsNodes(defaults);
+            if (!getActiveWorkId()) setActiveWorkId('work-default');
+            return defaults;
         }
 
         nodes = await migrateToWorkStructure(nodes);
@@ -400,7 +396,7 @@ export async function getSettingsNodes() {
 // 保存设定集节点 (Async)
 export async function saveSettingsNodes(nodes) {
     if (typeof window === 'undefined') return;
-    await set(NODES_KEY, nodes);
+    await persistSet(NODES_KEY, nodes);
 }
 
 /**

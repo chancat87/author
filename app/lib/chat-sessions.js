@@ -2,7 +2,7 @@
 
 // ==================== 多会话管理模块 ====================
 
-import { get, set } from 'idb-keyval';
+import { persistGet, persistSet } from './persistence';
 
 const STORAGE_KEY = 'author-chat-sessions';
 
@@ -11,32 +11,24 @@ function generateId(prefix = 'session') {
 }
 
 /**
- * 从 IndexedDB 读取全部会话数据 (Async)
+ * 从持久化存储读取全部会话数据 (Async)
  */
 export async function loadSessionStore() {
     if (typeof window === 'undefined') return { activeSessionId: null, sessions: [] };
     try {
-        let store = await get(STORAGE_KEY);
-        if (!store) {
-            // Fallback: migrate from localStorage
-            const raw = localStorage.getItem(STORAGE_KEY);
-            if (raw) {
-                store = JSON.parse(raw);
-                await set(STORAGE_KEY, store);
-            }
-        }
+        const store = await persistGet(STORAGE_KEY);
         if (store) return store;
     } catch { }
     return { activeSessionId: null, sessions: [] };
 }
 
 /**
- * 保存全部会话数据到 IndexedDB (Async)
+ * 保存全部会话数据到持久化存储 (Async)
  */
 export async function saveSessionStore(store) {
     if (typeof window === 'undefined') return;
     try {
-        await set(STORAGE_KEY, store);
+        await persistSet(STORAGE_KEY, store);
     } catch { }
 }
 

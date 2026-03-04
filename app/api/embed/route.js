@@ -11,7 +11,7 @@ export async function POST(request) {
         const apiKey = isCustomEmbed ? (apiConfig.embedApiKey || apiConfig?.apiKey) : apiConfig?.apiKey;
 
         // 自动识别默认填写或遗留的智谱URL并矫正为对应官方URL
-        let defaultBaseUrl = provider === 'gemini-native' ? 'https://generativelanguage.googleapis.com/v1beta' : 'https://open.bigmodel.cn/api/paas/v4';
+        let defaultBaseUrl = ['gemini-native', 'custom-gemini'].includes(provider) ? 'https://generativelanguage.googleapis.com/v1beta' : 'https://open.bigmodel.cn/api/paas/v4';
 
         let rawBaseUrl;
         if (isCustomEmbed) {
@@ -21,7 +21,7 @@ export async function POST(request) {
             rawBaseUrl = apiConfig?.baseUrl || defaultBaseUrl;
         }
 
-        if (!rawBaseUrl || (provider === 'gemini-native' && rawBaseUrl.includes('open.bigmodel.cn'))) {
+        if (!rawBaseUrl || (['gemini-native', 'custom-gemini'].includes(provider) && rawBaseUrl.includes('open.bigmodel.cn'))) {
             rawBaseUrl = defaultBaseUrl;
         }
 
@@ -47,7 +47,7 @@ export async function POST(request) {
 
         let embeddings = [];
 
-        if (provider === 'gemini-native') {
+        if (['gemini-native', 'custom-gemini'].includes(provider)) {
             const geminiModel = embedModelName || 'text-embedding-004';
             const url = `${baseUrl}/models/${geminiModel}:embedContent?key=${apiKey}`;
             console.log('Fetching Gemini Embeddings:', url);

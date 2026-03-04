@@ -1,5 +1,7 @@
 // Token 使用统计模块 — 记录每次 AI 请求的 token 用量、速度，并计算消耗预估
 
+import { persistSet } from './persistence';
+
 const STORAGE_KEY = 'author-token-stats';
 
 /**
@@ -43,6 +45,7 @@ export function addTokenRecord(record) {
         model: record.model || 'unknown',
     });
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ records }));
+    persistSet(STORAGE_KEY, { records }).catch(() => { });
 }
 
 /**
@@ -51,6 +54,7 @@ export function addTokenRecord(record) {
 export function clearTokenStats() {
     if (typeof window === 'undefined') return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ records: [] }));
+    persistSet(STORAGE_KEY, { records: [] }).catch(() => { });
 }
 
 /**

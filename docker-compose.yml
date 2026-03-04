@@ -26,4 +26,6 @@ services:
     environment:
       - NODE_ENV=production
       - HOSTNAME=0.0.0.0
+    volumes:
+      - ./data:/app/data
     restart: unless-stopped

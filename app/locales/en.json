@@ -469,7 +469,11 @@
     "maxOutputTokensDesc": "Maximum tokens per model response",
     "reasoningEffort": "Reasoning Effort",
     "reasoningAuto": "Auto (no override)",
-    "reasoningEffortDesc": "Controls reasoning depth, only affects models that support reasoning"
+    "reasoningEffortDesc": "Controls reasoning depth, only affects models that support reasoning",
+    "balance": "API Balance",
+    "balanceQuery": "Check Balance",
+    "balanceQuerying": "Checking…",
+    "balanceNotSupported": "Balance check not supported for this provider"
   },
   "preferences": {
     "intro": "You can change your language and visual theme preferences here at any time. All changes take effect immediately and are saved locally.",

@@ -42,6 +42,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef }) {
         setTheme(next);
         document.documentElement.setAttribute('data-theme', next);
         localStorage.setItem('author-theme', next);
+        import('../lib/persistence').then(m => m.persistSet('author-theme', next).catch(() => { }));
     }, [theme, setTheme]);
 
     // 中文数字 ↔ 阿拉伯数字 互转
