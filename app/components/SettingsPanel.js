@@ -1145,16 +1145,40 @@ function ApiConfigForm({ data, onChange }) {
                         // 显示条件：明确选了外部搜索，或者供应商没有内置搜索
                         (data.tools?.searchMode === 'external' || !['openai', 'openai-responses', 'custom', 'custom-gemini', 'gemini-native'].includes(data.provider)) && (
                             <div style={{ paddingLeft: 22, marginTop: 6, padding: '8px 10px', borderRadius: 6, background: 'var(--bg-primary)', border: '1px solid var(--border-light)' }}>
-                                <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', marginBottom: 6 }}>{t('apiConfig.searchEngine') || '搜索引擎'} — Tavily</div>
+                                <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', marginBottom: 6 }}>{t('apiConfig.searchEngine') || '搜索引擎'}</div>
+                                <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                                    {[
+                                        { key: 'tavily', label: 'Tavily' },
+                                        { key: 'exa', label: 'Exa' },
+                                    ].map(opt => (
+                                        <button key={opt.key} style={{ padding: '3px 14px', border: (data.searchConfig?.provider || 'tavily') === opt.key ? '2px solid var(--accent)' : '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', background: (data.searchConfig?.provider || 'tavily') === opt.key ? 'var(--accent-light)' : 'var(--bg-primary)', cursor: 'pointer', fontSize: 11, fontWeight: (data.searchConfig?.provider || 'tavily') === opt.key ? 600 : 400, color: (data.searchConfig?.provider || 'tavily') === opt.key ? 'var(--accent)' : 'var(--text-primary)', transition: 'all 0.15s' }}
+                                            onClick={() => onChange({ ...data, searchConfig: { ...(data.searchConfig || {}), provider: opt.key } })}>{opt.label}</button>
+                                    ))}
+                                </div>
                                 <input
                                     type="password"
-                                    placeholder="Tavily API Key (tvly-...)"
+                                    placeholder={(data.searchConfig?.provider || 'tavily') === 'exa' ? 'Exa API Key' : 'Tavily API Key (tvly-...)'}
                                     value={data.searchConfig?.apiKey || ''}
-                                    onChange={e => onChange({ ...data, searchConfig: { ...(data.searchConfig || {}), provider: 'tavily', apiKey: e.target.value } })}
+                                    onChange={e => onChange({ ...data, searchConfig: { ...(data.searchConfig || {}), provider: data.searchConfig?.provider || 'tavily', apiKey: e.target.value } })}
                                     style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 12, fontFamily: 'var(--font-ui)', outline: 'none' }}
                                 />
                                 <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>
-                                    {t('apiConfig.tavilyHint') || '免费 1000次/月 → tavily.com'}
+                                    {(data.searchConfig?.provider || 'tavily') === 'exa'
+                                        ? (t('apiConfig.exaHint') || '按量计费，注册赠送额度 → exa.ai')
+                                        : (t('apiConfig.tavilyHint') || '免费 1000次/月 → tavily.com')}
+                                </div>
+                                <div style={{ marginTop: 8 }}>
+                                    <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', marginBottom: 4 }}>🔗 {t('apiConfig.searchCustomUrl') || '自定义 API 地址（可选）'}</div>
+                                    <input
+                                        type="text"
+                                        placeholder={(data.searchConfig?.provider || 'tavily') === 'exa' ? 'https://api.exa.ai' : 'https://api.tavily.com'}
+                                        value={data.searchConfig?.baseUrl || ''}
+                                        onChange={e => onChange({ ...data, searchConfig: { ...(data.searchConfig || {}), provider: data.searchConfig?.provider || 'tavily', baseUrl: e.target.value } })}
+                                        style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 12, fontFamily: 'var(--font-ui)', outline: 'none' }}
+                                    />
+                                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>
+                                        {t('apiConfig.searchCustomUrlHint') || '留空使用官方地址，填写后使用自定义中转地址（如号池代理）'}
+                                    </div>
                                 </div>
                             </div>
                         )

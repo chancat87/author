@@ -19,7 +19,8 @@ export async function POST(request) {
         switch (searchConfig.provider) {
 
             case 'tavily': {
-                const res = await fetch('https://api.tavily.com/search', {
+                const tavilyBase = (searchConfig.baseUrl || 'https://api.tavily.com').replace(/\/$/, '');
+                const res = await fetch(`${tavilyBase}/search`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -39,6 +40,35 @@ export async function POST(request) {
                     title: item.title || '',
                     url: item.url || '',
                     snippet: item.content || '',
+                }));
+                break;
+            }
+
+            case 'exa': {
+                const exaBase = (searchConfig.baseUrl || 'https://api.exa.ai').replace(/\/$/, '');
+                const res = await fetch(`${exaBase}/search`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-api-key': searchConfig.apiKey,
+                    },
+                    body: JSON.stringify({
+                        query,
+                        type: 'auto',
+                        numResults: 5,
+                        contents: { highlights: { numSentences: 3 } },
+                    }),
+                });
+                if (!res.ok) {
+                    const err = await res.text();
+                    console.error('Exa Search error:', res.status, err);
+                    return Response.json({ error: `Exa 搜索失败 (${res.status})` }, { status: res.status });
+                }
+                const data = await res.json();
+                results = (data.results || []).map(item => ({
+                    title: item.title || '',
+                    url: item.url || '',
+                    snippet: (item.highlights || []).join(' ') || item.text || '',
                 }));
                 break;
             }

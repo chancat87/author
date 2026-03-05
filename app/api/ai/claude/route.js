@@ -21,7 +21,8 @@ async function executeSearch(query, searchConfig) {
     const provider = searchConfig.provider || 'tavily';
     switch (provider) {
         case 'tavily': {
-            const res = await fetch('https://api.tavily.com/search', {
+            const tavilyBase = (searchConfig.baseUrl || 'https://api.tavily.com').replace(/\/$/, '');
+            const res = await fetch(`${tavilyBase}/search`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ api_key: searchConfig.apiKey, query, max_results: 5, include_answer: false }),
@@ -29,6 +30,17 @@ async function executeSearch(query, searchConfig) {
             if (!res.ok) { console.error('Tavily Search error:', res.status); return []; }
             const data = await res.json();
             return (data.results || []).map(item => ({ title: item.title || '', url: item.url || '', snippet: item.content || '' }));
+        }
+        case 'exa': {
+            const exaBase = (searchConfig.baseUrl || 'https://api.exa.ai').replace(/\/$/, '');
+            const res = await fetch(`${exaBase}/search`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-api-key': searchConfig.apiKey },
+                body: JSON.stringify({ query, type: 'auto', numResults: 5, contents: { highlights: { numSentences: 3 } } }),
+            });
+            if (!res.ok) { console.error('Exa Search error:', res.status); return []; }
+            const data = await res.json();
+            return (data.results || []).map(item => ({ title: item.title || '', url: item.url || '', snippet: (item.highlights || []).join(' ') || item.text || '' }));
         }
         default: return [];
     }

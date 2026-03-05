@@ -493,7 +493,8 @@
         "searchBuiltinHint": "使用供应商自带的搜索功能，无需额外配置",
         "searchBuiltinCustomHint": "使用供应商自带的搜索功能（代理需支持转发 tools 参数）",
         "searchEngine": "搜索引擎",
-        "tavilyHint": "免费 1000次/月 → tavily.com"
+        "tavilyHint": "免费 1000次/月 → tavily.com",
+        "exaHint": "按量计费，注册赠送额度 → exa.ai"
     },
     "preferences": {
         "intro": "在这里可以随时更改应用程序的语言和视觉主题偏好。所有的更改都会实时生效并保存在本地。",

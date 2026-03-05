@@ -493,7 +493,8 @@
     "searchBuiltinHint": "Uses the provider's native search feature, no extra configuration needed",
     "searchBuiltinCustomHint": "Uses the provider's native search (proxy must support forwarding tools parameter)",
     "searchEngine": "Search Engine",
-    "tavilyHint": "Free 1000/month → tavily.com"
+    "tavilyHint": "Free 1000/month → tavily.com",
+    "exaHint": "Pay-per-use, free credits on signup → exa.ai"
   },
   "preferences": {
     "intro": "You can change your language and visual theme preferences here at any time. All changes take effect immediately and are saved locally.",

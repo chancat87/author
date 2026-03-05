@@ -39,6 +39,7 @@ I watched the versatility of these models being gutted. I don't want us to live 
 
 ### 🤖 AI Writing Assistant
 - **Multi-provider support**: ZhipuAI GLM-4 / DeepSeek / OpenAI / Google Gemini / Claude / SiliconFlow / Volcengine / Moonshot + custom endpoints
+- **Smart model fetching** — one-click fetch full model list from API, auto-compatible with various proxy formats (`/models`, `/v1/models`), with timeout protection
 - **Continue / Rewrite / Polish / Expand** — one-click generation
 - **Ghost Text** streaming preview — see AI output in real-time like Cursor, with accept/reject
 - **Free chat mode** — discuss plot, characters, and settings with AI
@@ -189,6 +190,25 @@ For providers without built-in search, choose a search engine and enter your API
 3. In Author Settings → Web Search → Select **Tavily** → Paste the Key
 
 > Free tier: **1,000 requests/month**
+
+### Exa (Semantic Search)
+
+1. Visit [exa.ai](https://exa.ai) and create an account
+2. Get your API Key from the [Dashboard](https://dashboard.exa.ai/api-keys)
+3. In Author Settings → Web Search → Select **Exa** → Paste the Key
+
+> Free tier: **1,000 requests/month** — Semantic search optimized for AI use cases
+
+### Custom Search API URL (Proxy Pool)
+
+If you've set up a Tavily/Exa proxy pool using multiple free-tier accounts, you can configure a **custom API URL** in the search settings:
+
+1. In Author Settings → Web Search → Search engine config area
+2. Find the "🔗 Custom API URL (optional)" input field
+3. Enter your proxy URL, e.g. `https://your-proxy.com`
+4. Leave blank to use the official default URL
+
+> 💡 The system automatically appends `/search` to your URL — no need to add it manually
 
 ---
 

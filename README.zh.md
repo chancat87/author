@@ -39,6 +39,7 @@
 
 ### 🤖 AI 写作助手
 - **多 AI 供应商**：智谱 GLM-4 / DeepSeek / OpenAI / Google Gemini / Claude / SiliconFlow / 火山引擎 / 阿里云百炼 / MiniMax / Moonshot + 自定义端点
+- **智能模型拉取** — 一键从 API 拉取完整模型列表，自动兼容各种中转站格式（`/models`、`/v1/models`），超时保护不卡死
 - **续写 / 改写 / 润色 / 扩写**，一键生成
 - **Ghost Text** 流式预览 — 像 Cursor 一样实时显示 AI 生成内容，支持接受/拒绝
 - **自由对话模式** — 与 AI 讨论剧情、角色、设定
@@ -193,6 +194,25 @@ Author 支持让 AI 联网搜索实时信息。不同供应商的搜索方式不
 3. 在 Author 设置 → 联网搜索 → 选择 **Tavily** → 粘贴 Key
 
 > 免费额度：**1000 次/月**
+
+### Exa（语义搜索）
+
+1. 访问 [exa.ai](https://exa.ai)，注册账号
+2. 在 [Dashboard](https://dashboard.exa.ai/api-keys) 获取 API Key
+3. 在 Author 设置 → 联网搜索 → 选择 **Exa** → 粘贴 Key
+
+> 免费额度：**1000 次/月**　｜　支持语义搜索，AI 场景下搜索质量更高
+
+### 自定义搜索 API 地址（中转号池）
+
+如果你搭建了 Tavily/Exa 的中转号池代理，可以在搜索配置中填写**自定义 API 地址**：
+
+1. 在 Author 设置 → 联网搜索 → 搜索引擎配置区域
+2. 找到「🔗 自定义 API 地址（可选）」输入框
+3. 填入你的中转地址，如 `https://your-proxy.com`
+4. 留空则使用官方默认地址
+
+> 💡 系统会自动在你的地址后拼接 `/search` 路径，无需手动添加
 
 ---
 

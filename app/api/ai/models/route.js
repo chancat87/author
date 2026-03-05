@@ -112,12 +112,15 @@ function extractModelArray(data) {
     if (Array.isArray(data.models)) return data.models;
     // OpenAI 兼容格式: { data: [...] }
     if (Array.isArray(data.data)) return data.data;
+    // 部分中转: { results: [...] }
+    if (Array.isArray(data.results)) return data.results;
     // 直接是数组
     if (Array.isArray(data)) return data;
     return [];
 }
 
 // OpenAI 兼容格式拉取模型（/v1/models）
+// 参考 Cherry Studio：多路径尝试 + 多格式兼容 + 超时处理
 async function fetchOpenAIModels(apiKey, baseUrl, embedOnly) {
     const base = (baseUrl || '').replace(/\/$/, '');
     if (!base) {
@@ -127,32 +130,70 @@ async function fetchOpenAIModels(apiKey, baseUrl, embedOnly) {
         );
     }
 
-    const url = `${base}/models`;
+    const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+    };
 
-    const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`,
-        },
-    });
-
-    if (!response.ok) {
-        return handleFetchError(response);
+    // 根据 baseUrl 构建候选路径列表
+    // 用户可能填 https://api.example.com/v1 或 https://api.example.com
+    const pathsToTry = [];
+    if (base.endsWith('/v1') || base.endsWith('/v1beta')) {
+        // 已含版本前缀，直接加 /models
+        pathsToTry.push(`${base}/models`);
+    } else {
+        // 不含版本前缀，两种都试
+        pathsToTry.push(`${base}/models`);
+        pathsToTry.push(`${base}/v1/models`);
     }
 
-    const data = await response.json();
-    let models = (data.data || []);
+    let rawModels = [];
+    let lastError = null;
+
+    for (const url of pathsToTry) {
+        try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 15000);
+
+            const response = await fetch(url, {
+                method: 'GET',
+                headers,
+                signal: controller.signal,
+            });
+            clearTimeout(timeout);
+
+            if (!response.ok) {
+                // 保存最后一个错误以便兜底返回
+                lastError = response;
+                continue;
+            }
+
+            const data = await response.json();
+            rawModels = extractModelArray(data);
+            if (rawModels.length > 0) break;
+        } catch (err) {
+            // 超时或网络错误，尝试下一个路径
+            console.warn(`模型拉取失败 ${url}:`, err.message);
+            continue;
+        }
+    }
+
+    if (rawModels.length === 0 && lastError) {
+        return handleFetchError(lastError);
+    }
+
+    let models = rawModels;
 
     if (embedOnly) {
         // 匹配常见嵌入模型：embed*, bge-*, bce-*, e5-*, gte-* 等
-        models = models.filter(m => /embed|\/bge[-_]|\/bce[-_]|\/e5[-_]|\/gte[-_]|text-embedding/i.test(m.id));
+        models = models.filter(m => /embed|\/bge[-_]|\/bce[-_]|\/e5[-_]|\/gte[-_]|text-embedding/i.test(m.id || m.name || ''));
     }
 
     models = models.map(m => ({
-        id: m.id,
-        displayName: m.id,
+        id: (m.id || m.name || '').trim(),
+        displayName: m.display_name || m.displayName || m.id || m.name || '',
     }))
+        .filter(m => m.id) // 过滤空 ID
         .sort((a, b) => a.id.localeCompare(b.id));
 
     return NextResponse.json({ models });
@@ -261,28 +302,42 @@ async function tryAnthropicNativeModels(apiKey, base) {
 
 // OpenAI 兼容格式：Bearer token + /v1/models（多数中转使用此格式）
 async function tryOpenAICompatModels(apiKey, base) {
-    // 尝试 /v1/models 和 /models 两种路径
-    for (const path of ['/v1/models', '/models']) {
+    // 根据 base 是否已含版本前缀，构建候选路径
+    const pathsToTry = [];
+    if (base.endsWith('/v1') || base.endsWith('/v1beta')) {
+        pathsToTry.push(`${base}/models`);
+    } else {
+        pathsToTry.push(`${base}/v1/models`);
+        pathsToTry.push(`${base}/models`);
+    }
+
+    for (const url of pathsToTry) {
         try {
-            const url = `${base}${path}`;
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 10000);
+
             const response = await fetch(url, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${apiKey}`,
                 },
+                signal: controller.signal,
             });
+            clearTimeout(timeout);
 
             if (!response.ok) continue;
 
             const data = await response.json();
-            const rawModels = data.data || [];
+            const rawModels = extractModelArray(data);
             if (rawModels.length === 0) continue;
 
             return rawModels.map(m => ({
-                id: m.id,
-                displayName: m.id,
-            })).sort((a, b) => a.id.localeCompare(b.id));
+                id: (m.id || m.name || '').trim(),
+                displayName: m.display_name || m.displayName || m.id || m.name || '',
+            }))
+                .filter(m => m.id)
+                .sort((a, b) => a.id.localeCompare(b.id));
         } catch {
             continue;
         }

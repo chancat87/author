@@ -414,18 +414,21 @@ ipcMain.handle('download-and-install-update', async (event) => {
 
         log(`Download complete: ${savePath}`);
 
-        // 4. 启动安装程序（显示进度条 + 完成对话框）并退出当前应用
-        log('Launching installer...');
-        const installer = spawn(savePath, [], {
+        // 4. 先退出应用，再延迟启动安装程序
+        // 使用 cmd /C 延迟启动安装器，确保当前应用完全退出后再运行
+        log('Scheduling installer launch and quitting app...');
+        const delayCmd = `timeout /t 3 /nobreak >nul & start "" "${savePath}"`;
+        spawn(delayCmd, [], {
             detached: true,
             stdio: 'ignore',
-        });
-        installer.unref();
+            shell: true,
+        }).unref();
 
-        // 稍等一下确保安装程序启动
-        await new Promise(r => setTimeout(r, 1000));
-
-        log('Quitting app for update...');
+        // 先杀掉 Next.js 服务器子进程
+        if (serverProcess) {
+            serverProcess.kill();
+            serverProcess = null;
+        }
         app.quit();
 
         return { success: true };
