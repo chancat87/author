@@ -393,6 +393,9 @@ async function parseViaApi(file) {
     });
 
     if (!response.ok) {
+        if (response.status === 413) {
+            throw new Error('文件体积过大，请尝试压缩 PDF 后重新导入');
+        }
         const data = await response.json().catch(() => ({}));
         throw new Error(data.error || `解析失败 (${response.status})`);
     }

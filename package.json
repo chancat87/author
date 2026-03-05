@@ -71,7 +71,29 @@
         "filter": [
           "**/*",
           "!dist",
-          "!dist/**/*"
+          "!dist/**/*",
+          "!.git",
+          "!.git/**/*",
+          "!data",
+          "!data/**/*",
+          "!electron",
+          "!electron/**/*",
+          "!*.png",
+          "!*.md",
+          "!Caddyfile",
+          "!Dockerfile",
+          "!docker-compose*.yml",
+          "!afterPack.js",
+          "!eslint.config.mjs",
+          "!jsconfig.json",
+          "!postcss.config.mjs",
+          "!next.config.mjs",
+          "!package-lock.json",
+          "!LICENSE",
+          "!.npmrc",
+          "!.env*",
+          "!.gitignore",
+          "!.dockerignore"
         ]
       },
       {

@@ -278,6 +278,8 @@ function startNextServer() {
                 NODE_ENV: 'production',
                 PORT: String(actualPort),
                 HOSTNAME: '0.0.0.0',
+                // 提高请求体大小限制（50MB），避免上传大 PDF/DOC 文件时返回 413
+                BODY_SIZE_LIMIT: '52428800',
             },
             stdio: 'pipe',
         });

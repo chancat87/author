@@ -7,6 +7,10 @@
 
 import { NextResponse } from 'next/server';
 
+// 提高 body 大小限制，避免大 PDF/DOC 文件上传时返回 413
+export const maxDuration = 60; // 秒
+export const dynamic = 'force-dynamic';
+
 export async function POST(request) {
     try {
         const formData = await request.formData();
