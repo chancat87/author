@@ -278,7 +278,10 @@
     "statsClearBtn": "🗑 Clear Stats",
     "statsClearConfirm": "Are you sure you want to clear all token usage statistics? This cannot be undone.",
     "statsModelBreakdown": "Channel / Model Stats",
-    "statsModelBreakdownHint": "Usage breakdown by API provider and model"
+    "statsModelBreakdownHint": "Usage breakdown by API provider and model",
+    "toolCodeExec": "Code Execution",
+    "toolCodeResult": "Execution Result",
+    "toolSearchSources": "Search Sources"
   },
   "sidebar": {
     "chat": "💬 Chat",
@@ -473,7 +476,24 @@
     "balance": "API Balance",
     "balanceQuery": "Check Balance",
     "balanceQuerying": "Checking…",
-    "balanceNotSupported": "Balance check not supported for this provider"
+    "balanceNotSupported": "Balance check not supported for this provider",
+    "builtinTools": "Built-in Tools",
+    "toolGoogleSearch": "Google Search (Web Search)",
+    "toolGoogleSearchDesc": "Let AI search the internet for latest information; search sources will be included in the response",
+    "toolCodeExecution": "Code Execution",
+    "toolCodeExecutionDesc": "Let AI write and run code to solve math computations and more; code and results will be shown in the response",
+    "toolWebSearch": "Web Search",
+    "toolWebSearchDesc": "Let AI search the internet for latest information (requires a search-enabled model, e.g. gpt-4o-search-preview)",
+    "searchTools": "Web Search",
+    "enableSearch": "Enable Web Search",
+    "enableSearchDesc": "Let AI search the internet for latest information; sources will be shown in the response",
+    "searchMode": "Search Method",
+    "searchBuiltin": "Built-in",
+    "searchExternal": "External",
+    "searchBuiltinHint": "Uses the provider's native search feature, no extra configuration needed",
+    "searchBuiltinCustomHint": "Uses the provider's native search (proxy must support forwarding tools parameter)",
+    "searchEngine": "Search Engine",
+    "tavilyHint": "Free 1000/month → tavily.com"
   },
   "preferences": {
     "intro": "You can change your language and visual theme preferences here at any time. All changes take effect immediately and are saved locally.",

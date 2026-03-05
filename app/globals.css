@@ -4288,6 +4288,108 @@ h5.chat-md-heading {
   animation: fadeSlideIn 0.15s ease;
 }
 
+/* ===== 工具调用结果展示 ===== */
+.tool-calls-container {
+  margin: 4px 0 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tool-call-card {
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border-light);
+  background: var(--bg-secondary);
+}
+
+.tool-call-card.code-exec {
+  border-color: rgba(100, 180, 255, 0.25);
+  background: rgba(100, 180, 255, 0.04);
+}
+
+.tool-call-card.code-result.success {
+  border-color: rgba(80, 200, 120, 0.25);
+  background: rgba(80, 200, 120, 0.04);
+}
+
+.tool-call-card.code-result.error {
+  border-color: rgba(230, 80, 80, 0.25);
+  background: rgba(230, 80, 80, 0.04);
+}
+
+.tool-call-card.grounding {
+  border-color: rgba(255, 180, 60, 0.25);
+  background: rgba(255, 180, 60, 0.04);
+}
+
+.tool-call-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.tool-lang {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.tool-code-block {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  color: var(--text-primary);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.tool-code-block code {
+  font-family: inherit;
+}
+
+.grounding-sources {
+  padding: 6px 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.grounding-chip {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  background: rgba(255, 180, 60, 0.10);
+  color: var(--accent);
+  text-decoration: none;
+  border: 1px solid rgba(255, 180, 60, 0.2);
+  transition: all 0.15s;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grounding-chip:hover {
+  background: rgba(255, 180, 60, 0.18);
+  border-color: rgba(255, 180, 60, 0.4);
+  color: var(--accent-hover, var(--accent));
+}
+
 /* ===== 变体导航 < 1/3 > ===== */
 .chat-variant-nav {
   display: flex;

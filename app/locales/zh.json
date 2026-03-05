@@ -278,7 +278,10 @@
         "statsClearBtn": "🗑 清空统计",
         "statsClearConfirm": "确定清空所有 Token 使用统计？此操作不可撤销。",
         "statsModelBreakdown": "渠道 / 模型统计",
-        "statsModelBreakdownHint": "按 API 提供商和模型分别统计的消耗明细"
+        "statsModelBreakdownHint": "按 API 提供商和模型分别统计的消耗明细",
+        "toolCodeExec": "代码执行",
+        "toolCodeResult": "执行结果",
+        "toolSearchSources": "搜索来源"
     },
     "sidebar": {
         "chat": "💬 对话",
@@ -473,7 +476,24 @@
         "balance": "API 余额",
         "balanceQuery": "查询余额",
         "balanceQuerying": "查询中…",
-        "balanceNotSupported": "当前供应商不支持余额查询"
+        "balanceNotSupported": "当前供应商不支持余额查询",
+        "builtinTools": "内置工具",
+        "toolGoogleSearch": "Google Search（联网搜索）",
+        "toolGoogleSearchDesc": "让 AI 实时搜索互联网获取最新信息，回复中会附带搜索来源",
+        "toolCodeExecution": "Code Execution（代码执行）",
+        "toolCodeExecutionDesc": "让 AI 编写并运行代码来解决数学计算等问题，回复中会显示代码和执行结果",
+        "toolWebSearch": "Web Search（联网搜索）",
+        "toolWebSearchDesc": "让 AI 实时搜索互联网获取最新信息（需使用支持搜索的模型，如 gpt-4o-search-preview）",
+        "searchTools": "联网搜索",
+        "enableSearch": "启用联网搜索",
+        "enableSearchDesc": "让 AI 搜索互联网获取最新信息，搜索来源会显示在回复中",
+        "searchMode": "搜索方式",
+        "searchBuiltin": "内置搜索",
+        "searchExternal": "外部搜索",
+        "searchBuiltinHint": "使用供应商自带的搜索功能，无需额外配置",
+        "searchBuiltinCustomHint": "使用供应商自带的搜索功能（代理需支持转发 tools 参数）",
+        "searchEngine": "搜索引擎",
+        "tavilyHint": "免费 1000次/月 → tavily.com"
     },
     "preferences": {
         "intro": "在这里可以随时更改应用程序的语言和视觉主题偏好。所有的更改都会实时生效并保存在本地。",

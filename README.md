@@ -170,6 +170,28 @@ Author supports multiple AI providers. Configure via **environment variables** o
 
 ---
 
+## 🔍 Web Search Configuration
+
+Author supports AI-powered web search for real-time information. Different providers handle search differently:
+
+| Provider | Search Method | Extra Setup |
+|----------|--------------|-------------|
+| Gemini (Native) | Built-in Google Search | No extra config needed |
+| OpenAI / OpenAI Responses | Built-in Web Search | No extra config (needs search model) |
+| DeepSeek / ZhipuAI / SiliconFlow / Others | External Search API | **Search engine Key required** |
+
+For providers without built-in search, choose a search engine and enter your API Key:
+
+### Tavily (Recommended — Simplest)
+
+1. Visit [tavily.com](https://tavily.com) and create an account
+2. After login, find your API Key on the Dashboard (format: `tvly-...`)
+3. In Author Settings → Web Search → Select **Tavily** → Paste the Key
+
+> Free tier: **1,000 requests/month**
+
+---
+
 ## 🔒 Privacy & Data Security
 
 ### Local Storage (Safe)

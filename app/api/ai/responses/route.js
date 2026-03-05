@@ -5,7 +5,7 @@ export const runtime = 'edge';
 
 export async function POST(request) {
     try {
-        const { systemPrompt, userPrompt, apiConfig, maxTokens, temperature, topP } = await request.json();
+        const { systemPrompt, userPrompt, apiConfig, maxTokens, temperature, topP, tools: toolsConfig } = await request.json();
 
         const apiKey = apiConfig?.apiKey || process.env.OPENAI_API_KEY;
         const baseUrl = (apiConfig?.baseUrl || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
@@ -37,6 +37,14 @@ export async function POST(request) {
         const effort = (!rawEffort || rawEffort === 'auto') ? 'medium' : rawEffort;
         if (['low', 'medium', 'high', 'xhigh'].includes(effort)) {
             requestBody.reasoning = { effort, summary: 'auto' };
+        }
+
+        // 联网搜索工具
+        if (toolsConfig?.webSearch) {
+            requestBody.tools = [
+                ...(requestBody.tools || []),
+                { type: 'web_search_preview', search_context_size: 'medium' },
+            ];
         }
 
         const response = await fetch(url, {
@@ -122,6 +130,29 @@ export async function POST(request) {
                                                 }
                                             })}\n\n`));
                                         }
+
+                                        // 提取 web_search 引用注释
+                                        const outputs = json.response?.output || [];
+                                        const allAnnotations = [];
+                                        for (const out of outputs) {
+                                            if (out.type === 'message' && out.content) {
+                                                for (const part of out.content) {
+                                                    if (part.annotations) {
+                                                        for (const ann of part.annotations) {
+                                                            if (ann.type === 'url_citation' && ann.url) {
+                                                                allAnnotations.push({ title: ann.title || '', uri: ann.url });
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        if (allAnnotations.length > 0) {
+                                            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+                                                grounding: { searchQueries: [], sources: allAnnotations, supports: [] }
+                                            })}\n\n`));
+                                        }
+
                                         controller.enqueue(encoder.encode('data: [DONE]\n\n'));
                                     }
                                 } catch {

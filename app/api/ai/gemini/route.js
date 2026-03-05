@@ -5,7 +5,7 @@ export const runtime = 'edge';
 
 export async function POST(request) {
     try {
-        const { systemPrompt, userPrompt, apiConfig, maxTokens, temperature, topP, reasoningEffort } = await request.json();
+        const { systemPrompt, userPrompt, apiConfig, maxTokens, temperature, topP, reasoningEffort, tools: toolsConfig } = await request.json();
 
         const apiKey = apiConfig?.apiKey || process.env.GEMINI_API_KEY;
         let rawBaseUrl = apiConfig?.baseUrl;
@@ -46,6 +46,12 @@ export async function POST(request) {
                 } : {}),
             },
         };
+
+        // 内置工具（仅在用户明确开启时才添加，默认不影响原有行为）
+        const geminiTools = [];
+        if (toolsConfig?.googleSearch) geminiTools.push({ googleSearch: {} });
+        if (toolsConfig?.codeExecution) geminiTools.push({ codeExecution: {} });
+        if (geminiTools.length > 0) requestBody.tools = geminiTools;
 
         const response = await fetch(url, {
             method: 'POST',
@@ -111,10 +117,34 @@ export async function POST(request) {
                                         if (part.thought === true && part.text) {
                                             // Gemini 思维链
                                             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ thinking: part.text })}\n\n`));
+                                        } else if (part.executableCode) {
+                                            // Code Execution — 模型生成的代码
+                                            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ codeExec: { code: part.executableCode.code, language: part.executableCode.language || 'python' } })}\n\n`));
+                                        } else if (part.codeExecutionResult) {
+                                            // Code Execution — 执行结果
+                                            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ codeResult: { output: part.codeExecutionResult.output, outcome: part.codeExecutionResult.outcome } })}\n\n`));
                                         } else if (part.text) {
                                             // 正文内容
                                             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: part.text })}\n\n`));
                                         }
+                                    }
+
+                                    // Google Search grounding 元数据（在 candidate 级别）
+                                    const grounding = candidate?.groundingMetadata;
+                                    if (grounding) {
+                                        controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+                                            grounding: {
+                                                searchQueries: grounding.webSearchQueries || [],
+                                                sources: (grounding.groundingChunks || []).map(c => ({
+                                                    title: c.web?.title || '',
+                                                    uri: c.web?.uri || '',
+                                                })),
+                                                supports: (grounding.groundingSupports || []).map(s => ({
+                                                    text: s.segment?.text || '',
+                                                    indices: s.groundingChunkIndices || [],
+                                                })),
+                                            }
+                                        })}\n\n`));
                                     }
 
                                     // 提取 usage（通常在最后一个 chunk）

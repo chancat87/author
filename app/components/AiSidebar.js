@@ -47,11 +47,13 @@ function getProviderColor(provider, model) {
     if (p.includes('anthropic') || m.includes('claude')) return 'linear-gradient(135deg, #d97757 0%, #b85d3f 100%)';
     if (p.includes('gemini') || p.includes('google') || m.includes('gemini')) return 'linear-gradient(135deg, #4285f4 0%, #8ab4f8 100%)';
     if (p.includes('deepseek') || m.includes('deepseek')) return 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)';
-    if (p.includes('qwen') || p.includes('dashscope') || p.includes('ali') || m.includes('qwen')) return 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)';
+    if (p.includes('qwen') || p.includes('dashscope') || p.includes('ali') || p.includes('bailian') || m.includes('qwen')) return 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)';
     if (p.includes('siliconflow') || m.includes('silicon')) return 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)';
     if (p.includes('ollama') || m.includes('llama')) return 'linear-gradient(135deg, #14b8a6 0%, #0f766e 100%)';
     if (p.includes('custom')) return 'linear-gradient(135deg, #4b5563 0%, #374151 100%)';
     if (p.includes('openrouter')) return 'linear-gradient(135deg, #818cf8 0%, #6366f1 100%)';
+    if (p.includes('volcengine') || p.includes('火山') || m.includes('doubao')) return 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)';
+    if (p.includes('minimax') || m.includes('abab')) return 'linear-gradient(135deg, #ec4899 0%, #db2777 100%)';
 
     // Hash-based dynamic fallback colors for anything else
     const colors = [
@@ -89,6 +91,12 @@ function ProviderLogo({ provider, model, className = '' }) {
         svg = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>;
     } else if (p.includes('openrouter')) {
         svg = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" /><path d="M2 12h20" /></svg>;
+    } else if (p.includes('volcengine') || p.includes('火山') || m.includes('doubao')) {
+        svg = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" /></svg>;
+    } else if (p.includes('minimax') || m.includes('abab')) {
+        svg = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>;
+    } else if (p.includes('bailian') || p.includes('qwen')) {
+        svg = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>;
     }
 
     return svg;
@@ -203,8 +211,34 @@ export default function AiSidebar({ onInsertText }) {
         }
     }, [slidingWindow, slidingWindowSize, chatHistory.length]);
 
-    // --- 通用 SSE 流式读取，支持 text+thinking ---
+    // --- 通用 SSE 流式读取，支持 text+thinking+tools ---
     const streamResponse = useCallback(async (apiEndpoint, systemPrompt, userPrompt, apiConfig, onUpdate, onDone) => {
+        // 构建工具配置
+        const provider = apiConfig?.provider;
+        const isGeminiNative = ['gemini-native', 'custom-gemini'].includes(provider);
+        const isOpenAI = ['openai', 'openai-responses'].includes(provider);
+        const searchMode = apiConfig?.tools?.searchMode || 'builtin'; // 'builtin' | 'external'
+        const searchEnabled = !!apiConfig?.tools?.searchEnabled;
+        let toolsPayload = undefined;
+
+        if (isGeminiNative) {
+            // Gemini: 内置工具
+            const gs = searchEnabled || !!apiConfig?.tools?.googleSearch;
+            const ce = !!apiConfig?.tools?.codeExecution;
+            if (gs || ce) toolsPayload = { googleSearch: gs, codeExecution: ce };
+        } else if (searchEnabled) {
+            if (searchMode === 'builtin' && (isOpenAI || provider === 'custom')) {
+                // OpenAI 内置搜索
+                toolsPayload = { webSearch: true };
+            } else if (searchMode === 'external' || (!isOpenAI && provider !== 'custom')) {
+                // Function Calling 外部搜索
+                toolsPayload = {
+                    functionSearch: true,
+                    searchConfig: apiConfig?.searchConfig || {},
+                };
+            }
+        }
+
         const startTime = Date.now();
         const res = await fetch(apiEndpoint, {
             method: 'POST',
@@ -217,6 +251,7 @@ export default function AiSidebar({ onInsertText }) {
                     topP: apiConfig.topP ?? 0.95,
                     reasoningEffort: apiConfig.reasoningEffort || 'auto',
                 } : {}),
+                ...(toolsPayload ? { tools: toolsPayload } : {}),
             }),
         });
 
@@ -232,6 +267,7 @@ export default function AiSidebar({ onInsertText }) {
         let fullText = '';
         let fullThinking = '';
         let usageData = null;
+        let toolCalls = []; // 收集工具调用结果
 
         while (true) {
             const { done, value } = await reader.read();
@@ -249,10 +285,14 @@ export default function AiSidebar({ onInsertText }) {
                         if (json.thinking) { fullThinking += json.thinking; hasUpdate = true; }
                         if (json.text) { fullText += json.text; hasUpdate = true; }
                         if (json.usage) { usageData = json.usage; }
+                        // 工具调用事件
+                        if (json.codeExec) { toolCalls.push({ type: 'codeExec', ...json.codeExec }); hasUpdate = true; }
+                        if (json.codeResult) { toolCalls.push({ type: 'codeResult', ...json.codeResult }); hasUpdate = true; }
+                        if (json.grounding) { toolCalls.push({ type: 'grounding', ...json.grounding }); hasUpdate = true; }
                     } catch { }
                 }
             }
-            if (hasUpdate) onUpdate(fullText, fullThinking);
+            if (hasUpdate) onUpdate(fullText, fullThinking, toolCalls);
         }
 
         // 记录 token 统计
@@ -283,7 +323,7 @@ export default function AiSidebar({ onInsertText }) {
         }
         setStatsVersion(v => v + 1);
 
-        onDone(fullText, fullThinking);
+        onDone(fullText, fullThinking, toolCalls);
     }, []);
 
     const onChatMessage = useCallback(async (text, selectedHistory) => {
@@ -296,7 +336,7 @@ export default function AiSidebar({ onInsertText }) {
             const { apiConfig } = getProjectSettings();
             const apiEndpoint = ['gemini-native', 'custom-gemini'].includes(apiConfig?.provider) ? '/api/ai/gemini'
                 : apiConfig?.provider === 'openai-responses' ? '/api/ai/responses'
-                    : ['claude', 'custom-claude'].includes(apiConfig?.provider) ? '/api/ai/claude'
+                    : (['claude', 'custom-claude'].includes(apiConfig?.provider) || apiConfig?.apiFormat === 'anthropic') ? '/api/ai/claude'
                         : '/api/ai';
 
             const context = await buildContext(activeChapterId, text, contextSelection.size > 0 ? contextSelection : null);
@@ -304,25 +344,25 @@ export default function AiSidebar({ onInsertText }) {
             const historyForApi = selectedHistory.map(m => `${m.role === 'user' ? t('aiSidebar.roleYou') : t('aiSidebar.roleAi')}: ${m.content}`).join('\n');
             const userPrompt = historyForApi ? `${historyForApi}\n${t('aiSidebar.roleYou')}: ${text}` : text;
 
-            const aiPlaceholder = { id: aiMsgId, role: 'assistant', content: '', thinking: '', timestamp: Date.now() };
+            const aiPlaceholder = { id: aiMsgId, role: 'assistant', content: '', thinking: '', toolCalls: [], timestamp: Date.now() };
             setSessionStore(prev => addMessage(prev, aiPlaceholder));
 
             await streamResponse(apiEndpoint, systemPrompt, userPrompt, apiConfig,
-                (snapText, snapThinking) => {
+                (snapText, snapThinking, snapToolCalls) => {
                     setSessionStore(prev => ({
                         ...prev, sessions: prev.sessions.map(s => {
                             if (s.id !== prev.activeSessionId) return s;
-                            return { ...s, messages: s.messages.map(m => m.id === aiMsgId ? { ...m, content: snapText, thinking: snapThinking } : m) };
+                            return { ...s, messages: s.messages.map(m => m.id === aiMsgId ? { ...m, content: snapText, thinking: snapThinking, toolCalls: snapToolCalls } : m) };
                         }),
                     }));
                 },
-                (finalText, finalThinking) => {
+                (finalText, finalThinking, finalToolCalls) => {
                     setSessionStore(prev => {
                         const finalStore = {
                             ...prev, sessions: prev.sessions.map(s => {
                                 if (s.id !== prev.activeSessionId) return s;
                                 return {
-                                    ...s, messages: s.messages.map(m => m.id === aiMsgId ? { ...m, content: finalText || '（AI 未返回内容）', thinking: finalThinking } : m),
+                                    ...s, messages: s.messages.map(m => m.id === aiMsgId ? { ...m, content: finalText || '（AI 未返回内容）', thinking: finalThinking, toolCalls: finalToolCalls } : m),
                                     updatedAt: Date.now(),
                                 };
                             }),
@@ -381,25 +421,25 @@ export default function AiSidebar({ onInsertText }) {
                             if (m.id !== aiMsgId) return m;
                             const variants = m.variants || [{ content: m.content, thinking: m.thinking || '', timestamp: m.timestamp }];
                             console.log('[Regenerate] Initialized variants:', variants.length);
-                            return { ...m, variants, content: '', thinking: '' };
+                            return { ...m, variants, content: '', thinking: '', toolCalls: [] };
                         }),
                     };
                 }),
             }));
 
             await streamResponse(apiEndpoint, systemPrompt, userPrompt, apiConfig,
-                (snapText, snapThinking) => {
+                (snapText, snapThinking, snapToolCalls) => {
                     setSessionStore(prev => ({
                         ...prev, sessions: prev.sessions.map(s => {
                             if (s.id !== prev.activeSessionId) return s;
-                            return { ...s, messages: s.messages.map(m => m.id === aiMsgId ? { ...m, content: snapText, thinking: snapThinking } : m) };
+                            return { ...s, messages: s.messages.map(m => m.id === aiMsgId ? { ...m, content: snapText, thinking: snapThinking, toolCalls: snapToolCalls } : m) };
                         }),
                     }));
                 },
-                (finalText, finalThinking) => {
+                (finalText, finalThinking, finalToolCalls) => {
                     console.log('[Regenerate] Stream done, adding variant. Final text length:', finalText?.length);
                     setSessionStore(prev => {
-                        const newStore = addVariant(prev, aiMsgId, { content: finalText || '（AI 未返回内容）', thinking: finalThinking, timestamp: Date.now() });
+                        const newStore = addVariant(prev, aiMsgId, { content: finalText || '（AI 未返回内容）', thinking: finalThinking, toolCalls: finalToolCalls, timestamp: Date.now() });
                         console.log('[Regenerate] After addVariant, checking msg:', newStore.sessions.find(s => s.id === newStore.activeSessionId)?.messages.find(m => m.id === aiMsgId)?.variants?.length, 'variants');
                         saveSessionStore(newStore);
                         return newStore;
@@ -917,6 +957,38 @@ export default function AiSidebar({ onInsertText }) {
                                     )}
 
                                     {/* 消息内容 / 编辑模式 */}
+                                    {/* 工具调用结果展示（Gemini 内置工具） */}
+                                    {msg.toolCalls && msg.toolCalls.length > 0 && (
+                                        <div className="tool-calls-container">
+                                            {msg.toolCalls.map((tc, idx) => {
+                                                if (tc.type === 'codeExec') return (
+                                                    <div key={idx} className="tool-call-card code-exec">
+                                                        <div className="tool-call-header">💻 {t('aiSidebar.toolCodeExec') || '代码执行'} <span className="tool-lang">{tc.language}</span></div>
+                                                        <pre className="tool-code-block"><code>{tc.code}</code></pre>
+                                                    </div>
+                                                );
+                                                if (tc.type === 'codeResult') return (
+                                                    <div key={idx} className={`tool-call-card code-result ${tc.outcome === 'OUTCOME_OK' ? 'success' : 'error'}`}>
+                                                        <div className="tool-call-header">{tc.outcome === 'OUTCOME_OK' ? '✅' : '❌'} {t('aiSidebar.toolCodeResult') || '执行结果'}</div>
+                                                        <pre className="tool-code-block"><code>{tc.output}</code></pre>
+                                                    </div>
+                                                );
+                                                if (tc.type === 'grounding' && tc.sources?.length > 0) return (
+                                                    <div key={idx} className="tool-call-card grounding">
+                                                        <div className="tool-call-header">🔍 {t('aiSidebar.toolSearchSources') || '搜索来源'}</div>
+                                                        <div className="grounding-sources">
+                                                            {tc.sources.map((src, si) => (
+                                                                <a key={si} className="grounding-chip" href={src.uri} target="_blank" rel="noopener noreferrer" title={src.uri}>
+                                                                    {src.title || src.uri}
+                                                                </a>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                );
+                                                return null;
+                                            })}
+                                        </div>
+                                    )}
                                     {editingMsgId === msg.id ? (
                                         <div className="chat-message-editing">
                                             <textarea
