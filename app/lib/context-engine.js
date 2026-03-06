@@ -4,59 +4,18 @@
 import { getChapters } from './storage';
 import { getProjectSettings, getSettingsNodes, getWritingMode, getActiveWorkId } from './settings';
 import { getEmbedding, cosineSimilarity } from './embeddings';
+import { estimateTokenCount } from 'tokenx';
 
 // ==================== Token 预算管理 ====================
 
 export const INPUT_TOKEN_BUDGET = 200000;  // 输入预算（发送给AI的上下文）
 export const OUTPUT_TOKEN_BUDGET = 6000;   // 输出预算（AI生成的回复长度，约4500字）
 
-// 各 provider 的中文 token 比例（中文字符数 / token 数）
-// 比例越大 = tokenizer 越高效 = 同样文字消耗越少 token
-const PROVIDER_CN_RATIO = {
-    // 国产模型 — tokenizer 对中文优化，约 2.5~3 字/token
-    zhipu: 2.5,
-    deepseek: 2.5,
-    siliconflow: 2.5,
-    volcengine: 2.5,
-    moonshot: 2.5,
-    bailian: 2.5,      // 阿里云百炼 (Qwen) - OpenAI 格式
-    minimax: 2.5,      // MiniMax - OpenAI 格式
-    // 西方模型 — 中文效率较低
-    openai: 1.5,
-    'openai-responses': 1.5,
-    claude: 1.8,
-    // Gemini — 中间水平
-    gemini: 2.0,
-    'gemini-native': 2.0,
-    // 默认 / 自定义
-    custom: 2.0,
-    'custom-gemini': 2.0,
-    'custom-claude': 1.8,
-};
-
-// 获取当前 provider 的中文 token 比例
-function getCnRatio() {
-    try {
-        const settings = getProjectSettings();
-        const provider = settings.apiConfig?.provider || 'custom';
-        const apiFormat = settings.apiConfig?.apiFormat;
-        // 如果使用 Anthropic 格式，使用 Claude 的比例
-        if (apiFormat === 'anthropic') {
-            return 1.8;
-        }
-        return PROVIDER_CN_RATIO[provider] || 2.0;
-    } catch {
-        return 2.0;
-    }
-}
-
-// 基于当前 provider 的 token 估算
+// 基于 tokenx 库的 token 估算（与 Cherry Studio 同一方案）
+// tokenx 是启发式估算，与实际 tokenizer 会有微小差异（±10-20%），这是正常的
 export function estimateTokens(text) {
     if (!text) return 0;
-    const cnRatio = getCnRatio();
-    const chineseChars = (text.match(/[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/g) || []).length;
-    const otherChars = text.length - chineseChars;
-    return Math.ceil(chineseChars / cnRatio + otherChars / 4);
+    return estimateTokenCount(text);
 }
 
 // 上下文模块优先级（数字越小越优先）
