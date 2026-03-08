@@ -347,7 +347,15 @@
     "conflictSelectAll": "Select All",
     "conflictSelectExisting": "Select Existing",
     "conflictSelectImported": "Select Imported",
-    "conflictConfirm": "Confirm Merge"
+    "conflictConfirm": "Confirm Merge",
+    "previewChapter": "Preview Chapter",
+    "previewLabel": "Preview",
+    "previewPrev": "Previous",
+    "previewNext": "Next",
+    "previewClose": "Close Preview",
+    "previewEmpty": "This chapter has no content yet",
+    "previewAll": "Full Book Preview",
+    "untitled": "Untitled"
   },
   "page": {
     "noChapterHint": "Select or create a chapter to start writing",
@@ -557,5 +565,18 @@
     "checkFailed": "❌ Failed to check for updates, please try again later",
     "goUpdate": "Go to Update",
     "close": "Close"
+  },
+  "modelPicker": {
+    "search": "Search models…",
+    "configured": "Configured",
+    "unconfigured": "Not Configured",
+    "noKey": "Configure →",
+    "noModels": "No models yet, add in settings",
+    "notConfigured": "No model configured",
+    "chatModel": "Chat",
+    "editorModel": "Editor",
+    "follow": "Follow",
+    "followMain": "Follow main config",
+    "openSettings": "Manage providers"
   }
 }

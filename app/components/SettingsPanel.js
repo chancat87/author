@@ -30,6 +30,7 @@ import {
     preprocessPdfText,
     exportNodesToTxt, exportNodesToMarkdown,
     exportNodesToDocx, exportSettingsAsPdf, parseDocxToText, parsePdfToText,
+    parsePmpxFile,
 } from '../lib/settings-io';
 import SettingsConflictModal from './SettingsConflictModal';
 
@@ -288,6 +289,39 @@ export default function SettingsPanel() {
         if (!file) return;
         e.target.value = '';
         const ext = file.name.split('.').pop().toLowerCase();
+
+        // PMPX 导入（排骨笔记）— 独立流程
+        if (ext === 'pmpx') {
+            try {
+                if (!activeWorkId) { alert(t('settings.importNoWork')); return; }
+                const importedItems = await parsePmpxFile(file);
+                if (importedItems.length === 0) {
+                    alert(t('settings.importEmpty') || '未能从文件中解析出任何设定条目');
+                    return;
+                }
+                // 检测冲突
+                const existingItems = nodes.filter(n => n.type === 'item' && n.parentId);
+                const conflicts = [];
+                const noConflicts = [];
+                for (const item of importedItems) {
+                    const existing = existingItems.find(n =>
+                        n.name === item.name && n.category === item.category &&
+                        nodes.find(p => p.id === n.parentId && (p.parentId === activeWorkId || p.id === activeWorkId))
+                    );
+                    if (existing) {
+                        conflicts.push({ name: item.name, category: item.category, existing, imported: item });
+                    } else {
+                        noConflicts.push(item);
+                    }
+                }
+                if (conflicts.length > 0) {
+                    setConflictData({ conflicts, noConflicts });
+                } else {
+                    await doImportItems(noConflicts, []);
+                }
+            } catch (err) { alert((t('settings.importError')) + err.message); }
+            return;
+        }
 
         // 先把文件转换为纯文本
         let text;
@@ -560,7 +594,7 @@ export default function SettingsPanel() {
     ];
 
     return (
-        <div className="settings-panel-overlay" onClick={onClose}>
+        <div className="settings-panel-overlay" onMouseDown={e => { e.currentTarget._mouseDownTarget = e.target; }} onClick={e => { if (e.currentTarget._mouseDownTarget === e.currentTarget) onClose(); }}>
             <div className={`settings-panel-container glass-panel${isFullscreen ? ' fullscreen' : ''}`} onClick={e => e.stopPropagation()}>
                 {/* 头部 */}
                 <div className="settings-header" style={{ background: 'transparent' }}>
@@ -691,7 +725,7 @@ export default function SettingsPanel() {
                                         title={t('settings.importSettingsTitle')}
                                     >
                                         📥 {t('settings.importSettings')}
-                                        <input type="file" accept=".json,.txt,.md,.markdown,.docx,.pdf" style={{ display: 'none' }} onChange={handleImportSettings} />
+                                        <input type="file" accept=".json,.txt,.md,.markdown,.docx,.pdf,.pmpx" style={{ display: 'none' }} onChange={handleImportSettings} />
                                     </label>
                                     <button
                                         style={{ padding: '5px 10px', border: '1px solid rgba(229,62,62,0.3)', borderRadius: 'var(--radius-sm)', background: 'none', cursor: 'pointer', fontSize: 12, color: '#e53e3e', transition: 'all 0.15s' }}
@@ -798,7 +832,7 @@ export default function SettingsPanel() {
     );
 }
 
-const PROVIDERS = [
+export const PROVIDERS = [
     // === 国内供应商 ===
     { key: 'zhipu', label: '智谱AI (GLM)', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', models: ['glm-4-flash', 'glm-4-plus', 'glm-4-long', 'glm-4'] },
     { key: 'deepseek', label: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', models: ['deepseek-chat', 'deepseek-reasoner'] },
@@ -959,6 +993,8 @@ function ApiConfigForm({ data, onChange }) {
     const [profileName, setProfileName] = useState('');
     const [showSaveInput, setShowSaveInput] = useState(false);
     const [providerSearch, setProviderSearch] = useState('');
+    const [showModelModal, setShowModelModal] = useState(false);
+    const [modelSearch, setModelSearch] = useState('');
     const { t } = useI18n();
 
     // 根据 provider 和 apiFormat 获取正确的 baseUrl
@@ -1010,6 +1046,7 @@ function ApiConfigForm({ data, onChange }) {
                 baseUrl: data.baseUrl || '',
                 model: data.model || '',
                 apiFormat: data.apiFormat || '',
+                models: data.providerConfigs?.[data.provider]?.models || (data.model ? [data.model] : []),
             };
         }
 
@@ -1063,7 +1100,7 @@ function ApiConfigForm({ data, onChange }) {
             const res = await fetch('/api/ai/models', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apiKey: data.apiKey, baseUrl: data.baseUrl, provider: data.provider }) });
             const result = await res.json();
             if (result.error) { setFetchedModels(null); setTestStatus({ success: false, error: result.error }); }
-            else { setFetchedModels(result.models || []); }
+            else { setFetchedModels(result.models || []); setShowModelModal(true); setModelSearch(''); }
         } catch { setFetchedModels(null); setTestStatus({ success: false, error: t('apiConfig.fetchModelsFailed') }); }
     };
 
@@ -1249,50 +1286,101 @@ function ApiConfigForm({ data, onChange }) {
                     {/* API 地址 */}
                     <FieldInput label={isCustom ? t('apiConfig.apiAddress') : t('apiConfig.apiAddressAuto')} value={data.baseUrl} onChange={v => update('baseUrl', v)} placeholder={data.provider === 'custom-gemini' ? 'https://generativelanguage.googleapis.com/v1beta' : data.provider === 'custom-claude' ? 'https://api.anthropic.com' : t('apiConfig.apiAddressPlaceholder')} />
 
-                    {/* 模型选择 */}
-                    {currentProvider.models.length > 0 && !isCustom ? (
-                        <div style={{ marginBottom: 14 }}>
-                            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 5 }}>
-                                {t('apiConfig.model')}
-                                {data.apiKey && (
-                                    <button style={{ marginLeft: 8, fontSize: 11, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }} onClick={handleFetchModels} disabled={fetchedModels === 'loading'}>
-                                        {fetchedModels === 'loading' ? t('apiConfig.fetching') : t('apiConfig.fetchModels')}
-                                    </button>
-                                )}
-                            </label>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, ...(Array.isArray(fetchedModels) && fetchedModels.length > 20 ? { maxHeight: 200, overflowY: 'auto', padding: 4, border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)' } : {}) }}>
-                                {(Array.isArray(fetchedModels) ? fetchedModels.map(m => m.id) : currentProvider.models).map(m => (
-                                    <button key={m} style={{ padding: '5px 12px', border: data.model === m ? '2px solid var(--accent)' : '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', background: data.model === m ? 'var(--accent-light)' : 'var(--bg-primary)', cursor: 'pointer', fontSize: 12, color: data.model === m ? 'var(--accent)' : 'var(--text-primary)', fontFamily: 'monospace' }} onClick={() => update('model', m)}>{m}</button>
-                                ))}
-                            </div>
-                            {Array.isArray(fetchedModels) && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{t('apiConfig.fetchedCount').replace('{count}', fetchedModels.length)}</div>}
-                            {currentProvider.allowCustomModel && (
-                                <div style={{ marginTop: 8 }}>
-                                    <input className="modal-input" style={{ marginBottom: 0 }} value={data.model || ''} onChange={e => update('model', e.target.value)} placeholder="或输入自定义模型名称" />
-                                </div>
+                    {/* 模型选择 — 统一用弹窗管理，内联只显示当前模型 + 获取按钮 */}
+                    <div style={{ marginBottom: 14 }}>
+                        <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 5 }}>
+                            {t('apiConfig.model')}
+                        </label>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                            <input className="modal-input" style={{ marginBottom: 0, flex: 1 }} value={data.model || ''} onChange={e => update('model', e.target.value)} placeholder={isCustom ? (data.provider === 'custom-gemini' ? '例如：gemini-2.0-flash' : data.provider === 'custom-claude' ? '例如：claude-sonnet-4-20250514' : '例如：gpt-4o-mini') : '选择或输入模型名称'} />
+                            {(isCustom ? (data.apiKey && data.baseUrl) : data.apiKey) && (
+                                <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, whiteSpace: 'nowrap', flexShrink: 0 }} onClick={() => { if (Array.isArray(fetchedModels) && fetchedModels.length > 0) { setShowModelModal(true); setModelSearch(''); } else { handleFetchModels(); } }} disabled={fetchedModels === 'loading'}>
+                                    {fetchedModels === 'loading' ? '⏳ 获取中…' : Array.isArray(fetchedModels) && fetchedModels.length > 0 ? `📋 模型列表 (${fetchedModels.length})` : '📡 获取模型列表'}
+                                </button>
                             )}
                         </div>
-                    ) : (
-                        <div style={{ marginBottom: 14 }}>
-                            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 5 }}>
-                                {t('apiConfig.modelName')}
-                                {data.apiKey && data.baseUrl && (
-                                    <button style={{ marginLeft: 8, fontSize: 11, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }} onClick={handleFetchModels} disabled={fetchedModels === 'loading'}>
-                                        {fetchedModels === 'loading' ? t('apiConfig.fetching') : t('apiConfig.fetchModels')}
-                                    </button>
-                                )}
-                            </label>
-                            <input className="modal-input" style={{ marginBottom: 0 }} value={data.model || ''} onChange={e => update('model', e.target.value)} placeholder={data.provider === 'custom-gemini' ? '例如：gemini-2.0-flash' : data.provider === 'custom-claude' ? '例如：claude-sonnet-4-20250514' : '例如：gpt-4o-mini'} />
-                            {Array.isArray(fetchedModels) && fetchedModels.length > 0 && (
-                                <>
-                                    <div style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 4px' }}>{t('apiConfig.fetchedCountClick').replace('{count}', fetchedModels.length)}</div>
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                                        {fetchedModels.map(m => (
-                                            <button key={m.id} style={{ padding: '4px 10px', border: data.model === m.id ? '2px solid var(--accent)' : '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', background: data.model === m.id ? 'var(--accent-light)' : 'var(--bg-primary)', cursor: 'pointer', fontSize: 11, color: data.model === m.id ? 'var(--accent)' : 'var(--text-primary)', fontFamily: 'monospace' }} onClick={() => update('model', m.id)}>{m.id}</button>
-                                        ))}
+                        {/* 快切列表管理 */}
+                        {data.model && (() => {
+                            const savedModels = data.providerConfigs?.[data.provider]?.models || [];
+                            const isInList = savedModels.includes(data.model);
+                            return (
+                                <button style={{ marginTop: 6, padding: '4px 12px', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', background: isInList ? 'color-mix(in srgb, var(--accent) 15%, transparent)' : 'var(--bg-primary)', cursor: 'pointer', fontSize: 11, color: isInList ? 'var(--accent)' : 'var(--text-secondary)' }} onClick={() => {
+                                    const configs = { ...(data.providerConfigs || {}) };
+                                    if (!configs[data.provider]) configs[data.provider] = {};
+                                    const models = [...(configs[data.provider].models || [])];
+                                    if (isInList) {
+                                        configs[data.provider] = { ...configs[data.provider], models: models.filter(x => x !== data.model) };
+                                    } else {
+                                        models.push(data.model);
+                                        configs[data.provider] = { ...configs[data.provider], models };
+                                    }
+                                    onChange({ ...data, providerConfigs: configs });
+                                }}>{isInList ? '☑ 已在快切列表' : '☐ 加入快切列表'}</button>
+                            );
+                        })()}
+                    </div>
+
+                    {/* ===== 获取模型弹窗 ===== */}
+                    {showModelModal && Array.isArray(fetchedModels) && (
+                        <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }} onClick={e => { if (e.target === e.currentTarget) setShowModelModal(false); }}>
+                            <div style={{ background: 'var(--bg-primary)', borderRadius: 'var(--radius-lg, 14px)', boxShadow: '0 16px 48px rgba(0,0,0,0.25)', width: 480, maxWidth: '90vw', maxHeight: '70vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', animation: 'modelPickerFadeInDown 0.2s ease' }}>
+                                {/* 弹窗头 */}
+                                <div style={{ padding: '16px 20px 12px', borderBottom: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <div>
+                                        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>可用模型列表</div>
+                                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{currentProvider.label} · 共 {fetchedModels.length} 个模型，勾选加入快切列表</div>
                                     </div>
-                                </>
-                            )}
+                                    <button style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--text-muted)', padding: '4px 8px', lineHeight: 1 }} onClick={() => setShowModelModal(false)}>✕</button>
+                                </div>
+                                {/* 搜索框 */}
+                                <div style={{ padding: '10px 20px 8px' }}>
+                                    <input
+                                        style={{ width: '100%', padding: '7px 12px', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm, 6px)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: 12, outline: 'none' }}
+                                        placeholder="🔍 搜索模型名称…"
+                                        value={modelSearch}
+                                        onChange={e => setModelSearch(e.target.value)}
+                                        autoFocus
+                                    />
+                                </div>
+                                {/* 模型列表 */}
+                                <div style={{ flex: 1, overflowY: 'auto', padding: '4px 12px 12px' }}>
+                                    {fetchedModels
+                                        .filter(m => !modelSearch || m.id.toLowerCase().includes(modelSearch.toLowerCase()))
+                                        .map(m => {
+                                            const savedModels = data.providerConfigs?.[data.provider]?.models || [];
+                                            const isInList = savedModels.includes(m.id);
+                                            const isActive = data.model === m.id;
+                                            return (
+                                                <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 'var(--radius-sm, 6px)', cursor: 'pointer', transition: 'background 0.1s', background: isActive ? 'color-mix(in srgb, var(--accent) 8%, transparent)' : 'transparent' }}
+                                                    onMouseEnter={e => e.currentTarget.style.background = isActive ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'var(--bg-secondary)'}
+                                                    onMouseLeave={e => e.currentTarget.style.background = isActive ? 'color-mix(in srgb, var(--accent) 8%, transparent)' : 'transparent'}
+                                                >
+                                                    {/* 勾选框 */}
+                                                    <button style={{ width: 22, height: 22, border: isInList ? '2px solid var(--accent)' : '2px solid var(--border-light)', borderRadius: 4, background: isInList ? 'var(--accent)' : 'transparent', color: '#fff', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, transition: 'all 0.15s' }} onClick={() => {
+                                                        const configs = { ...(data.providerConfigs || {}) };
+                                                        if (!configs[data.provider]) configs[data.provider] = {};
+                                                        const models = [...(configs[data.provider].models || [])];
+                                                        if (isInList) {
+                                                            configs[data.provider] = { ...configs[data.provider], models: models.filter(x => x !== m.id) };
+                                                        } else {
+                                                            models.push(m.id);
+                                                            configs[data.provider] = { ...configs[data.provider], models };
+                                                        }
+                                                        onChange({ ...data, providerConfigs: configs });
+                                                    }}>{isInList ? '✓' : ''}</button>
+                                                    {/* 模型名 */}
+                                                    <span style={{ flex: 1, fontFamily: 'monospace', fontSize: 12, color: isActive ? 'var(--accent)' : 'var(--text-primary)', fontWeight: isActive ? 600 : 400, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }} onClick={() => { update('model', m.id); }} title={`使用 ${m.id}`}>{m.id}</span>
+                                                    {isActive && <span style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 600, flexShrink: 0 }}>当前</span>}
+                                                </div>
+                                            );
+                                        })}
+                                </div>
+                                {/* 底部 */}
+                                <div style={{ padding: '10px 20px', borderTop: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>已勾选 {(data.providerConfigs?.[data.provider]?.models || []).length} 个模型</span>
+                                    <button style={{ padding: '6px 20px', borderRadius: 'var(--radius-sm, 6px)', border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }} onClick={() => setShowModelModal(false)}>完成</button>
+                                </div>
+                            </div>
                         </div>
                     )}
 
@@ -1302,8 +1390,8 @@ function ApiConfigForm({ data, onChange }) {
                             {testStatus === 'loading' ? '测试中...' : '🔌 测试连接'}
                         </button>
                         {testStatus && testStatus !== 'loading' && (
-                            <span style={{ fontSize: 12, color: testStatus === 'success' ? 'var(--success)' : 'var(--error)', alignSelf: 'center' }}>
-                                {testStatus === 'success' ? '✅ 连接成功' : `❌ ${testStatus}`}
+                            <span style={{ fontSize: 12, color: testStatus.success ? 'var(--success)' : 'var(--error)', alignSelf: 'center' }}>
+                                {testStatus.success ? '✅ 连接成功' : `❌ ${testStatus.error || '连接失败'}`}
                             </span>
                         )}
                     </div>

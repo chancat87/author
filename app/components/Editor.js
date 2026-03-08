@@ -19,6 +19,7 @@ import { PageBreakExtension } from './PageBreakExtension';
 import GhostMark from './GhostMark';
 import { useEffect, useCallback, useRef, useState, useMemo, useId, forwardRef, useImperativeHandle } from 'react';
 import { useAppStore } from '../store/useAppStore';
+import ModelPicker from './ModelPicker';
 
 // ==================== AI 模式配置 ====================
 const AI_MODES = [
@@ -225,9 +226,13 @@ const Editor = forwardRef(function Editor({ content, onUpdate, editable = true, 
             <EditorToolbar editor={editor} margins={margins} setMargins={setMargins} />
             <div
                 className="editor-container"
+                onMouseDown={(e) => {
+                    // 记录 mousedown 是否在 tiptap 内部，避免拖选文字松开时误触发 focus('end')
+                    e.currentTarget._mouseDownInTiptap = !!e.target.closest('.tiptap');
+                }}
                 onClick={(e) => {
-                    // 点击灰色空隙处自动聚焦到文末
-                    if (e.target.closest('.editor-container') && !e.target.closest('.tiptap')) {
+                    // 只有 mousedown 和 mouseup 都在灰色空隙（非 tiptap 区域）时才聚焦到文末
+                    if (!e.currentTarget._mouseDownInTiptap && e.target.closest('.editor-container') && !e.target.closest('.tiptap')) {
                         editor?.chain().focus('end').run();
                     }
                 }}
@@ -1333,6 +1338,11 @@ function EditorToolbar({ editor, margins, setMargins }) {
 
     return (
         <div className="editor-toolbar" onMouseDown={e => { if (e.target.tagName !== 'INPUT') e.preventDefault(); }}>
+            {/* 编辑器 AI 模型切换器 */}
+            <ModelPicker target="editor" dropDirection="down" />
+
+            <div className="toolbar-divider" />
+
             {/* 撤销/重做 */}
             <div className="toolbar-group">
                 <button className="toolbar-btn" onClick={() => editor.chain().focus().undo().run()} title="撤销 (Ctrl+Z)">↩</button>

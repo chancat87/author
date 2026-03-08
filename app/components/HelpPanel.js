@@ -592,7 +592,7 @@ export default function HelpPanel({ open, onClose }) {
     const currentSection = HELP_SECTIONS.find(s => s.id === activeSection);
 
     return (
-        <div className="help-overlay" onClick={onClose}>
+        <div className="help-overlay" onMouseDown={e => { e.currentTarget._mouseDownTarget = e.target; }} onClick={e => { if (e.currentTarget._mouseDownTarget === e.currentTarget) onClose(); }}>
             <div className="help-panel" onClick={e => e.stopPropagation()}>
                 {/* 顶栏 */}
                 <div className="help-header">

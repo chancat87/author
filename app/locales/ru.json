@@ -347,7 +347,15 @@
         "conflictSelectAll": "Выбрать все",
         "conflictSelectExisting": "Выбрать существующие",
         "conflictSelectImported": "Выбрать импортированные",
-        "conflictConfirm": "Подтвердить слияние"
+        "conflictConfirm": "Подтвердить слияние",
+        "previewChapter": "Предпросмотр главы",
+        "previewLabel": "Предпросмотр",
+        "previewPrev": "Предыдущая",
+        "previewNext": "Следующая",
+        "previewClose": "Закрыть предпросмотр",
+        "previewEmpty": "В этой главе пока нет содержимого",
+        "previewAll": "Предпросмотр книги",
+        "untitled": "Без названия"
     },
     "page": {
         "noChapterHint": "Выберите или создайте главу, чтобы начать писать",
@@ -553,5 +561,18 @@
         "checkFailed": "❌ Не удалось проверить обновления, попробуйте позже",
         "goUpdate": "Перейти к обновлению",
         "close": "Закрыть"
+    },
+    "modelPicker": {
+        "search": "Поиск моделей…",
+        "configured": "Настроенные",
+        "unconfigured": "Не настроенные",
+        "noKey": "Настроить →",
+        "noModels": "Нет моделей, добавьте в настройках",
+        "notConfigured": "Модель не настроена",
+        "chatModel": "Чат",
+        "editorModel": "Редактор",
+        "follow": "Следовать",
+        "followMain": "Следовать основной конфигурации",
+        "openSettings": "Управление провайдерами"
     }
 }

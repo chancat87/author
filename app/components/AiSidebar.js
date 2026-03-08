@@ -8,9 +8,10 @@ import {
     renameSession, switchSession, getActiveSession, addMessage, editMessage as editMsgFn,
     deleteMessage as deleteMsgFn, createBranch, addVariant, switchVariant, replaceMessages
 } from '../lib/chat-sessions';
-import { getProjectSettings, getActiveWorkId, getSettingsNodes, addSettingsNode, updateSettingsNode, deleteSettingsNode } from '../lib/settings';
+import { getProjectSettings, getChatApiConfig, getActiveWorkId, getSettingsNodes, addSettingsNode, updateSettingsNode, deleteSettingsNode } from '../lib/settings';
 import { useAppStore } from '../store/useAppStore';
 import ChatMarkdown from './ChatMarkdown';
+import ModelPicker from './ModelPicker';
 import { useI18n } from '../lib/useI18n';
 
 // 解析消息中的 [SETTINGS_ACTION] 块（支持可选的代码围栏包裹）
@@ -333,7 +334,8 @@ export default function AiSidebar({ onInsertText }) {
         const aiMsgId = `msg-${Date.now()}-a`;
 
         try {
-            const { apiConfig } = getProjectSettings();
+            const apiConfig = getChatApiConfig();
+
             const apiEndpoint = ['gemini-native', 'custom-gemini'].includes(apiConfig?.provider) ? '/api/ai/gemini'
                 : apiConfig?.provider === 'openai-responses' ? '/api/ai/responses'
                     : (['claude', 'custom-claude'].includes(apiConfig?.provider) || apiConfig?.apiFormat === 'anthropic') ? '/api/ai/claude'
@@ -400,7 +402,8 @@ export default function AiSidebar({ onInsertText }) {
         console.log('[Regenerate] User msg:', userMsg.content.slice(0, 50));
 
         try {
-            const { apiConfig } = getProjectSettings();
+            const apiConfig = getChatApiConfig();
+
             const apiEndpoint = ['gemini-native', 'custom-gemini'].includes(apiConfig?.provider) ? '/api/ai/gemini'
                 : apiConfig?.provider === 'openai-responses' ? '/api/ai/responses'
                     : ['claude', 'custom-claude'].includes(apiConfig?.provider) ? '/api/ai/claude'
@@ -724,6 +727,7 @@ export default function AiSidebar({ onInsertText }) {
             {/* 标题栏 */}
             <div className="ai-sidebar-header">
                 <span className="ai-sidebar-title">{t('aiSidebar.title')}</span>
+                <ModelPicker target="chat" dropDirection="down" />
                 <div style={{ display: 'flex', gap: '4px' }}>
                     <button
                         className="btn btn-ghost btn-icon btn-sm"
@@ -1106,30 +1110,32 @@ export default function AiSidebar({ onInsertText }) {
                         <div ref={chatEndRef} />
                     </div>
 
-                    {/* 输入框 */}
+                    {/* 模型切换器 + 输入框 */}
                     <div className="chat-input-area">
-                        <textarea
-                            ref={inputRef}
-                            className="chat-input"
-                            placeholder={t('aiSidebar.inputPlaceholder')}
-                            value={inputText}
-                            onChange={e => setInputText(e.target.value)}
-                            onKeyDown={e => {
-                                if (e.key === 'Enter' && !e.shiftKey) {
-                                    e.preventDefault();
-                                    handleSend();
-                                }
-                            }}
-                            disabled={chatStreaming}
-                            rows={2}
-                        />
-                        <button
-                            className="chat-send-btn"
-                            onClick={handleSend}
-                            disabled={!inputText.trim() || chatStreaming}
-                        >
-                            {chatStreaming ? '⏳' : '↑'}
-                        </button>
+                        <div style={{ display: 'flex', gap: 6, flex: 1 }}>
+                            <textarea
+                                ref={inputRef}
+                                className="chat-input"
+                                placeholder={t('aiSidebar.inputPlaceholder')}
+                                value={inputText}
+                                onChange={e => setInputText(e.target.value)}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                        e.preventDefault();
+                                        handleSend();
+                                    }
+                                }}
+                                disabled={chatStreaming}
+                                rows={2}
+                            />
+                            <button
+                                className="chat-send-btn"
+                                onClick={handleSend}
+                                disabled={!inputText.trim() || chatStreaming}
+                            >
+                                {chatStreaming ? '⏳' : '↑'}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )

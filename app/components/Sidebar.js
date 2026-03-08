@@ -846,10 +846,25 @@ function ChapterConflictModal({ conflicts, onClose, onConfirm, t }) {
     );
 }
 
-// 导出更多弹窗 — 选择章节 + 格式
+// HTML → 纯文本
+function htmlToPlainText(html) {
+    return (html || '')
+        .replace(/<\/p>/gi, '\n\n')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<[^>]*>/g, '')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .trim();
+}
+
+// 导出更多弹窗 — 选择章节 + 格式 + 预览
 function ExportModal({ chapters, onClose, onExport, t }) {
     const [selected, setSelected] = useState(new Set());
     const [format, setFormat] = useState('txt');
+    const [previewChapter, setPreviewChapter] = useState(null); // 当前预览的章节对象
+    const [previewMode, setPreviewMode] = useState(null); // null | 'single' | 'all'
 
     // 按每 10 章分组
     const groups = [];
@@ -896,169 +911,474 @@ function ExportModal({ chapters, onClose, onExport, t }) {
         { value: 'pdf', label: '🖨️ PDF' },
     ];
 
+    // 导航到上/下一章预览
+    const navigatePreview = (delta) => {
+        if (!previewChapter) return;
+        const idx = chapters.findIndex(ch => ch.id === previewChapter.id);
+        const nextIdx = idx + delta;
+        if (nextIdx >= 0 && nextIdx < chapters.length) {
+            setPreviewChapter(chapters[nextIdx]);
+        }
+    };
+
+    // 是否显示预览面板
+    const showPreview = previewMode === 'all' || (previewMode === 'single' && previewChapter);
+    // 全书总字数
+    const totalWords = chapters.reduce((sum, ch) => sum + (ch.wordCount || 0), 0);
+
+    // 每种格式的容器样式
+    const formatContainerStyle = {
+        txt: { fontFamily: '"Cascadia Code", "SF Mono", "Consolas", monospace', fontSize: 13, lineHeight: 1.7, background: 'var(--bg-secondary)', padding: '20px 24px', borderRadius: 8 },
+        md: { fontFamily: '"Cascadia Code", "SF Mono", "Consolas", monospace', fontSize: 13, lineHeight: 1.7, background: '#1e1e2e', color: '#cdd6f4', padding: '20px 24px', borderRadius: 8 },
+        docx: { fontFamily: '"SimSun", "Songti SC", "STSong", serif', fontSize: 15, lineHeight: 1.8, background: '#fff', color: '#222', padding: '40px 48px', borderRadius: 4, boxShadow: '0 2px 12px rgba(0,0,0,0.08)', border: '1px solid #e0e0e0', maxWidth: 680, margin: '0 auto' },
+        epub: { fontFamily: '"Georgia", "Palatino Linotype", "Book Antiqua", serif', fontSize: 16, lineHeight: 2, background: '#fffef8', color: '#2c2c2c', padding: '32px 40px', borderRadius: 8, maxWidth: 640, margin: '0 auto', boxShadow: '0 1px 6px rgba(0,0,0,0.06)' },
+        pdf: { fontFamily: '"SimSun", "Songti SC", serif', fontSize: 14, lineHeight: 1.8, background: '#fff', color: '#111', padding: '48px 52px', border: '1px solid #ccc', borderRadius: 2, maxWidth: 700, margin: '0 auto', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' },
+    };
+
+    // 根据格式渲染单个章节内容块 — 与导出管线保持一致
+    const renderChapterBlock = (ch, idx, total) => {
+        const title = ch.title || t('sidebar.untitled') || '未命名';
+        const plainText = htmlToPlainText(ch.content);
+        const empty = !ch.content && !plainText;
+        const emptyNode = (
+            <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 13, fontStyle: 'italic', padding: '20px 0', textIndent: 0 }}>
+                {t('sidebar.previewEmpty') || '此章节暂无内容'}
+            </div>
+        );
+        // 与导出一致：先 htmlToText → 按空行拆段，每段内 \n 转 <br>
+        const paragraphs = plainText ? plainText.split(/\n\n+/).filter(p => p.trim()) : [];
+
+        // 渲染段落列表（DOCX/EPUB/PDF 共用）
+        const renderParagraphs = (style = {}) => (
+            paragraphs.map((p, pi) => (
+                <p key={pi} style={{ margin: '0.5em 0', textIndent: '2em', ...style }}
+                    dangerouslySetInnerHTML={{ __html: p.trim().replace(/\n/g, '<br>') }} />
+            ))
+        );
+
+        switch (format) {
+            case 'txt': {
+                // 导出: title\n\ncontent 纯文本
+                return (
+                    <div key={ch.id} style={{ marginBottom: idx < total - 1 ? 32 : 0 }}>
+                        <div style={{ marginBottom: 8, color: 'var(--text-primary)' }}>{title}</div>
+                        {empty ? emptyNode : (
+                            <pre style={{ whiteSpace: 'pre-wrap', margin: 0, fontFamily: 'inherit', color: 'inherit' }}>{plainText}</pre>
+                        )}
+                        {idx < total - 1 && <div style={{ margin: '24px 0 8px', borderTop: '1px dashed var(--border-light)' }} />}
+                    </div>
+                );
+            }
+            case 'md': {
+                // 导出: # title\n\ncontent\n\n---
+                return (
+                    <div key={ch.id} style={{ marginBottom: idx < total - 1 ? 24 : 0 }}>
+                        {empty ? emptyNode : (
+                            <pre style={{ whiteSpace: 'pre-wrap', margin: 0, fontFamily: 'inherit' }}>
+                                <span style={{ color: '#f38ba8', fontWeight: 700 }}>{'# '}</span>
+                                <span style={{ color: '#cba6f7', fontWeight: 700 }}>{title}</span>
+                                {'\n\n'}
+                                <span style={{ color: '#cdd6f4' }}>{plainText}</span>
+                            </pre>
+                        )}
+                        {idx < total - 1 && (
+                            <div style={{ margin: '20px 0', color: '#585b70', textAlign: 'center', letterSpacing: 4 }}>---</div>
+                        )}
+                    </div>
+                );
+            }
+            case 'docx': {
+                // 导出: Heading1 + 宋体段落, htmlToParagraphs 剥离所有HTML
+                return (
+                    <div key={ch.id} style={{ marginBottom: idx < total - 1 ? 48 : 0 }}>
+                        <h1 style={{
+                            fontFamily: '"SimHei", "Heiti SC", "Microsoft YaHei", sans-serif',
+                            fontSize: 22, fontWeight: 700, color: '#1a1a2e',
+                            margin: '0 0 12px', textIndent: 0,
+                            borderBottom: '2px solid #2b2d42', paddingBottom: 8,
+                        }}>{title}</h1>
+                        {empty ? emptyNode : renderParagraphs({ lineHeight: 1.8 })}
+                        {idx < total - 1 && <div style={{ margin: '36px 0 12px', borderTop: '1px solid #e0e0e0' }} />}
+                    </div>
+                );
+            }
+            case 'epub': {
+                // 导出: <h1> + <p> 纯文本段落
+                return (
+                    <div key={ch.id} style={{
+                        marginBottom: idx < total - 1 ? 48 : 0,
+                        paddingBottom: idx < total - 1 ? 48 : 0,
+                        borderBottom: idx < total - 1 ? '1px solid #e8e4d9' : 'none',
+                    }}>
+                        <h1 style={{
+                            fontFamily: '"Georgia", serif',
+                            fontSize: 24, fontWeight: 400, fontStyle: 'italic',
+                            textAlign: 'center', color: '#5c4b37',
+                            margin: '12px 0 4px', textIndent: 0,
+                            letterSpacing: '0.1em',
+                        }}>{title}</h1>
+                        <div style={{ textAlign: 'center', margin: '0 0 24px', textIndent: 0 }}>
+                            <span style={{ display: 'inline-block', width: 40, height: 1, background: '#c4a882', verticalAlign: 'middle' }} />
+                            <span style={{ margin: '0 12px', color: '#c4a882', fontSize: 14 }}>✦</span>
+                            <span style={{ display: 'inline-block', width: 40, height: 1, background: '#c4a882', verticalAlign: 'middle' }} />
+                        </div>
+                        {empty ? emptyNode : renderParagraphs()}
+                    </div>
+                );
+            }
+            case 'pdf': {
+                // 导出: <h1> + <p text-indent:2em> 纯文本段落
+                return (
+                    <div key={ch.id} style={{
+                        marginBottom: idx < total - 1 ? 40 : 0,
+                        paddingBottom: idx < total - 1 ? 40 : 0,
+                        borderBottom: idx < total - 1 ? '2px dashed #ccc' : 'none',
+                    }}>
+                        <h1 style={{
+                            fontFamily: '"SimHei", "Heiti SC", sans-serif',
+                            fontSize: 19, fontWeight: 700, color: '#111',
+                            margin: '0 0 16px', textIndent: 0,
+                        }}>{title}</h1>
+                        {empty ? emptyNode : renderParagraphs({ lineHeight: 1.8, margin: '0.5em 0' })}
+                    </div>
+                );
+            }
+            default:
+                return null;
+        }
+    };
+
     return (
-        <div className="modal-overlay" onClick={onClose}>
+        <div className="modal-overlay" onMouseDown={e => { e.currentTarget._mouseDownTarget = e.target; }} onClick={e => { if (e.currentTarget._mouseDownTarget === e.currentTarget) onClose(); }}>
             <div onClick={e => e.stopPropagation()} style={{
-                width: '90vw', maxWidth: 500, maxHeight: '85vh',
-                display: 'flex', flexDirection: 'column',
+                width: '90vw', maxWidth: showPreview ? 960 : 500, maxHeight: '85vh',
+                display: 'flex', flexDirection: 'row',
                 background: 'var(--bg-card)',
                 borderRadius: 16,
                 border: '1px solid var(--border-light)',
                 boxShadow: '0 24px 48px rgba(0,0,0,0.18), 0 0 0 1px rgba(255,255,255,0.05)',
                 overflow: 'hidden',
+                transition: 'max-width 0.3s ease',
             }}>
-                {/* 头部 */}
+                {/* ===== 左侧：章节选择列表 ===== */}
                 <div style={{
-                    padding: '20px 24px 16px',
-                    background: 'linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #000))',
-                    color: '#fff',
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    display: 'flex', flexDirection: 'column',
+                    width: showPreview ? '40%' : '100%',
+                    minWidth: showPreview ? 280 : 'auto',
+                    transition: 'width 0.3s ease',
+                    overflow: 'hidden',
                 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span style={{ fontSize: 22 }}>📤</span>
-                        <div>
-                            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{t('sidebar.exportMoreTitle') || '导出更多'}</h3>
-                            <span style={{ fontSize: 12, opacity: 0.85 }}>
-                                {t('sidebar.exportSelectHint') || '选择要导出的章节'}
-                            </span>
-                        </div>
-                    </div>
-                    <button onClick={onClose} style={{
-                        background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 8,
-                        color: '#fff', width: 32, height: 32, cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
-                    }}>✕</button>
-                </div>
-
-                {/* 全选栏 */}
-                <div style={{
-                    padding: '10px 20px',
-                    borderBottom: '1px solid var(--border-light)',
-                    background: 'var(--bg-secondary)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-                        <input
-                            type="checkbox"
-                            checked={selected.size === chapters.length && chapters.length > 0}
-                            onChange={toggleAll}
-                            style={{ accentColor: 'var(--accent)', width: 16, height: 16 }}
-                        />
-                        {t('sidebar.exportSelectAll') || '全选'}
-                    </label>
-                    <span style={{
-                        fontSize: 12, fontWeight: 600,
-                        background: selected.size > 0 ? 'var(--accent)' : 'var(--bg-tertiary, #888)',
-                        color: selected.size > 0 ? '#fff' : 'var(--text-muted)',
-                        padding: '2px 10px', borderRadius: 12,
-                        transition: 'all 0.2s',
+                    {/* 头部 */}
+                    <div style={{
+                        padding: '20px 24px 16px',
+                        background: 'linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #000))',
+                        color: '#fff',
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     }}>
-                        {selected.size} / {chapters.length}
-                    </span>
-                </div>
-
-                {/* 章节分组列表 */}
-                <div style={{ flex: 1, overflowY: 'auto', padding: '8px 16px' }}>
-                    {groups.map((group, gi) => {
-                        const startIdx = gi * 10 + 1;
-                        const endIdx = gi * 10 + group.length;
-                        const groupIds = group.map(ch => ch.id);
-                        const allGroupSelected = groupIds.every(id => selected.has(id));
-                        const someGroupSelected = groupIds.some(id => selected.has(id));
-
-                        return (
-                            <div key={gi} style={{ marginBottom: 6 }}>
-                                {/* 组标题 */}
-                                <label style={{
-                                    display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
-                                    fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)',
-                                    padding: '8px 8px 6px', letterSpacing: '0.5px',
-                                    textTransform: 'uppercase',
-                                    borderBottom: '2px solid var(--border-light)',
-                                    marginBottom: 2,
-                                }}>
-                                    <input
-                                        type="checkbox"
-                                        checked={allGroupSelected}
-                                        ref={el => { if (el) el.indeterminate = someGroupSelected && !allGroupSelected; }}
-                                        onChange={() => toggleGroup(group)}
-                                        style={{ accentColor: 'var(--accent)', width: 15, height: 15 }}
-                                    />
-                                    {t('sidebar.exportGroup') || '第'} {startIdx}–{endIdx} {t('sidebar.exportGroupSuffix') || '章'}
-                                </label>
-                                {/* 组内章节 */}
-                                {group.map(ch => (
-                                    <label key={ch.id} style={{
-                                        display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
-                                        fontSize: 13, padding: '6px 8px 6px 24px',
-                                        color: selected.has(ch.id) ? 'var(--text-primary)' : 'var(--text-secondary)',
-                                        borderRadius: 6,
-                                        background: selected.has(ch.id) ? 'color-mix(in srgb, var(--accent) 8%, transparent)' : 'transparent',
-                                        transition: 'background 0.15s',
-                                    }}
-                                        onMouseEnter={e => { if (!selected.has(ch.id)) e.currentTarget.style.background = 'var(--bg-secondary)'; }}
-                                        onMouseLeave={e => { if (!selected.has(ch.id)) e.currentTarget.style.background = 'transparent'; }}
-                                    >
-                                        <input
-                                            type="checkbox"
-                                            checked={selected.has(ch.id)}
-                                            onChange={() => toggleChapter(ch.id)}
-                                            style={{ accentColor: 'var(--accent)', width: 14, height: 14, flexShrink: 0 }}
-                                        />
-                                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: selected.has(ch.id) ? 500 : 400 }}>
-                                            {ch.title || t('sidebar.untitled') || '未命名'}
-                                        </span>
-                                        <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
-                                            {(ch.wordCount || 0).toLocaleString()}{t('sidebar.wordUnit') || '字'}
-                                        </span>
-                                    </label>
-                                ))}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ fontSize: 22 }}>📤</span>
+                            <div>
+                                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{t('sidebar.exportMoreTitle') || '导出更多'}</h3>
+                                <span style={{ fontSize: 12, opacity: 0.85 }}>
+                                    {t('sidebar.exportSelectHint') || '选择要导出的章节'}
+                                </span>
                             </div>
-                        );
-                    })}
-                </div>
+                        </div>
+                        <button onClick={onClose} style={{
+                            background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 8,
+                            color: '#fff', width: 32, height: 32, cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
+                        }}>✕</button>
+                    </div>
 
-                {/* 底部操作栏 */}
-                <div style={{
-                    padding: '14px 20px',
-                    borderTop: '1px solid var(--border-light)',
-                    background: 'var(--bg-secondary)',
-                    display: 'flex', alignItems: 'center', gap: 10,
-                }}>
-                    <div style={{ display: 'flex', gap: 4, flex: 1, flexWrap: 'wrap' }}>
-                        {formats.map(f => (
+                    {/* 全选栏 */}
+                    <div style={{
+                        padding: '10px 20px',
+                        borderBottom: '1px solid var(--border-light)',
+                        background: 'var(--bg-secondary)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                            <input
+                                type="checkbox"
+                                checked={selected.size === chapters.length && chapters.length > 0}
+                                onChange={toggleAll}
+                                style={{ accentColor: 'var(--accent)', width: 16, height: 16 }}
+                            />
+                            {t('sidebar.exportSelectAll') || '全选'}
+                        </label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             <button
-                                key={f.value}
-                                onClick={() => setFormat(f.value)}
+                                onClick={() => {
+                                    if (previewMode === 'all') {
+                                        setPreviewMode(null);
+                                    } else {
+                                        setPreviewMode('all');
+                                        setPreviewChapter(null);
+                                    }
+                                }}
+                                title={t('sidebar.previewAll') || '全书预览'}
                                 style={{
-                                    padding: '5px 12px', fontSize: 12, fontWeight: 500,
-                                    borderRadius: 20, border: '1px solid',
-                                    borderColor: format === f.value ? 'var(--accent)' : 'var(--border-light)',
-                                    background: format === f.value ? 'var(--accent)' : 'transparent',
-                                    color: format === f.value ? '#fff' : 'var(--text-secondary)',
-                                    cursor: 'pointer', transition: 'all 0.2s',
+                                    background: previewMode === 'all' ? 'var(--accent)' : 'transparent',
+                                    border: '1px solid', borderColor: previewMode === 'all' ? 'var(--accent)' : 'var(--border-light)',
+                                    borderRadius: 6,
+                                    color: previewMode === 'all' ? '#fff' : 'var(--text-secondary)',
+                                    padding: '3px 10px', cursor: 'pointer', fontSize: 12, fontWeight: 500,
+                                    display: 'flex', alignItems: 'center', gap: 4,
+                                    transition: 'all 0.2s',
                                     whiteSpace: 'nowrap',
                                 }}
                             >
-                                {f.label}
+                                📖 {t('sidebar.previewAll') || '全书预览'}
                             </button>
-                        ))}
+                            <span style={{
+                                fontSize: 12, fontWeight: 600,
+                                background: selected.size > 0 ? 'var(--accent)' : 'transparent',
+                                color: selected.size > 0 ? '#fff' : 'var(--text-secondary)',
+                                padding: '2px 10px', borderRadius: 12,
+                                border: selected.size > 0 ? '1px solid var(--accent)' : '1px solid var(--border-light)',
+                                transition: 'all 0.2s',
+                            }}>
+                                {selected.size} / {chapters.length}
+                            </span>
+                        </div>
                     </div>
-                    <button
-                        className="btn btn-primary"
-                        disabled={selected.size === 0}
-                        onClick={() => {
-                            const selectedChapters = chapters.filter(ch => selected.has(ch.id));
-                            onExport(selectedChapters, format);
-                        }}
-                        style={{
-                            flexShrink: 0, padding: '8px 20px', fontSize: 13, fontWeight: 600,
-                            borderRadius: 10, opacity: selected.size === 0 ? 0.5 : 1,
-                        }}
-                    >
-                        {t('sidebar.exportBtn') || '导出'} ({selected.size})
-                    </button>
+
+                    {/* 章节分组列表 */}
+                    <div style={{ flex: 1, overflowY: 'auto', padding: '8px 16px' }}>
+                        {groups.map((group, gi) => {
+                            const startIdx = gi * 10 + 1;
+                            const endIdx = gi * 10 + group.length;
+                            const groupIds = group.map(ch => ch.id);
+                            const allGroupSelected = groupIds.every(id => selected.has(id));
+                            const someGroupSelected = groupIds.some(id => selected.has(id));
+
+                            return (
+                                <div key={gi} style={{ marginBottom: 6 }}>
+                                    {/* 组标题 */}
+                                    <label style={{
+                                        display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+                                        fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)',
+                                        padding: '8px 8px 6px', letterSpacing: '0.5px',
+                                        textTransform: 'uppercase',
+                                        borderBottom: '2px solid var(--border-light)',
+                                        marginBottom: 2,
+                                    }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={allGroupSelected}
+                                            ref={el => { if (el) el.indeterminate = someGroupSelected && !allGroupSelected; }}
+                                            onChange={() => toggleGroup(group)}
+                                            style={{ accentColor: 'var(--accent)', width: 15, height: 15 }}
+                                        />
+                                        {t('sidebar.exportGroup') || '第'} {startIdx}–{endIdx} {t('sidebar.exportGroupSuffix') || '章'}
+                                    </label>
+                                    {/* 组内章节 */}
+                                    {group.map(ch => {
+                                        const isPreviewing = previewChapter?.id === ch.id;
+                                        return (
+                                            <div key={ch.id} style={{
+                                                display: 'flex', alignItems: 'center', gap: 4,
+                                                fontSize: 13, padding: '4px 4px 4px 24px',
+                                                color: selected.has(ch.id) ? 'var(--text-primary)' : 'var(--text-secondary)',
+                                                borderRadius: 6,
+                                                background: isPreviewing ? 'color-mix(in srgb, var(--accent) 14%, transparent)' : selected.has(ch.id) ? 'color-mix(in srgb, var(--accent) 8%, transparent)' : 'transparent',
+                                                transition: 'background 0.15s',
+                                                border: isPreviewing ? '1px solid color-mix(in srgb, var(--accent) 30%, transparent)' : '1px solid transparent',
+                                            }}
+                                                onMouseEnter={e => { if (!selected.has(ch.id) && !isPreviewing) e.currentTarget.style.background = 'var(--bg-secondary)'; }}
+                                                onMouseLeave={e => { if (!selected.has(ch.id) && !isPreviewing) e.currentTarget.style.background = 'transparent'; }}
+                                            >
+                                                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', flex: 1, minWidth: 0, padding: '2px 0' }}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selected.has(ch.id)}
+                                                        onChange={() => toggleChapter(ch.id)}
+                                                        style={{ accentColor: 'var(--accent)', width: 14, height: 14, flexShrink: 0 }}
+                                                    />
+                                                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: selected.has(ch.id) ? 500 : 400 }}>
+                                                        {ch.title || t('sidebar.untitled') || '未命名'}
+                                                    </span>
+                                                </label>
+                                                <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0, fontVariantNumeric: 'tabular-nums', marginRight: 2 }}>
+                                                    {(ch.wordCount || 0).toLocaleString()}{t('sidebar.wordUnit') || '字'}
+                                                </span>
+                                                {/* 预览按钮 */}
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (isPreviewing) {
+                                                            setPreviewChapter(null);
+                                                            setPreviewMode(null);
+                                                        } else {
+                                                            setPreviewChapter(ch);
+                                                            setPreviewMode('single');
+                                                        }
+                                                    }}
+                                                    title={t('sidebar.previewChapter') || '预览章节'}
+                                                    style={{
+                                                        background: isPreviewing ? 'var(--accent)' : 'transparent',
+                                                        border: 'none', borderRadius: 4,
+                                                        color: isPreviewing ? '#fff' : 'var(--text-muted)',
+                                                        width: 24, height: 24, flexShrink: 0,
+                                                        cursor: 'pointer', fontSize: 13,
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                        transition: 'all 0.15s',
+                                                        opacity: isPreviewing ? 1 : 0.6,
+                                                    }}
+                                                    onMouseEnter={e => { if (!isPreviewing) { e.currentTarget.style.opacity = '1'; e.currentTarget.style.background = 'var(--bg-secondary)'; } }}
+                                                    onMouseLeave={e => { if (!isPreviewing) { e.currentTarget.style.opacity = '0.6'; e.currentTarget.style.background = 'transparent'; } }}
+                                                >
+                                                    👁
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    {/* 底部操作栏 */}
+                    <div style={{
+                        padding: '14px 20px',
+                        borderTop: '1px solid var(--border-light)',
+                        background: 'var(--bg-secondary)',
+                        display: 'flex', alignItems: 'center', gap: 10,
+                    }}>
+                        <div style={{ display: 'flex', gap: 4, flex: 1, flexWrap: 'wrap' }}>
+                            {formats.map(f => (
+                                <button
+                                    key={f.value}
+                                    onClick={() => setFormat(f.value)}
+                                    style={{
+                                        padding: '5px 12px', fontSize: 12, fontWeight: 500,
+                                        borderRadius: 20, border: '1px solid',
+                                        borderColor: format === f.value ? 'var(--accent)' : 'var(--border-light)',
+                                        background: format === f.value ? 'var(--accent)' : 'transparent',
+                                        color: format === f.value ? '#fff' : 'var(--text-secondary)',
+                                        cursor: 'pointer', transition: 'all 0.2s',
+                                        whiteSpace: 'nowrap',
+                                    }}
+                                >
+                                    {f.label}
+                                </button>
+                            ))}
+                        </div>
+                        <button
+                            className="btn btn-primary"
+                            disabled={selected.size === 0}
+                            onClick={() => {
+                                const selectedChapters = chapters.filter(ch => selected.has(ch.id));
+                                onExport(selectedChapters, format);
+                            }}
+                            style={{
+                                flexShrink: 0, padding: '8px 20px', fontSize: 13, fontWeight: 600,
+                                borderRadius: 10, opacity: selected.size === 0 ? 0.5 : 1,
+                            }}
+                        >
+                            {t('sidebar.exportBtn') || '导出'} ({selected.size})
+                        </button>
+                    </div>
                 </div>
+
+                {/* ===== 右侧：预览面板 (单章 / 全书) ===== */}
+                {showPreview && (
+                    <div style={{
+                        width: '60%',
+                        display: 'flex', flexDirection: 'column',
+                        borderLeft: '1px solid var(--border-light)',
+                        background: 'var(--bg-primary)',
+                        overflow: 'hidden',
+                        animation: 'fadeInRight 0.2s ease',
+                    }}>
+                        {/* 预览头部 */}
+                        <div style={{
+                            padding: '14px 20px',
+                            borderBottom: '1px solid var(--border-light)',
+                            background: 'var(--bg-secondary)',
+                            display: 'flex', alignItems: 'center', gap: 10,
+                        }}>
+                            {previewMode === 'single' && previewChapter && (
+                                <>
+                                    <button
+                                        onClick={() => navigatePreview(-1)}
+                                        disabled={chapters.findIndex(ch => ch.id === previewChapter.id) === 0}
+                                        style={{
+                                            background: 'transparent', border: '1px solid var(--border-light)', borderRadius: 6,
+                                            width: 28, height: 28, cursor: 'pointer', fontSize: 13,
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            color: 'var(--text-secondary)', opacity: chapters.findIndex(ch => ch.id === previewChapter.id) === 0 ? 0.3 : 1,
+                                            transition: 'all 0.15s',
+                                        }}
+                                        title={t('sidebar.previewPrev') || '上一章'}
+                                    >◀</button>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            📖 {previewChapter.title || t('sidebar.untitled') || '未命名'}
+                                        </div>
+                                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                                            {(previewChapter.wordCount || 0).toLocaleString()}{t('sidebar.wordUnit') || '字'}
+                                            {' · '}
+                                            {t('sidebar.previewLabel') || '预览'}
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => navigatePreview(1)}
+                                        disabled={chapters.findIndex(ch => ch.id === previewChapter.id) === chapters.length - 1}
+                                        style={{
+                                            background: 'transparent', border: '1px solid var(--border-light)', borderRadius: 6,
+                                            width: 28, height: 28, cursor: 'pointer', fontSize: 13,
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            color: 'var(--text-secondary)', opacity: chapters.findIndex(ch => ch.id === previewChapter.id) === chapters.length - 1 ? 0.3 : 1,
+                                            transition: 'all 0.15s',
+                                        }}
+                                        title={t('sidebar.previewNext') || '下一章'}
+                                    >▶</button>
+                                </>
+                            )}
+                            {previewMode === 'all' && (
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+                                        📖 {t('sidebar.previewAll') || '全书预览'}
+                                    </div>
+                                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                                        {chapters.length} {t('sidebar.exportGroupSuffix') || '章'}
+                                        {' · '}
+                                        {totalWords.toLocaleString()}{t('sidebar.wordUnit') || '字'}
+                                    </div>
+                                </div>
+                            )}
+                            <button
+                                onClick={() => { setPreviewChapter(null); setPreviewMode(null); }}
+                                style={{
+                                    background: 'transparent', border: '1px solid var(--border-light)', borderRadius: 6,
+                                    width: 28, height: 28, cursor: 'pointer', fontSize: 14,
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    color: 'var(--text-muted)', transition: 'all 0.15s',
+                                }}
+                                title={t('sidebar.previewClose') || '关闭预览'}
+                            >✕</button>
+                        </div>
+                        {/* 预览内容 — 根据格式不同应用不同样式 */}
+                        <div style={{
+                            flex: 1, overflowY: 'auto', padding: '24px 28px',
+                            color: 'var(--text-primary)',
+                        }}>
+                            <div style={{
+                                wordBreak: 'break-word', overflowWrap: 'break-word',
+                                ...(formatContainerStyle[format] || {}),
+                            }}>
+                                {previewMode === 'single' && previewChapter && (
+                                    renderChapterBlock(previewChapter, 0, 1)
+                                )}
+                                {previewMode === 'all' && (
+                                    chapters.map((ch, idx) => renderChapterBlock(ch, idx, chapters.length))
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

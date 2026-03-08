@@ -277,7 +277,7 @@ body {
   top: var(--toolbar-h, 90px);
   left: 0;
   bottom: 0;
-  width: 280px;
+  width: var(--sidebar-w, 280px);
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border-light);
   display: flex;
@@ -295,17 +295,23 @@ body {
   pointer-events: none;
 }
 
-/* 左侧侧边栏 — 挤开模式 */
+/* 左侧侧边栏 — 挤开模式（在工具栏下方） */
 .sidebar.push-mode {
-  position: relative;
-  top: auto;
-  left: auto;
-  bottom: auto;
-  z-index: auto;
+  position: absolute;
+  top: var(--toolbar-h, 85px) !important;
+  left: 0;
+  bottom: 0;
+  z-index: 25;
   flex-shrink: 0;
   transform: none;
-  box-shadow: none;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.08);
   transition: width 0.25s ease, opacity 0.25s ease;
+}
+
+/* 挤开模式下只推编辑区，工具栏保持全宽 */
+.app-layout.sidebar-push-open .editor-container {
+  margin-left: var(--sidebar-w, 280px);
+  transition: margin-left 0.25s ease;
 }
 
 .sidebar.push-mode.collapsed {
@@ -315,6 +321,55 @@ body {
   pointer-events: none;
   transform: none;
   border-right: none;
+}
+
+/* ===== 侧栏拖拽调整手柄 ===== */
+/* 拖拽时禁用所有侧栏过渡动画，消除延迟感 */
+body.resizing .sidebar,
+body.resizing .sidebar.push-mode,
+body.resizing .ai-sidebar,
+body.resizing .editor-container,
+body.resizing .main-content {
+  transition: none !important;
+}
+
+.resize-handle {
+  width: 5px;
+  cursor: col-resize;
+  flex-shrink: 0;
+  background: transparent;
+  transition: background 0.15s;
+  z-index: 40;
+  position: relative;
+}
+
+
+.resize-handle:hover,
+.resize-handle:active {
+  background: var(--accent);
+  opacity: 0.4;
+}
+
+.resize-handle:active {
+  opacity: 0.7;
+}
+
+/* 左侧栏手柄（两种模式统一绝对定位） */
+.resize-handle-left {
+  position: absolute;
+  top: var(--toolbar-h, 42px);
+  bottom: 0;
+  left: var(--sidebar-w, 280px);
+  z-index: 30;
+}
+
+/* 右侧 AI 侧栏手柄 */
+.resize-handle-right {
+  position: absolute;
+  top: var(--toolbar-h, 42px);
+  bottom: 0;
+  right: var(--ai-sidebar-w, 380px);
+  z-index: 40;
 }
 
 /* 侧边栏顶部关闭行 */
@@ -2034,6 +2089,40 @@ body {
     opacity: 1;
     transform: translateX(0);
   }
+}
+
+@keyframes fadeInRight {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* 章节预览内容样式 */
+.chapter-preview-content p {
+  margin: 0 0 1em;
+  text-indent: 2em;
+}
+
+.chapter-preview-content h1,
+.chapter-preview-content h2,
+.chapter-preview-content h3 {
+  margin: 1.2em 0 0.6em;
+  text-indent: 0;
+}
+
+.chapter-preview-content blockquote {
+  border-left: 3px solid var(--accent);
+  margin: 1em 0;
+  padding: 0.5em 1em;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 
 @keyframes bounce {
@@ -3916,7 +4005,7 @@ body {
   right: 0;
   top: var(--toolbar-h, 42px);
   bottom: 0;
-  width: 380px;
+  width: var(--ai-sidebar-w, 380px);
   background: var(--bg-primary);
   border-left: 1px solid var(--border-light);
   display: flex;
@@ -3929,7 +4018,7 @@ body {
 
 /* AI 侧栏打开时，编辑区右移让出滚动条（挤开模式） */
 .app-layout.ai-open .editor-container {
-  margin-right: 380px;
+  margin-right: var(--ai-sidebar-w, 380px);
   transition: margin-right 0.3s ease;
 }
 
@@ -3957,12 +4046,13 @@ body {
 }
 
 .ai-sidebar-header {
-  padding: 16px 20px;
+  padding: 12px 16px;
   background: linear-gradient(135deg, var(--accent-light), transparent);
   border-bottom: 1px solid var(--border-light);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
 }
 
 .ai-sidebar-title {
@@ -6302,4 +6392,262 @@ h5.chat-md-heading {
   text-transform: uppercase;
   color: var(--text-muted);
   letter-spacing: 0.5px;
+}
+
+/* ==================== ModelPicker 模型切换器 ==================== */
+
+.model-picker {
+  position: relative;
+  z-index: 100;
+}
+
+.model-picker-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-secondary);
+  transition: all 0.15s;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.model-picker-trigger:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+  background: var(--bg-primary);
+}
+
+.model-picker-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, monospace);
+  font-weight: 500;
+  font-size: 11px;
+}
+
+.model-picker-badge {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.model-picker-arrow {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.model-picker-dropdown {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  min-width: 280px;
+  max-height: 420px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md, 10px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modelPickerFadeIn 0.15s ease;
+  z-index: 9999;
+}
+
+@keyframes modelPickerFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.model-picker-dropdown.drop-down {
+  bottom: auto;
+  top: calc(100% + 6px);
+  animation: modelPickerFadeInDown 0.15s ease;
+}
+
+@keyframes modelPickerFadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.model-picker-search-wrap {
+  padding: 8px 10px 6px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.model-picker-search {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.model-picker-search:focus {
+  border-color: var(--accent);
+}
+
+.model-picker-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.model-picker-group-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  padding: 8px 12px 4px;
+}
+
+.model-picker-provider-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.model-picker-provider-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-picker-no-key {
+  font-size: 10px;
+  color: var(--accent);
+  cursor: pointer;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.model-picker-no-key:hover {
+  text-decoration: underline;
+}
+
+.model-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 12px 5px 36px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-primary);
+  text-align: left;
+  transition: background 0.1s;
+}
+
+.model-picker-item:hover {
+  background: var(--bg-secondary);
+}
+
+.model-picker-item.active {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.model-picker-item.follow {
+  padding-left: 12px;
+  border-bottom: 1px solid var(--border-light);
+  margin-bottom: 2px;
+}
+
+.model-picker-item-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+}
+
+.model-picker-item-sub {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono, monospace);
+  flex-shrink: 0;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-picker-check {
+  color: var(--accent);
+  font-weight: 700;
+  flex-shrink: 0;
+  font-size: 13px;
+}
+
+.model-picker-empty {
+  padding: 4px 12px 4px 36px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.model-picker-footer {
+  padding: 6px 10px;
+  border-top: 1px solid var(--border-light);
+}
+
+.model-picker-settings-btn {
+  width: 100%;
+  padding: 5px;
+  border: none;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.1s;
+  text-align: center;
+}
+
+.model-picker-settings-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--accent);
 }

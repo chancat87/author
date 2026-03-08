@@ -58,6 +58,68 @@ export default function Home() {
   const [showHelp, setShowHelp] = useState(false);
   const editorRef = useRef(null);
 
+  // ===== 侧栏宽度拖拽调整 =====
+  const [leftWidth, setLeftWidth] = useState(280);
+  const [rightWidth, setRightWidth] = useState(380);
+  const draggingRef = useRef(null); // 'left' | 'right' | null
+  const layoutRef = useRef(null);
+
+  // 从 localStorage 恢复宽度
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('sidebar-widths') || '{}');
+      if (saved.left) setLeftWidth(saved.left);
+      if (saved.right) setRightWidth(saved.right);
+    } catch { }
+  }, []);
+
+  const startDrag = useCallback((side, e) => {
+    e.preventDefault();
+    draggingRef.current = side;
+    const startX = e.clientX;
+    const startW = side === 'left' ? leftWidth : rightWidth;
+    let lastW = startW;
+    let rafId = 0;
+    const el = layoutRef.current;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.body.classList.add('resizing');
+
+    const onMove = (ev) => {
+      const delta = ev.clientX - startX;
+      if (side === 'left') {
+        lastW = Math.max(120, Math.min(800, startW + delta));
+      } else {
+        lastW = Math.max(200, Math.min(800, startW - delta));
+      }
+      if (!rafId) {
+        rafId = requestAnimationFrame(() => {
+          if (el) el.style.setProperty(side === 'left' ? '--sidebar-w' : '--ai-sidebar-w', lastW + 'px');
+          rafId = 0;
+        });
+      }
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      if (rafId) cancelAnimationFrame(rafId);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.body.classList.remove('resizing');
+      draggingRef.current = null;
+      if (side === 'left') setLeftWidth(lastW);
+      else setRightWidth(lastW);
+      try {
+        const cur = JSON.parse(localStorage.getItem('sidebar-widths') || '{}');
+        if (side === 'left') cur.left = lastW;
+        else cur.right = lastW;
+        localStorage.setItem('sidebar-widths', JSON.stringify(cur));
+      } catch { }
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, [leftWidth, rightWidth]);
+
   // 客户端水合后加载 localStorage 中的侧边栏布局偏好
   useEffect(() => { _hydrateSidebarModes(); }, []);
 
@@ -342,7 +404,7 @@ export default function Home() {
   }, [showToast]);
 
   return (
-    <div className={`app-layout${aiSidebarOpen ? ' ai-open' : ''}${!aiSidebarPushMode ? ' ai-overlay' : ''}`}>
+    <div ref={layoutRef} className={`app-layout${aiSidebarOpen ? ' ai-open' : ''}${!aiSidebarPushMode ? ' ai-overlay' : ''}${sidebarPushMode && sidebarOpen ? ' sidebar-push-open' : ''}`} style={{ '--sidebar-w': leftWidth + 'px', '--ai-sidebar-w': rightWidth + 'px' }}>
       {/* ===== 更新提示 ===== */}
       <UpdateBanner />
 
@@ -359,7 +421,10 @@ export default function Home() {
       <div className="content-row">
         {/* 挤开模式：侧边栏放在 main 外面 */}
         {sidebarPushMode && (
-          <Sidebar pushMode onOpenHelp={() => setShowHelp(true)} onToggle={() => setSidebarOpen(!sidebarOpen)} editorRef={editorRef} />
+          <>
+            <Sidebar pushMode onOpenHelp={() => setShowHelp(true)} onToggle={() => setSidebarOpen(!sidebarOpen)} editorRef={editorRef} />
+            {sidebarOpen && <div className="resize-handle resize-handle-left" onMouseDown={e => startDrag('left', e)} />}
+          </>
         )}
 
         {/* ===== 主内容 ===== */}
@@ -392,7 +457,10 @@ export default function Home() {
 
           {/* 覆盖模式：侧边栏放在 main 里面 */}
           {!sidebarPushMode && (
-            <Sidebar onOpenHelp={() => setShowHelp(true)} onToggle={() => setSidebarOpen(!sidebarOpen)} editorRef={editorRef} />
+            <>
+              <Sidebar onOpenHelp={() => setShowHelp(true)} onToggle={() => setSidebarOpen(!sidebarOpen)} editorRef={editorRef} />
+              {sidebarOpen && <div className="resize-handle resize-handle-left overlay" onMouseDown={e => startDrag('left', e)} />}
+            </>
           )}
 
           {/* 侧边栏展开按钮（编辑器画布左上角） */}
@@ -420,6 +488,7 @@ export default function Home() {
         </main>
 
         {/* ===== AI 对话侧栏 ===== */}
+        {aiSidebarOpen && <div className="resize-handle resize-handle-right" onMouseDown={e => startDrag('right', e)} />}
         <AiSidebar onInsertText={handleInsertFromArchive} />
       </div>
 

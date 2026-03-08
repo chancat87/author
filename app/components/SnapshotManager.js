@@ -93,7 +93,7 @@ export default function SnapshotManager({ onRestored }) {
     };
 
     return (
-        <div className="settings-panel-overlay" onClick={onClose} style={{ zIndex: 9999 }}>
+        <div className="settings-panel-overlay" onMouseDown={e => { e.currentTarget._mouseDownTarget = e.target; }} onClick={e => { if (e.currentTarget._mouseDownTarget === e.currentTarget) onClose(); }} style={{ zIndex: 9999 }}>
             <div className="settings-panel-container" onClick={e => e.stopPropagation()} style={{ width: 800, maxWidth: '90vw', height: '80vh' }}>
                 <div className="settings-header">
                     <h2>{t('snapshot.title')}

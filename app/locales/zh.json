@@ -347,7 +347,15 @@
         "conflictSelectAll": "全选",
         "conflictSelectExisting": "全选已有",
         "conflictSelectImported": "全选导入",
-        "conflictConfirm": "确认合并"
+        "conflictConfirm": "确认合并",
+        "previewChapter": "预览章节",
+        "previewLabel": "预览",
+        "previewPrev": "上一章",
+        "previewNext": "下一章",
+        "previewClose": "关闭预览",
+        "previewEmpty": "此章节暂无内容",
+        "previewAll": "全书预览",
+        "untitled": "未命名"
     },
     "page": {
         "noChapterHint": "请选择或创建一个章节开始写作",
@@ -557,5 +565,18 @@
         "checkFailed": "❌ 检查更新失败，请稍后再试",
         "goUpdate": "前往更新",
         "close": "关闭"
+    },
+    "modelPicker": {
+        "search": "搜索模型…",
+        "configured": "已配置",
+        "unconfigured": "未配置",
+        "noKey": "配置 →",
+        "noModels": "暂无模型，请在设置中添加",
+        "notConfigured": "未配置模型",
+        "chatModel": "对话",
+        "editorModel": "编辑",
+        "follow": "跟随",
+        "followMain": "跟随主配置",
+        "openSettings": "管理供应商"
     }
 }

@@ -128,6 +128,9 @@ const DEFAULT_SETTINGS = {
         reasoningEffort: 'auto',    // 思考层级: auto / low / medium / high
     },
 
+    // 对话侧栏独立模型配置（null = 跟随主配置）
+    chatApiConfig: null,
+
     // 作品基本信息
     bookInfo: {
         title: '',
@@ -217,6 +220,16 @@ export function getProjectSettings() {
                 };
             }
         }
+        // 自动迁移：为 providerConfigs 中的每个供应商补全 models 数组
+        if (settings.apiConfig?.providerConfigs) {
+            for (const [key, cfg] of Object.entries(settings.apiConfig.providerConfigs)) {
+                if (!cfg.models) {
+                    cfg.models = cfg.model ? [cfg.model] : [];
+                } else if (cfg.model && !cfg.models.includes(cfg.model)) {
+                    cfg.models.unshift(cfg.model);
+                }
+            }
+        }
         return settings;
     } catch {
         return DEFAULT_SETTINGS;
@@ -229,6 +242,17 @@ export function saveProjectSettings(settings) {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     // 异步写入服务端（不阻塞 UI）
     persistSet(SETTINGS_KEY, settings).catch(() => { });
+}
+
+/**
+ * 获取对话侧栏使用的 API 配置。
+ * 如果已配置独立的 chatApiConfig 则使用它，否则回退到主 apiConfig。
+ */
+export function getChatApiConfig() {
+    const settings = getProjectSettings();
+    const chat = settings.chatApiConfig;
+    if (chat && chat.provider) return chat;
+    return settings.apiConfig;
 }
 
 // 添加角色

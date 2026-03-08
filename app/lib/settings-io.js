@@ -721,3 +721,139 @@ h2{font-size:18px;}h3{font-size:15px;}p{text-indent:0;}
         setTimeout(() => win.print(), 500);
     }
 }
+
+// ==================== PMPX 导入（排骨笔记） ====================
+
+// PMPX 属性名 → Author 字段 key 映射
+const PMPX_FIELD_MAP = {
+    '核心身份': 'role', '职业': 'role', '核心身份|职业': 'role',
+    '核心性格': 'personality',
+    '核心欲望': 'motivation',
+    '关键背景': 'background',
+    '标志与缺陷': 'appearance',
+    '天赋': 'skills', '核心技能': 'skills', '天赋|核心技能': 'skills',
+    '说话风格': 'speechStyle', '口头禅': 'speechStyle',
+    '关系': 'relationships', '人际关系': 'relationships',
+    '成长弧线': 'arc',
+};
+
+// PMPX type → Author category
+const PMPX_TYPE_MAP = {
+    'character': 'character',
+    'location': 'location',
+    'object': 'object',
+    'world': 'world',
+    'plot': 'plot',
+};
+
+/**
+ * 从 PMPX 富文本 content JSON 中提取纯文本
+ */
+function extractPmpxText(contentJson) {
+    try {
+        const content = typeof contentJson === 'string' ? JSON.parse(contentJson) : contentJson;
+        const blocks = content?.blocks || [];
+        const parts = [];
+        for (const block of blocks) {
+            const spans = block?.spans || [];
+            for (const span of spans) {
+                if (span?.text) parts.push(span.text);
+            }
+        }
+        return parts.join('').trim();
+    } catch {
+        return '';
+    }
+}
+
+/**
+ * 从 PMPX 文件（排骨笔记导出的 .pmpx）中解析角色/物品数据
+ * @param {File} file - .pmpx 文件
+ * @returns {Promise<Array<{name: string, category: string, content: Object}>>}
+ */
+export async function parsePmpxFile(file) {
+    const JSZip = (await import('jszip')).default;
+    const arrayBuf = await file.arrayBuffer();
+    const zip = await JSZip.loadAsync(arrayBuf);
+
+    const items = [];
+
+    // 遍历所有 materials/ 下的 .pobj 文件（跳过 templates/）
+    const pobjFiles = [];
+    zip.forEach((path, entry) => {
+        if (path.startsWith('materials/') && path.endsWith('.pobj') && !entry.dir) {
+            pobjFiles.push(entry);
+        }
+    });
+
+    console.log('[PMPX Import] Found', pobjFiles.length, 'material .pobj files');
+
+    for (const entry of pobjFiles) {
+        const text = await entry.async('text');
+        let data;
+        try { data = JSON.parse(text); } catch { continue; }
+
+        // 跳过模板
+        if (data.isTemplate) continue;
+
+        const name = data.name || '未命名';
+        const category = PMPX_TYPE_MAP[data.type] || 'character';
+        const properties = data.properties || [];
+        const content = {};
+
+        // 解析属性：PMPX 使用配对模式 —
+        // kvDocument/inheritedKvDocument（带 name 标签）后跟 textBlock/inheritedTextBlock（无 name，作为补充说明）
+        for (let i = 0; i < properties.length; i++) {
+            const prop = properties[i];
+            const propName = prop.name || '';
+            const propText = extractPmpxText(prop.content);
+            const propType = prop.type || '';
+
+            // 无名 textBlock → 附加到上一个有名字段
+            if (!propName && (propType === 'textBlock' || propType === 'inheritedTextBlock')) {
+                if (propText) {
+                    // 找到最后写入的字段，追加内容
+                    const lastKey = Object.keys(content).pop();
+                    if (lastKey && content[lastKey]) {
+                        content[lastKey] += '\n' + propText;
+                    } else if (lastKey) {
+                        content[lastKey] = propText;
+                    } else {
+                        // 没有上一个字段，存到 notes
+                        content.notes = (content.notes ? content.notes + '\n' : '') + propText;
+                    }
+                }
+                continue;
+            }
+
+            if (!propName) continue;
+
+            // 映射 PMPX 属性名到 Author 字段 key
+            // 先尝试完整匹配，再尝试 | 分割后的各部分
+            let fieldKey = PMPX_FIELD_MAP[propName];
+            if (!fieldKey) {
+                const parts = propName.split('|');
+                for (const part of parts) {
+                    fieldKey = PMPX_FIELD_MAP[part.trim()];
+                    if (fieldKey) break;
+                }
+            }
+            // 仍未匹配 → 保留原始属性名作为 key
+            if (!fieldKey) fieldKey = propName;
+
+            // 合并到同一字段（如果已存在）
+            if (content[fieldKey] && propText) {
+                content[fieldKey] += '\n' + propText;
+            } else if (propText) {
+                content[fieldKey] = propText;
+            }
+        }
+
+        if (Object.keys(content).length > 0) {
+            items.push({ name, category, content });
+            console.log('[PMPX Import] Parsed:', name, '→', category, 'fields:', Object.keys(content));
+        }
+    }
+
+    return items;
+}
