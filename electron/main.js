@@ -1,6 +1,6 @@
 const { app, BrowserWindow, shell, dialog, ipcMain } = require('electron');
 const path = require('path');
-const { fork, execSync } = require('child_process');
+const { execSync } = require('child_process');
 const http = require('http');
 const net = require('net');
 const fs = require('fs');
@@ -47,6 +47,7 @@ if (!gotTheLock) {
 }
 
 let mainWindow;
+let splashWindow;
 let serverProcess;
 
 const isDev = process.argv.includes('--dev');
@@ -55,6 +56,7 @@ let actualPort = BASE_PORT;
 let loadRetries = 0;
 const MAX_LOAD_RETRIES = 10;
 let serverReady = false; // 追踪服务器是否真正就绪
+let serverCrashed = false; // 追踪子进程是否已崩溃
 
 function createWindow() {
     mainWindow = new BrowserWindow({
@@ -182,16 +184,27 @@ function tryKillPortProcess(port) {
     }
 }
 
-function waitForServer(port, maxRetries = 60) {
+function waitForServer(port, maxRetries = 30) {
     return new Promise((resolve) => {
         let retries = 0;
         const check = () => {
+            // 如果子进程已经崩溃，立即返回失败
+            if (serverCrashed) {
+                log(`[waitForServer] Server process already crashed, aborting wait`);
+                resolve(false);
+                return;
+            }
+            if (retries > 0 && retries % 5 === 0) {
+                log(`[waitForServer] Still waiting for server... attempt ${retries}/${maxRetries}`);
+                updateSplashText(`正在启动服务... (${retries}/${maxRetries})`);
+            }
             const req = http.get(`http://localhost:${port}`, (res) => {
                 resolve(true);
             });
             req.on('error', () => {
                 retries++;
                 if (retries >= maxRetries) {
+                    log(`[waitForServer] Timed out after ${maxRetries} retries`);
                     resolve(false);
                 } else {
                     setTimeout(check, 1000);
@@ -201,6 +214,7 @@ function waitForServer(port, maxRetries = 60) {
                 req.destroy();
                 retries++;
                 if (retries >= maxRetries) {
+                    log(`[waitForServer] Timed out after ${maxRetries} retries`);
                     resolve(false);
                 } else {
                     setTimeout(check, 1000);
@@ -267,43 +281,272 @@ function startNextServer() {
         }
 
         log(`Using port: ${actualPort}`);
-        log('Starting Next.js server via fork...');
 
-        serverProcess = fork(serverPath, [], {
-            cwd: standaloneDir,
-            env: {
-                ...process.env,
-                NODE_ENV: 'production',
-                PORT: String(actualPort),
-                HOSTNAME: '0.0.0.0',
-                // 提高请求体大小限制（50MB），避免上传大 PDF/DOC 文件时返回 413
-                BODY_SIZE_LIMIT: '52428800',
-            },
-            stdio: 'pipe',
-        });
+        // ===== 策略1：尝试子进程模式（5 秒超时预检） =====
+        const childProcessOk = await tryChildProcessMode(standaloneDir, serverPath);
+        if (childProcessOk) {
+            log('[Strategy] Child process mode succeeded');
+            const ready = await waitForServer(actualPort);
+            serverReady = ready;
+            log(`Server ready: ${ready}`);
+            resolve(ready);
+            return;
+        }
 
-        serverProcess.stdout.on('data', (data) => {
-            log('[Next.js stdout] ' + data.toString().trim());
-        });
+        // ===== 策略2：主进程内直接加载 server.js =====
+        log('[Strategy] Falling back to in-process server mode...');
+        updateSplashText('正在以兼容模式启动...');
 
-        serverProcess.stderr.on('data', (data) => {
-            log('[Next.js stderr] ' + data.toString().trim());
-        });
+        const inProcessOk = await tryInProcessMode(standaloneDir, serverPath);
+        if (inProcessOk) {
+            log('[Strategy] In-process mode succeeded');
+            const ready = await waitForServer(actualPort);
+            serverReady = ready;
+            log(`Server ready: ${ready}`);
+            resolve(ready);
+            return;
+        }
 
-        serverProcess.on('error', (err) => {
-            log('[Server process error] ' + err.message);
-        });
-
-        serverProcess.on('close', (code) => {
-            log('[Server process closed] code: ' + code);
-            serverReady = false;
-        });
-
-        const ready = await waitForServer(actualPort);
-        serverReady = ready;
-        log(`Server ready: ${ready}`);
-        resolve(ready);
+        log('[Strategy] All strategies failed');
+        resolve(false);
     });
+}
+
+// ===== 策略1：子进程模式 =====
+function tryChildProcessMode(standaloneDir, serverPath) {
+    return new Promise(async (resolve) => {
+        const nodeExecutable = process.execPath;
+        log(`[ChildProcess] Node executable: ${nodeExecutable}`);
+
+        updateSplashText('正在检测运行环境...');
+
+        // 预检：验证 ELECTRON_RUN_AS_NODE 是否生效（5 秒超时）
+        const preflightOk = await new Promise((preResolve) => {
+            const { spawn: spawnProcess } = require('child_process');
+            log('[Preflight] Testing ELECTRON_RUN_AS_NODE...');
+            let resolved = false;
+            const testProc = spawnProcess(nodeExecutable, ['-e', 'console.log("PREFLIGHT_OK:" + process.version)'], {
+                env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+                stdio: ['ignore', 'pipe', 'pipe'],
+                windowsHide: true,
+            });
+            let testOutput = '';
+            let testErr = '';
+            testProc.stdout.on('data', (d) => { testOutput += d.toString(); });
+            testProc.stderr.on('data', (d) => { testErr += d.toString(); });
+            testProc.on('close', (code) => {
+                if (resolved) return;
+                resolved = true;
+                log(`[Preflight] exit code: ${code}, stdout: ${testOutput.trim()}, stderr: ${testErr.trim()}`);
+                preResolve(testOutput.includes('PREFLIGHT_OK'));
+            });
+            testProc.on('error', (err) => {
+                if (resolved) return;
+                resolved = true;
+                log(`[Preflight] error: ${err.message}`);
+                preResolve(false);
+            });
+            // 5 秒超时（不再等 10 秒）
+            setTimeout(() => {
+                if (resolved) return;
+                resolved = true;
+                log('[Preflight] Timed out after 5s — ELECTRON_RUN_AS_NODE likely blocked');
+                try { testProc.kill(); } catch (e) { }
+                preResolve(false);
+            }, 5000);
+        });
+
+        if (!preflightOk) {
+            log('[ChildProcess] Preflight failed, skipping child process mode');
+            resolve(false);
+            return;
+        }
+        log('[ChildProcess] Preflight passed');
+
+        // 启动服务子进程
+        updateSplashText('正在启动内置服务...');
+        serverCrashed = false;
+
+        const serverPathEscaped = serverPath.replace(/\\/g, '\\\\');
+        const wrapperScript = [
+            `process.on('uncaughtException', (e) => { console.error('UNCAUGHT_EXCEPTION:', e.stack || e); process.exit(1); });`,
+            `process.on('unhandledRejection', (e) => { console.error('UNHANDLED_REJECTION:', e && e.stack ? e.stack : e); process.exit(1); });`,
+            `console.log('WRAPPER: Starting server.js at ' + new Date().toISOString());`,
+            `try { require('${serverPathEscaped}'); } catch(e) { console.error('WRAPPER_LOAD_ERROR:', e.stack || e); process.exit(1); }`,
+        ].join('\n');
+
+        try {
+            const { spawn: spawnProcess } = require('child_process');
+            serverProcess = spawnProcess(nodeExecutable, ['-e', wrapperScript], {
+                cwd: standaloneDir,
+                env: {
+                    ...process.env,
+                    NODE_ENV: 'production',
+                    PORT: String(actualPort),
+                    HOSTNAME: '0.0.0.0',
+                    BODY_SIZE_LIMIT: '52428800',
+                    ELECTRON_RUN_AS_NODE: '1',
+                },
+                stdio: ['ignore', 'pipe', 'pipe'],
+                windowsHide: true,
+            });
+
+            log(`[ChildProcess] Spawned PID: ${serverProcess.pid}`);
+
+            if (!serverProcess.pid) {
+                log('[ChildProcess] ERROR: No PID');
+                resolve(false);
+                return;
+            }
+
+            serverProcess.stdout.on('data', (data) => {
+                log('[Next.js stdout] ' + data.toString().trim());
+            });
+            serverProcess.stderr.on('data', (data) => {
+                log('[Next.js stderr] ' + data.toString().trim());
+            });
+            serverProcess.on('error', (err) => {
+                log('[Server process error] ' + err.message);
+                serverCrashed = true;
+            });
+            serverProcess.on('exit', (code, signal) => {
+                log(`[Server process exit] code: ${code}, signal: ${signal}`);
+                serverReady = false;
+                serverCrashed = true;
+            });
+            serverProcess.on('close', (code, signal) => {
+                log(`[Server process closed] code: ${code}, signal: ${signal}`);
+                serverReady = false;
+            });
+
+            // 等 3 秒检查是否还活着
+            await new Promise(r => setTimeout(r, 3000));
+            if (serverCrashed) {
+                log('[ChildProcess] Process crashed during startup');
+                resolve(false);
+                return;
+            }
+
+            log('[ChildProcess] Process alive, waiting for HTTP...');
+            updateSplashText('等待服务就绪...');
+            resolve(true);
+
+        } catch (spawnErr) {
+            log(`[ChildProcess] Spawn error: ${spawnErr.message}`);
+            resolve(false);
+        }
+    });
+}
+
+// ===== 策略2：主进程内直接加载 =====
+function tryInProcessMode(standaloneDir, serverPath) {
+    return new Promise(async (resolve) => {
+        log('[InProcess] Loading server.js directly in main process...');
+        log(`[InProcess] Setting CWD to: ${standaloneDir}`);
+        log(`[InProcess] PORT=${actualPort}`);
+
+        // 保存原始 CWD 和环境变量
+        const originalCwd = process.cwd();
+
+        try {
+            // 设置环境变量（server.js 会读取这些）
+            process.env.NODE_ENV = 'production';
+            process.env.PORT = String(actualPort);
+            process.env.HOSTNAME = '0.0.0.0';
+            process.env.BODY_SIZE_LIMIT = '52428800';
+
+            // 切换工作目录到 standalone（server.js 需要相对路径找 .next 文件）
+            process.chdir(standaloneDir);
+            log('[InProcess] CWD changed to: ' + process.cwd());
+
+            // 加载 server.js
+            require(serverPath);
+            log('[InProcess] server.js loaded successfully (sync)');
+
+            // 等待 2 秒让服务完成异步初始化
+            await new Promise(r => setTimeout(r, 2000));
+
+            updateSplashText('等待服务就绪...');
+            resolve(true);
+
+        } catch (err) {
+            log(`[InProcess] FAILED: ${err.message}`);
+            log(`[InProcess] Stack: ${err.stack}`);
+            // 恢复 CWD
+            try { process.chdir(originalCwd); } catch (e) { }
+            resolve(false);
+        }
+    });
+}
+
+// ==================== 启动闪屏窗口 ====================
+
+function createSplashWindow() {
+    splashWindow = new BrowserWindow({
+        width: 400,
+        height: 200,
+        frame: false,
+        transparent: false,
+        resizable: false,
+        alwaysOnTop: true,
+        skipTaskbar: false,
+        show: true,
+        backgroundColor: '#1a1a2e',
+        webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+        },
+    });
+
+    const splashHtml = `
+    <html>
+    <head><meta charset="utf-8">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: #e0e0e0;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            height: 100vh; user-select: none; -webkit-app-region: drag;
+        }
+        .title { font-size: 28px; font-weight: 700; color: #fff; margin-bottom: 16px; letter-spacing: 2px; }
+        .status { font-size: 14px; color: #a0a8c0; margin-bottom: 20px; transition: opacity 0.3s; }
+        .spinner {
+            width: 32px; height: 32px; border: 3px solid rgba(255,255,255,0.15);
+            border-top-color: #e94560; border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+    </head>
+    <body>
+        <div class="title">Author</div>
+        <div class="status" id="status">正在初始化...</div>
+        <div class="spinner"></div>
+    </body>
+    </html>`;
+
+    splashWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(splashHtml));
+
+    splashWindow.on('closed', () => {
+        splashWindow = null;
+    });
+}
+
+function updateSplashText(text) {
+    if (splashWindow && !splashWindow.isDestroyed()) {
+        splashWindow.webContents.executeJavaScript(
+            `document.getElementById('status').textContent = ${JSON.stringify(text)};`
+        ).catch(() => { });
+    }
+}
+
+function closeSplashWindow() {
+    if (splashWindow && !splashWindow.isDestroyed()) {
+        splashWindow.close();
+        splashWindow = null;
+    }
 }
 
 app.whenReady().then(async () => {
@@ -314,9 +557,15 @@ app.whenReady().then(async () => {
     log(`App path: ${app.getAppPath()}`);
     log(`Exe path: ${process.execPath}`);
 
+    // 立即显示启动窗口，让用户知道程序在运行
+    if (!isDev) {
+        createSplashWindow();
+    }
+
     const ready = await startNextServer();
 
     if (!ready) {
+        closeSplashWindow();
         log('Server failed to start. Showing error dialog.');
         dialog.showErrorBox(
             'Author 启动失败',
@@ -325,13 +574,23 @@ app.whenReady().then(async () => {
             '1. 端口被其他程序占用\n' +
             '2. 缺少运行文件\n' +
             '3. 防火墙或杀毒软件拦截\n\n' +
-            '查看日志: ' + logFile
+            '请检查日志: ' + logFile
         );
         app.quit();
         return;
     }
 
+    updateSplashText('加载界面中...');
     createWindow();
+
+    // 主窗口显示后关闭 splash
+    mainWindow.once('ready-to-show', () => {
+        closeSplashWindow();
+    });
+
+    // 兜底：5 秒后无论如何关闭 splash
+    setTimeout(closeSplashWindow, 5000);
+
     setupAutoUpdater();
 });
 

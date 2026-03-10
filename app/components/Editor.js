@@ -18,6 +18,7 @@ import { MathInline, MathBlock, openMathEditor } from './MathExtension';
 import { PageBreakExtension } from './PageBreakExtension';
 import GhostMark from './GhostMark';
 import { useEffect, useCallback, useRef, useState, useMemo, useId, forwardRef, useImperativeHandle } from 'react';
+import { ragRecommend } from '../lib/context-engine';
 import { useAppStore } from '../store/useAppStore';
 import ModelPicker from './ModelPicker';
 
@@ -551,6 +552,38 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
     const chatPanelRef = useRef(null);
     const chatInputRef = useRef(null);
 
+    // ===== 拖动支持 =====
+    const dragRef = useRef({ dragging: false, startX: 0, startY: 0, origTop: 0, origLeft: 0 });
+    const [dragOffset, setDragOffset] = useState(null); // {top, left} 用户拖动偏移
+    const ragLoadingRef = useRef(false); // 追踪 RAG 加载状态（用于 close 守卫）
+
+    const onDragStart = useCallback((e) => {
+        // 只响应左键，忽略按钮/输入框上的点击
+        if (e.button !== 0) return;
+        if (e.target.closest('button') || e.target.closest('input')) return;
+        e.preventDefault();
+        const currentTop = dragOffset ? dragOffset.top : position.top;
+        const currentLeft = dragOffset ? dragOffset.left : position.left;
+        dragRef.current = { dragging: true, startX: e.clientX, startY: e.clientY, origTop: currentTop, origLeft: currentLeft };
+
+        const onMove = (ev) => {
+            if (!dragRef.current.dragging) return;
+            const dx = ev.clientX - dragRef.current.startX;
+            const dy = ev.clientY - dragRef.current.startY;
+            setDragOffset({
+                top: dragRef.current.origTop + dy,
+                left: dragRef.current.origLeft + dx,
+            });
+        };
+        const onUp = () => {
+            dragRef.current.dragging = false;
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    }, [position, dragOffset]);
+
     // 获取选中文本
     const getSelectedText = useCallback(() => {
         if (!editor) return '';
@@ -597,12 +630,13 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
         setMode(selected ? 'rewrite' : 'continue');
         setInstruction('');
         updatePosition();
+        setDragOffset(null); // 重置拖动偏移
         setVisible(true);
     }, [getSelectedText, updatePosition, pendingGhost]);
 
     // 关闭浮窗
     const close = useCallback(() => {
-        if (streaming || pendingGhost) return;
+        if (streaming || pendingGhost || ragLoadingRef.current) return;
         setVisible(false);
         setInstruction('');
         editor?.chain().focus().run();
@@ -906,7 +940,7 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
         return () => document.removeEventListener('keydown', handler);
     }, [visible, streaming, pendingGhost, open, close, stop, rejectGhost, acceptGhost]);
 
-    // 点击外部关闭（但待确认状态不自动关闭）
+    // 点击外部关闭（但待确认状态和RAG加载中不自动关闭）
     useEffect(() => {
         if (!visible) return;
         const handler = (e) => {
@@ -914,8 +948,9 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
                 if (!streaming && !pendingGhost) close();
             }
         };
-        document.addEventListener('mousedown', handler);
-        return () => document.removeEventListener('mousedown', handler);
+        // 延迟注册，避免同一事件循环中触发关闭
+        const timer = setTimeout(() => document.addEventListener('mousedown', handler), 10);
+        return () => { clearTimeout(timer); document.removeEventListener('mousedown', handler); };
     }, [visible, streaming, pendingGhost, close]);
 
     // Chat 模式下自动滚到底部
@@ -971,10 +1006,13 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
         <div
             ref={popoverRef}
             className={`inline-ai-popover ${mode === 'chat' ? 'inline-ai-popover-chat' : ''}`}
-            style={{ top: position.top, left: Math.max(16, position.left) }}
+            style={{
+                top: dragOffset ? dragOffset.top : position.top,
+                left: Math.max(16, dragOffset ? dragOffset.left : position.left),
+            }}
         >
-            {/* 模式选择 */}
-            <div className="inline-ai-modes">
+            {/* 模式选择（同时作为拖动手柄） */}
+            <div className="inline-ai-modes" onMouseDown={onDragStart} style={{ cursor: 'grab' }}>
                 {availableModes.map(m => (
                     <button
                         key={m.key}
@@ -991,8 +1029,8 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
             {/* ===== Chat 模式：聊天面板 ===== */}
             {mode === 'chat' ? (
                 <>
-                    {/* 聊天头部 */}
-                    <div className="chat-header">
+                    {/* 聊天头部（同时作为拖动手柄） */}
+                    <div className="chat-header" onMouseDown={onDragStart} style={{ cursor: 'grab' }}>
                         <div className="chat-header-icon">✦</div>
                         <div className="chat-header-text">
                             <span className="chat-header-title">AI 问答助手</span>
@@ -1081,6 +1119,8 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
                         contextItems={contextItems}
                         contextSelection={contextSelection}
                         setContextSelection={setContextSelection}
+                        editor={editor}
+                        ragLoadingRef={ragLoadingRef}
                         onJumpToNode={(nodeId) => {
                             setJumpToNodeId(nodeId);
                             setShowSettings(true);
@@ -1135,9 +1175,11 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
         </div>
     );
 }
-// ==================== Inline 参考面板（设定集勾选） ====================
-function InlineContextPanel({ contextItems, contextSelection, setContextSelection, onJumpToNode }) {
+// ==================== Inline 参考面板（设定集勾选 + Graph RAG 推荐） ====================
+function InlineContextPanel({ contextItems, contextSelection, setContextSelection, onJumpToNode, editor, ragLoadingRef }) {
     const [expanded, setExpanded] = useState(false);
+    const [ragLoading, setRagLoading] = useState(false);
+    const [ragScores, setRagScores] = useState({}); // { itemId: score }
 
     // 只显示设定集条目，不显示对话历史
     const settingsItems = useMemo(() =>
@@ -1157,6 +1199,52 @@ function InlineContextPanel({ contextItems, contextSelection, setContextSelectio
 
     const selectedCount = settingsItems.filter(it => contextSelection?.has(it.id)).length;
     const totalCount = settingsItems.length;
+
+    // Graph RAG 智能推荐
+    const handleRagRecommend = useCallback(async () => {
+        if (!editor || ragLoading) return;
+        if (ragLoadingRef) ragLoadingRef.current = true;
+        setRagLoading(true);
+        setRagScores({});
+        try {
+            // 获取光标前 ~500 字作为查询上下文
+            const text = editor.getText();
+            const head = editor.state.selection.head;
+            // 将 ProseMirror 位置大致映射到纯文本位置
+            const textBefore = editor.state.doc.textBetween(Math.max(0, head - 600), head, ' ');
+            const queryText = textBefore.slice(-500);
+
+            if (!queryText.trim()) {
+                setRagLoading(false);
+                if (ragLoadingRef) ragLoadingRef.current = false;
+                return;
+            }
+
+            const results = await ragRecommend(queryText, 10);
+
+            if (results.length > 0) {
+                // 自动勾选推荐的条目
+                setContextSelection?.(prev => {
+                    const next = new Set(prev);
+                    for (const r of results) {
+                        next.add(r.id);
+                    }
+                    return next;
+                });
+                // 保存得分用于显示
+                const scores = {};
+                for (const r of results) {
+                    scores[r.id] = r.score;
+                }
+                setRagScores(scores);
+            }
+        } catch (e) {
+            console.error('RAG 推荐失败:', e);
+        } finally {
+            setRagLoading(false);
+            if (ragLoadingRef) ragLoadingRef.current = false;
+        }
+    }, [editor, ragLoading, setContextSelection]);
 
     if (totalCount === 0) return null;
 
@@ -1183,15 +1271,33 @@ function InlineContextPanel({ contextItems, contextSelection, setContextSelectio
     };
 
     return (
-        <div className="inline-context-panel">
-            <button
-                className="inline-context-toggle"
-                onClick={() => setExpanded(!expanded)}
-            >
-                <span className="inline-context-chevron">{expanded ? '▼' : '▶'}</span>
-                <span>📚 参考</span>
-                <span className="inline-context-count">({selectedCount}/{totalCount})</span>
-            </button>
+        <div className="inline-context-panel" onMouseDown={e => e.preventDefault()}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <button
+                    className="inline-context-toggle"
+                    onClick={() => setExpanded(!expanded)}
+                    style={{ flex: 1 }}
+                >
+                    <span className="inline-context-chevron">{expanded ? '▼' : '▶'}</span>
+                    <span>📚 参考</span>
+                    <span className="inline-context-count">({selectedCount}/{totalCount})</span>
+                </button>
+                <button
+                    className="inline-ai-rag-btn"
+                    onMouseDown={e => e.preventDefault()}
+                    onClick={handleRagRecommend}
+                    disabled={ragLoading}
+                    title="基于当前正文智能推荐最相关的设定"
+                    style={{
+                        fontSize: 11, padding: '2px 6px', border: '1px solid var(--accent)',
+                        borderRadius: 4, background: 'var(--bg-primary)', color: 'var(--accent)',
+                        cursor: ragLoading ? 'wait' : 'pointer', opacity: ragLoading ? 0.6 : 1,
+                        whiteSpace: 'nowrap', flexShrink: 0, lineHeight: 1.4,
+                    }}
+                >
+                    {ragLoading ? '⏳ 分析中…' : '🎯 智能推荐'}
+                </button>
+            </div>
             {expanded && (
                 <div className="inline-context-list">
                     {Object.entries(grouped).map(([groupName, items]) => {
@@ -1219,6 +1325,15 @@ function InlineContextPanel({ contextItems, contextSelection, setContextSelectio
                                             />
                                             <span className="inline-context-item-name" title={item.name}>{item.name}</span>
                                         </label>
+                                        {ragScores[item.id] != null && (
+                                            <span style={{
+                                                fontSize: 10, color: '#fff', background: 'var(--accent)',
+                                                borderRadius: 3, padding: '0 4px', lineHeight: '16px',
+                                                flexShrink: 0, fontFamily: 'monospace',
+                                            }} title={`相似度: ${ragScores[item.id].toFixed(3)}`}>
+                                                {ragScores[item.id].toFixed(2)}
+                                            </span>
+                                        )}
                                         {item._nodeId && onJumpToNode && (
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); onJumpToNode(item._nodeId); }}

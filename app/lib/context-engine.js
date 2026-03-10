@@ -6,6 +6,60 @@ import { getProjectSettings, getSettingsNodes, getWritingMode, getActiveWorkId }
 import { getEmbedding, cosineSimilarity } from './embeddings';
 import { estimateTokenCount } from 'tokenx';
 
+// ==================== Graph RAG 智能推荐 ====================
+
+/**
+ * 对设定条目做 RAG 向量相似度推荐
+ * @param {string} queryText 编辑器上下文文本（光标附近 ~500 字）
+ * @param {number} topN 返回前 N 个推荐（默认10）
+ * @returns {Promise<{id: string, score: number}[]>} 按相似度降序排列的推荐列表
+ */
+export async function ragRecommend(queryText, topN = 10) {
+    if (!queryText || !queryText.trim()) return [];
+
+    const { apiConfig } = getProjectSettings();
+    if (!apiConfig?.useCustomEmbed) return [];
+
+    // 如果查询文本太短，补充更多上下文
+    let enrichedQuery = queryText.trim();
+
+    // 获取查询向量
+    const queryVector = await getEmbedding(enrichedQuery, apiConfig);
+    if (!queryVector) return [];
+
+    // 获取所有设定节点
+    const allNodes = await getSettingsNodes();
+    const activeWorkId = getActiveWorkId();
+
+    // 按当前作品过滤
+    let nodes;
+    if (activeWorkId) {
+        const workDesc = new Set();
+        const coll = (pid) => { allNodes.filter(n => n.parentId === pid).forEach(n => { workDesc.add(n.id); coll(n.id); }); };
+        workDesc.add(activeWorkId);
+        coll(activeWorkId);
+        nodes = allNodes.filter(n => workDesc.has(n.id));
+    } else {
+        nodes = allNodes;
+    }
+
+    const itemNodes = nodes.filter(n => n.type === 'item' && n.enabled !== false);
+
+    // 计算每个条目的相似度
+    const scored = [];
+    for (const n of itemNodes) {
+        if (!n.embedding) continue;
+        const score = cosineSimilarity(queryVector, n.embedding);
+        if (score > 0.15) {  // 宽松阈值，避免过度过滤中文内容
+            scored.push({ id: `setting-${n.id}`, nodeId: n.id, score });
+        }
+    }
+
+    // 按相似度降序排序，取 Top N
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, topN);
+}
+
 // ==================== Token 预算管理 ====================
 
 export const INPUT_TOKEN_BUDGET = 200000;  // 输入预算（发送给AI的上下文）

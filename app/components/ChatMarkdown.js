@@ -4,10 +4,6 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { memo, useState, useCallback } from 'react';
 
-/**
- * 聊天消息 Markdown 渲染组件
- * 支持：GFM (表格/删除线/任务列表) + 数学公式 (KaTeX) + 代码块
- */
 function ChatMarkdownInner({ content }) {
     if (!content) return null;
 
@@ -15,14 +11,22 @@ function ChatMarkdownInner({ content }) {
         <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
-                // 代码块：带复制按钮
-                code({ inline, className, children, ...props }) {
-                    const text = String(children).replace(/\n$/, '');
-                    if (inline) {
-                        return <code className="chat-md-inline-code" {...props}>{children}</code>;
+                // react-markdown v10: 用 pre 组件处理代码块（```...```）
+                // 代码块结构为 <pre><code className="language-xxx">...</code></pre>
+                pre({ children, ...props }) {
+                    // children 通常是单个 <code> 元素
+                    const codeChild = Array.isArray(children) ? children[0] : children;
+                    if (codeChild?.type === 'code' || codeChild?.props?.className) {
+                        const className = codeChild?.props?.className || '';
+                        const lang = className.replace('language-', '') || '';
+                        const code = String(codeChild?.props?.children || '').replace(/\n$/, '');
+                        return <CodeBlock lang={lang} code={code} />;
                     }
-                    const lang = className?.replace('language-', '') || '';
-                    return <CodeBlock lang={lang} code={text} />;
+                    return <pre {...props}>{children}</pre>;
+                },
+                // 内联 code（`xxx`），react-markdown v10 里只走这里处理行内代码
+                code({ children, ...props }) {
+                    return <code className="chat-md-inline-code" {...props}>{children}</code>;
                 },
                 // 链接：新窗口打开
                 a({ href, children, ...props }) {
