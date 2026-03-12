@@ -5,9 +5,12 @@ import { useAppStore } from '../store/useAppStore';
 import { useI18n } from '../lib/useI18n';
 import { createChapter, deleteChapter, updateChapter, saveChapters, getChapters, createVolume, insertChapterInVolume, reorderItems } from '../lib/storage';
 import { exportProject, importProject, importWork, exportWorkAsTxt, exportWorkAsMarkdown, exportWorkAsDocx, exportWorkAsEpub, exportWorkAsPdf } from '../lib/project-io';
-import { WRITING_MODES, getAllWorks, getSettingsNodes, createWorkNode, saveSettingsNodes, setActiveWorkId as setActiveWorkIdSetting } from '../lib/settings';
+import { WRITING_MODES, getAllWorks, getSettingsNodes, addWork, saveSettingsNodes, setActiveWorkId as setActiveWorkIdSetting } from '../lib/settings';
 import { detectConflicts, mergeChapters } from '../lib/chapter-number';
 import { estimateTokens } from '../lib/context-engine';
+import { Settings, Moon, Sun, History, Save, FolderOpen, FileDown, BookOpen, HelpCircle, Github, PanelLeftClose, ListOrdered, Library, Plus, FileText, FileType, BookMarked, FileOutput, Printer, Book, X, MoreHorizontal, ChevronUp, KeyRound, SlidersHorizontal } from 'lucide-react';
+import Tooltip from './ui/Tooltip';
+import IconButton from './ui/IconButton';
 
 export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
     const {
@@ -31,6 +34,8 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
     const [importModal, setImportModal] = useState(null);
     const [conflictModal, setConflictModal] = useState(null);
     const [showGitPopup, setShowGitPopup] = useState(false);
+    const [showMoreMenu, setShowMoreMenu] = useState(false); // "更多操作" 下拉菜单
+    const [moreMenuPos, setMoreMenuPos] = useState({ right: 0, bottom: 0 }); // 下拉菜单定位
     const [outlineCollapsed, setOutlineCollapsed] = useState(false); // 手动折叠大纲
     const [headings, setHeadings] = useState([]); // 文档大纲标题列表
     const [headingStats, setHeadingStats] = useState([]); // 每个标题下的字数+token
@@ -458,19 +463,57 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
     return (
         <>
             <aside className={`sidebar ${sidebarOpen ? '' : 'collapsed'}${pushMode ? ' push-mode' : ''}`}>
-                {/* ===== 顶部关闭按钮 ===== */}
-                <div className="sidebar-top-row">
-                    <button className="btn btn-ghost btn-icon btn-sm" onClick={() => onToggle?.()} title={t('sidebar.collapseSidebar')} style={{ fontSize: '16px' }}>
-                        ←
-                    </button>
+                
+                {/* ===== 左侧垂直导航栏 (Nav Pane) ===== */}
+                <div className="sidebar-nav-pane">
+                    <div className="sidebar-nav-top">
+                        <IconButton icon={<BookOpen size={20} />} label={t('sidebar.chapterList') || '章节大纲'} className="nav-item active" onClick={() => setSidebarOpen(!sidebarOpen)} />
+                        <IconButton icon={<Library size={20} />} label={t('sidebar.tooltipSettings') || '设定集管理'} onClick={() => setShowSettings(true)} className="nav-item" />
+                    </div>
+                    <div className="sidebar-nav-bottom">
+                        <IconButton icon={theme === 'light' ? <Moon size={20} /> : <Sun size={20} />} label={theme === 'light' ? t('sidebar.tooltipThemeDark') : t('sidebar.tooltipThemeLight')} onClick={toggleTheme} className="nav-item" />
+                        <IconButton icon={<History size={20} />} label={t('sidebar.tooltipTimeMachine')} onClick={() => setShowSnapshots(true)} className="nav-item" />
+                        <IconButton icon={<FolderOpen size={20} />} label={t('sidebar.menuLoad') || '读档'} onClick={() => document.getElementById('project-import-input')?.click()} className="nav-item" />
+                        <IconButton icon={<Save size={20} />} label={t('sidebar.menuSave') || '存档'} onClick={() => { exportProject(); showToast(t('sidebar.exportedProject') || '已导出', 'success'); }} className="nav-item" />
+                        <IconButton icon={<FileDown size={20} />} label={t('sidebar.menuImportWork') || '导入作品'} onClick={() => document.getElementById('work-import-input')?.click()} className="nav-item" />
+                        
+                        {/* 更多操作下拉（仅保留帮助和社区） */}
+                        <div style={{ position: 'relative' }}>
+                            <IconButton id="tour-settings" icon={<Settings size={20} />} label={t('sidebar.moreActions') || '更多操作'} onClick={() => setShowMoreMenu(!showMoreMenu)} className="nav-item" />
+                            {showMoreMenu && (<>
+                                <div style={{ position: 'fixed', inset: 0, zIndex: 99 }} onClick={() => setShowMoreMenu(false)} />
+                                <div style={{
+                                    position: 'absolute', left: '100%', bottom: 0, marginLeft: 8, zIndex: 100,
+                                    background: 'var(--bg-card)', border: '1px solid var(--border-light)',
+                                    borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)', padding: 4, minWidth: 140
+                                }}>
+                                    <button className="dropdown-item" style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => { setShowSettings(true, 'apiConfig'); setShowMoreMenu(false); }}>
+                                        <KeyRound size={14} style={{ flexShrink: 0 }} /> <span>{t('settings.tabApi') || 'API 配置'}</span>
+                                    </button>
+                                    <button className="dropdown-item" style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => { setShowSettings(true, 'preferences'); setShowMoreMenu(false); }}>
+                                        <SlidersHorizontal size={14} style={{ flexShrink: 0 }} /> <span>{t('settings.tabPreferences') || '偏好设置'}</span>
+                                    </button>
+                                    <div style={{ height: 1, background: 'var(--border-light)', margin: '4px 0' }} />
+                                    <button className="dropdown-item" style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => { onOpenHelp?.(); setShowMoreMenu(false); }}>
+                                        <HelpCircle size={14} style={{ flexShrink: 0 }} /> <span>{t('sidebar.menuHelp') || '帮助'}</span>
+                                    </button>
+                                    <button className="dropdown-item" style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => { setShowGitPopup(true); setShowMoreMenu(false); }}>
+                                        <Github size={14} style={{ flexShrink: 0 }} /> <span>{t('sidebar.menuCommunity') || '社区'}</span>
+                                    </button>
+                                </div>
+                            </>)}
+                        </div>
+                    </div>
                 </div>
 
-                {/* ===== 文档分页 ===== */}
+                {/* ===== 右侧内容区 (Content Pane) ===== */}
+                <div className="sidebar-content-pane">
+                    {/* ===== 文档分页 ===== */}
                 <div className="gdocs-section-header">
                     <span className="gdocs-section-title">文档分页</span>
                     <div style={{ display: 'flex', gap: '2px' }}>
-                        <button className="gdocs-section-add" onClick={handleRenumber} title={t('sidebar.renumber') || '重新编号'}>🔢</button>
-                        <button className="gdocs-section-add" onClick={handleCreateVolume} title={t('sidebar.newVolume') || '新建分卷'}>📚</button>
+                        <Tooltip content={t('sidebar.renumber') || '重新编号'}><button className="gdocs-section-add" onClick={handleRenumber} aria-label={t('sidebar.renumber') || '重新编号'}><ListOrdered size={14} /></button></Tooltip>
+                        <Tooltip content={t('sidebar.newVolume') || '新建分卷'}><button className="gdocs-section-add" onClick={handleCreateVolume} aria-label={t('sidebar.newVolume') || '新建分卷'}><Library size={14} /></button></Tooltip>
                         <button id="tour-new-chapter" className="gdocs-section-add" onClick={() => handleCreateChapter()} title={t('sidebar.newChapter')}>+</button>
                     </div>
                 </div>
@@ -531,7 +574,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                                             <>
                                                 <span className="gdocs-tab-arrow" style={{ transform: ch.collapsed ? 'none' : 'rotate(90deg)' }}>▶</span>
                                                 <span style={{ flex: 1, minWidth: 0 }}>
-                                                    <span className="gdocs-tab-title" style={{ fontWeight: 600 }}>📖 {ch.title}</span>
+                                                    <span className="gdocs-tab-title" style={{ fontWeight: 600 }}><Book size={14} style={{ marginRight: 4, verticalAlign: -2, flexShrink: 0 }} />{ch.title}</span>
                                                     {volWords > 0 && (
                                                         <span style={{ display: 'block', fontSize: '10px', color: 'var(--text-muted)', marginTop: '1px' }}>
                                                             {volWords.toLocaleString()}字
@@ -647,57 +690,47 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                         );
                     })}
                 </div>
-
-                {/* ===== 底部功能区（保留原有功能） ===== */}
-                <div className="sidebar-footer" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
-                    {(() => {
-                        const modeConfig = WRITING_MODES[writingMode];
-                        return modeConfig ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', borderRadius: 'var(--radius-sm)', background: `${modeConfig.color}10`, border: `1px solid ${modeConfig.color}30`, cursor: 'pointer', transition: 'all 0.15s ease' }} onClick={() => setShowSettings(true)} title={t('sidebar.clickToSwitchMode')}>
-                                <span style={{ fontSize: '14px' }}>{modeConfig.icon}</span>
-                                <span style={{ fontSize: '12px', fontWeight: '600', color: modeConfig.color }}>{t('sidebar.modeLabel').replace('{mode}', modeConfig.label)}</span>
-                            </div>
-                        ) : null;
-                    })()}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-muted)' }}>
-                        <span>{t('sidebar.totalWords')}</span>
-                        <span style={{ color: 'var(--accent)', fontWeight: '600' }}>{totalWords.toLocaleString()}</span>
-                    </div>
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                        <div style={{ position: 'relative', display: 'flex', flex: 1 }}>
-                            <button className="btn btn-secondary btn-sm" style={{ flex: 1, justifyContent: 'center', fontSize: '11px' }} onClick={() => setShowCurrentExportMenu(!showCurrentExportMenu)}>{t('sidebar.exportCurrent')}</button>
-                            {showCurrentExportMenu && (<>
-                                <div style={{ position: 'fixed', inset: 0, zIndex: 99 }} onClick={() => setShowCurrentExportMenu(false)} />
-                                <div style={{ position: 'absolute', left: 0, bottom: '100%', marginBottom: 6, minWidth: 150, zIndex: 100, background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)', padding: 4 }}>
-                                    {activeChapterId && chapters.find(c => c.id === activeChapterId) ? [
-                                        { label: '📄 TXT', fn: () => exportWorkAsTxt([chapters.find(c => c.id === activeChapterId)], chapters.find(c => c.id === activeChapterId).title) },
-                                        { label: '📝 Markdown', fn: () => exportWorkAsMarkdown([chapters.find(c => c.id === activeChapterId)], chapters.find(c => c.id === activeChapterId).title) },
-                                        { label: '📘 DOCX', fn: async () => await exportWorkAsDocx([chapters.find(c => c.id === activeChapterId)], chapters.find(c => c.id === activeChapterId).title) },
-                                        { label: '📚 EPUB', fn: async () => await exportWorkAsEpub([chapters.find(c => c.id === activeChapterId)], chapters.find(c => c.id === activeChapterId).title) },
-                                        { label: '🖨️ PDF', fn: () => exportWorkAsPdf([chapters.find(c => c.id === activeChapterId)], chapters.find(c => c.id === activeChapterId).title) },
-                                    ].map(item => (
-                                        <button key={item.label} className="dropdown-item" onClick={async () => { await item.fn(); setShowCurrentExportMenu(false); showToast(t('sidebar.exportedChapter'), 'success'); }}>{item.label}</button>
-                                    )) : <div style={{ padding: '8px 12px', fontSize: 13, color: 'var(--text-muted)' }}>{t('sidebar.noActiveChapter') || '请先选择章节'}</div>}
+                    {/* 章节底部工具（保留字数统计和单章导出） */}
+                    <div className="sidebar-footer" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px', padding: '12px' }}>
+                        {(() => {
+                            const modeConfig = WRITING_MODES[writingMode];
+                            return modeConfig ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', borderRadius: 'var(--radius-sm)', background: `${modeConfig.color}10`, border: `1px solid ${modeConfig.color}30`, cursor: 'pointer', transition: 'all 0.15s ease' }} onClick={() => setShowSettings(true)} title={t('sidebar.clickToSwitchMode')}>
+                                    <span style={{ fontSize: '14px' }}>{modeConfig.icon}</span>
+                                    <span style={{ fontSize: '12px', fontWeight: '600', color: modeConfig.color }}>{t('sidebar.modeLabel').replace('{mode}', modeConfig.label)}</span>
                                 </div>
-                            </>)}
+                            ) : null;
+                        })()}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-muted)' }}>
+                            <span>{t('sidebar.totalWords')}</span>
+                            <span style={{ color: 'var(--accent)', fontWeight: '600' }}>{totalWords.toLocaleString()}</span>
                         </div>
-                        <button className="btn btn-secondary btn-sm" style={{ flex: 1, justifyContent: 'center', fontSize: '11px' }} onClick={() => setShowExportModal(true)}>{t('sidebar.exportMore') || '导出更多'}</button>
-                        <button id="tour-settings" className="btn btn-secondary btn-sm btn-icon" onClick={() => setShowSettings(true)} title={t('sidebar.tooltipSettings')}>⚙️</button>
-                        <button className="btn btn-secondary btn-sm btn-icon" onClick={toggleTheme} title={theme === 'light' ? t('sidebar.tooltipThemeDark') : t('sidebar.tooltipThemeLight')}>{theme === 'light' ? '🌙' : '☀️'}</button>
-                    </div>
-                    <div style={{ display: 'flex', gap: '4px', alignItems: 'stretch' }}>
-                        <button className="btn btn-secondary btn-sm btn-icon" onClick={() => setShowSnapshots(true)} title={t('sidebar.tooltipTimeMachine')}>🕒</button>
-                        <button className="btn btn-secondary btn-sm btn-icon" onClick={() => { exportProject(); }} title={t('sidebar.btnSaveTitle') || '存档（导出项目 JSON）'}>💾</button>
-                        <button className="btn btn-secondary btn-sm btn-icon" onClick={() => { document.getElementById('project-import-input')?.click(); }} title={t('sidebar.btnLoadTitle') || '读档（导入项目 JSON）'}>📂</button>
-                        <button className="btn btn-secondary btn-sm btn-icon" onClick={() => { document.getElementById('work-import-input')?.click(); }} title={t('sidebar.btnImportWorkTitle')}>📥</button>
-                        <button id="tour-help" className="btn btn-secondary btn-sm btn-icon" onClick={() => onOpenHelp?.()} title={t('page.helpAndGuide') || '帮助与教程'}>📖</button>
-                        <button id="tour-github" className="btn btn-secondary btn-sm btn-icon" onClick={() => setShowGitPopup(prev => !prev)} title="GitHub / Gitee / QQ群">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" /></svg>
-                        </button>
-                        <input id="project-import-input" type="file" accept=".json" style={{ display: 'none' }} onChange={async (e) => { const file = e.target.files?.[0]; if (!file) return; const result = await importProject(file); if (result.success) { alert(result.message + '\n' + t('sidebar.importSuccess')); window.location.reload(); } else { alert(result.message); } e.target.value = ''; }} />
-                        <input id="work-import-input" type="file" accept=".txt,.md,.markdown,.epub,.docx,.doc,.pdf" style={{ display: 'none' }} onChange={async (e) => { const file = e.target.files?.[0]; if (!file) return; try { const result = await importWork(file); if (!result.success) { const msg = result.message === 'noChapter' ? t('sidebar.importWorkNoChapter') : t('sidebar.importWorkFailed').replace('{error}', result.message); showToast(msg, 'error'); e.target.value = ''; return; } setImportModal({ chapters: result.chapters, totalWords: result.totalWords }); } catch (err) { showToast(t('sidebar.importWorkFailed').replace('{error}', err.message), 'error'); } e.target.value = ''; }} />
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                            <div style={{ position: 'relative', display: 'flex', flex: 1 }}>
+                                <button className="btn btn-secondary btn-sm" style={{ flex: 1, justifyContent: 'center', fontSize: '11px' }} onClick={() => setShowCurrentExportMenu(!showCurrentExportMenu)}>{t('sidebar.exportCurrent')}</button>
+                                {showCurrentExportMenu && (<>
+                                    <div style={{ position: 'fixed', inset: 0, zIndex: 99 }} onClick={() => setShowCurrentExportMenu(false)} />
+                                    <div style={{ position: 'absolute', left: 0, bottom: '100%', marginBottom: 6, minWidth: 150, zIndex: 100, background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)', padding: 4 }}>
+                                        {activeChapterId && chapters.find(c => c.id === activeChapterId) ? [
+                                            { label: 'TXT', icon: <FileText size={14} />, fn: () => exportWorkAsTxt([chapters.find(c => c.id === activeChapterId)], chapters.find(c => c.id === activeChapterId).title) },
+                                            { label: 'Markdown', icon: <FileType size={14} />, fn: () => exportWorkAsMarkdown([chapters.find(c => c.id === activeChapterId)], chapters.find(c => c.id === activeChapterId).title) },
+                                            { label: 'DOCX', icon: <BookMarked size={14} />, fn: async () => await exportWorkAsDocx([chapters.find(c => c.id === activeChapterId)], chapters.find(c => c.id === activeChapterId).title) },
+                                            { label: 'EPUB', icon: <BookOpen size={14} />, fn: async () => await exportWorkAsEpub([chapters.find(c => c.id === activeChapterId)], chapters.find(c => c.id === activeChapterId).title) },
+                                            { label: 'PDF', icon: <Printer size={14} />, fn: () => exportWorkAsPdf([chapters.find(c => c.id === activeChapterId)], chapters.find(c => c.id === activeChapterId).title) },
+                                        ].map(item => (
+                                            <button key={item.label} className="dropdown-item" onClick={async () => { await item.fn(); setShowCurrentExportMenu(false); showToast(t('sidebar.exportedChapter'), 'success'); }}>{item.icon} {item.label}</button>
+                                        )) : <div style={{ padding: '8px 12px', fontSize: 13, color: 'var(--text-muted)' }}>{t('sidebar.noActiveChapter') || '请先选择章节'}</div>}
+                                    </div>
+                                </>)}
+                            </div>
+                            <button className="btn btn-secondary btn-sm" style={{ flex: 1, justifyContent: 'center', fontSize: '11px' }} onClick={() => setShowExportModal(true)}>{t('sidebar.exportMore') || '导出更多'}</button>
+                        </div>
                     </div>
                 </div>
+
+                {/* 隐藏的文件输入组件 */}
+                <input id="project-import-input" type="file" accept=".json" style={{ display: 'none' }} onChange={async (e) => { const file = e.target.files?.[0]; if (!file) return; const result = await importProject(file); if (result.success) { alert(result.message + '\n' + t('sidebar.importSuccess')); window.location.reload(); } else { alert(result.message); } e.target.value = ''; }} />
+                <input id="work-import-input" type="file" accept=".txt,.md,.markdown,.epub,.docx,.doc,.pdf" style={{ display: 'none' }} onChange={async (e) => { const file = e.target.files?.[0]; if (!file) return; try { const result = await importWork(file); if (!result.success) { const msg = result.message === 'noChapter' ? t('sidebar.importWorkNoChapter') : t('sidebar.importWorkFailed').replace('{error}', result.message); showToast(msg, 'error'); e.target.value = ''; return; } setImportModal({ chapters: result.chapters, totalWords: result.totalWords }); } catch (err) { showToast(t('sidebar.importWorkFailed').replace('{error}', err.message), 'error'); } e.target.value = ''; }} />
             </aside>
 
             {/* ===== Git / 社区弹窗 ===== */}
@@ -836,18 +869,15 @@ function ImportWorkModal({ chapters, totalWords, onClose, onImport, t }) {
     // 加载作品列表
     useEffect(() => {
         (async () => {
-            const nodes = await getSettingsNodes();
-            setWorks(getAllWorks(nodes));
+            const allWorks = await getAllWorks();
+            setWorks(allWorks);
         })();
     }, []);
 
     const handleCreateAndImport = async () => {
         const name = newWorkName.trim();
         if (!name) return;
-        const { workNode, subNodes } = createWorkNode(name);
-        const allNodes = await getSettingsNodes();
-        const updatedNodes = [...allNodes, workNode, ...subNodes];
-        await saveSettingsNodes(updatedNodes);
+        const workNode = await addWork(name);
         onImport(workNode.id);
     };
 
@@ -1172,11 +1202,11 @@ function ExportModal({ chapters, onClose, onExport, t }) {
     };
 
     const formats = [
-        { value: 'txt', label: '📄 TXT' },
-        { value: 'md', label: '📝 Markdown' },
-        { value: 'docx', label: '📘 DOCX' },
-        { value: 'epub', label: '📚 EPUB' },
-        { value: 'pdf', label: '🖨️ PDF' },
+        { value: 'txt', label: 'TXT' },
+        { value: 'md', label: 'Markdown' },
+        { value: 'docx', label: 'DOCX' },
+        { value: 'epub', label: 'EPUB' },
+        { value: 'pdf', label: 'PDF' },
     ];
 
     // 导航到上/下一章预览
@@ -1344,7 +1374,7 @@ function ExportModal({ chapters, onClose, onExport, t }) {
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <span style={{ fontSize: 22 }}>📤</span>
+                            <span style={{ fontSize: 22, display: 'flex' }}><FileOutput size={22} /></span>
                             <div>
                                 <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{t('sidebar.exportMoreTitle') || '导出更多'}</h3>
                                 <span style={{ fontSize: 12, opacity: 0.85 }}>
@@ -1356,7 +1386,7 @@ function ExportModal({ chapters, onClose, onExport, t }) {
                             background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 8,
                             color: '#fff', width: 32, height: 32, cursor: 'pointer',
                             display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
-                        }}>✕</button>
+                        }}><X size={16} /></button>
                     </div>
 
                     {/* 全选栏 */}
@@ -1397,7 +1427,7 @@ function ExportModal({ chapters, onClose, onExport, t }) {
                                     whiteSpace: 'nowrap',
                                 }}
                             >
-                                📖 {t('sidebar.previewAll') || '全书预览'}
+                                <Book size={14} style={{ flexShrink: 0 }} /> {t('sidebar.previewAll') || '全书预览'}
                             </button>
                             <span style={{
                                 fontSize: 12, fontWeight: 600,
@@ -1583,7 +1613,7 @@ function ExportModal({ chapters, onClose, onExport, t }) {
                                     >◀</button>
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                         <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                            📖 {previewChapter.title || t('sidebar.untitled') || '未命名'}
+                                            <Book size={14} style={{ flexShrink: 0, marginRight: 4 }} />{previewChapter.title || t('sidebar.untitled') || '未命名'}
                                         </div>
                                         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
                                             {(previewChapter.wordCount || 0).toLocaleString()}{t('sidebar.wordUnit') || '字'}
@@ -1608,7 +1638,7 @@ function ExportModal({ chapters, onClose, onExport, t }) {
                             {previewMode === 'all' && (
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                     <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
-                                        📖 {t('sidebar.previewAll') || '全书预览'}
+                                        <Book size={14} style={{ flexShrink: 0, marginRight: 4 }} />{t('sidebar.previewAll') || '全书预览'}
                                     </div>
                                     <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
                                         {chapters.length} {t('sidebar.exportGroupSuffix') || '章'}
@@ -1626,7 +1656,7 @@ function ExportModal({ chapters, onClose, onExport, t }) {
                                     color: 'var(--text-muted)', transition: 'all 0.15s',
                                 }}
                                 title={t('sidebar.previewClose') || '关闭预览'}
-                            >✕</button>
+                            ><X size={14} /></button>
                         </div>
                         {/* 预览内容 — 根据格式不同应用不同样式 */}
                         <div style={{

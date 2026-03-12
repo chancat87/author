@@ -9,13 +9,16 @@ const PROJECT_FILE_VERSION = 1;
 const STORAGE_KEYS = {
     chapters: 'author-chapters',
     settings: 'author-project-settings',
-    settingsNodes: 'author-settings-nodes',
+    settingsNodes: 'author-settings-nodes',   // 旧 key（兼容导入）
+    worksIndex: 'author-works-index',          // 新作品索引
     activeWork: 'author-active-work',
     chatSessions: 'author-chat-sessions',
 };
 
 // 章节摘要前缀
 const SUMMARY_PREFIX = 'author-chapter-summary-';
+// 按作品存储的设定集前缀
+const SETTINGS_NODES_PREFIX = 'author-settings-nodes-';
 
 /**
  * 导出整个项目为 JSON 文件并下载
@@ -38,6 +41,18 @@ export async function exportProject() {
             data[key] = null;
         }
     }
+
+    // 收集按作品存储的设定集节点
+    const perWorkSettings = {};
+    for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k?.startsWith(SETTINGS_NODES_PREFIX) && k !== 'author-settings-nodes-backup') {
+            try {
+                perWorkSettings[k] = JSON.parse(localStorage.getItem(k));
+            } catch { /* skip */ }
+        }
+    }
+    data.perWorkSettings = perWorkSettings;
 
     // 收集章节摘要
     const summaries = {};
@@ -83,6 +98,13 @@ export async function importProject(file) {
         for (const [key, storageKey] of Object.entries(STORAGE_KEYS)) {
             if (data[key] !== undefined && data[key] !== null) {
                 localStorage.setItem(storageKey, JSON.stringify(data[key]));
+            }
+        }
+
+        // 恢复按作品存储的设定集节点
+        if (data.perWorkSettings && typeof data.perWorkSettings === 'object') {
+            for (const [k, v] of Object.entries(data.perWorkSettings)) {
+                if (v) localStorage.setItem(k, JSON.stringify(v));
             }
         }
 

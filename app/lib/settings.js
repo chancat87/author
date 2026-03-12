@@ -2,7 +2,7 @@
 // 这些信息会在每次AI调用时作为上下文传入，让AI像Cursor一样了解整个项目
 // 基于「叙事引擎」架构 — 支持网络小说、传统文学、剧本/脚本三种创作模式
 
-import { persistGet, persistSet } from './persistence';
+import { persistGet, persistSet, persistDel } from './persistence';
 import { getEmbedding } from './embeddings';
 
 const SETTINGS_KEY = 'author-project-settings';
@@ -335,8 +335,14 @@ export function setWritingMode(mode) {
 
 // ==================== 树形设定集节点系统 ====================
 
-const NODES_KEY = 'author-settings-nodes';
-const ACTIVE_WORK_KEY = 'author-active-work';
+const LEGACY_NODES_KEY = 'author-settings-nodes';       // 旧全局 key（仅迁移用）
+const WORKS_INDEX_KEY  = 'author-works-index';           // 轻量作品索引
+const ACTIVE_WORK_KEY  = 'author-active-work';
+
+/** 每个作品的设定集独立 key */
+function getNodesKey(workId) {
+    return `author-settings-nodes-${workId || 'work-default'}`;
+}
 
 function generateNodeId() {
     return Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
@@ -418,50 +424,193 @@ export function setActiveWorkId(workId) {
     }
 }
 
-export function getAllWorks(nodes) {
-    const allNodes = nodes || getSettingsNodes();
-    return allNodes.filter(n => n.type === 'work');
+/**
+ * 获取所有作品列表（从轻量索引读取，不加载设定）
+ * @param {Array|null} nodes - 如果已有节点数组，直接从中提取；否则从索引读取
+ */
+export async function getAllWorks(nodes) {
+    if (nodes) return nodes.filter(n => n.type === 'work');
+    if (typeof window === 'undefined') return [];
+    // 确保迁移已完成
+    await migrateGlobalToPerWork();
+    const index = await persistGet(WORKS_INDEX_KEY);
+    return Array.isArray(index) ? index : [];
+}
+
+/** 保存作品索引（仅 work 节点的轻量信息） */
+async function saveWorksIndex(workEntries) {
+    if (typeof window === 'undefined') return;
+    // 只保留必要字段
+    const slim = workEntries.map(w => ({
+        id: w.id, name: w.name, type: 'work', category: 'work',
+        icon: w.icon || '📕', order: w.order ?? 0,
+        createdAt: w.createdAt, updatedAt: w.updatedAt,
+    }));
+    await persistSet(WORKS_INDEX_KEY, slim);
+}
+
+/**
+ * 添加新作品（写入索引 + 初始化独立 key）
+ * @returns {Object} workNode - 创建的作品节点
+ */
+export async function addWork(name, workId) {
+    const { workNode, subNodes } = createWorkNode(name, workId);
+    const works = await getAllWorks();
+    works.push(workNode);
+    await saveWorksIndex(works);
+    await persistSet(getNodesKey(workNode.id), subNodes);
+    return workNode;
+}
+
+/**
+ * 删除作品（移除索引 + 删除独立 key）
+ */
+export async function removeWork(workId) {
+    const works = await getAllWorks();
+    const updated = works.filter(w => w.id !== workId);
+    await saveWorksIndex(updated);
+    await persistDel(getNodesKey(workId));
+    return updated;
+}
+
+/**
+ * 重命名作品（更新索引）
+ */
+export async function renameWork(workId, newName) {
+    const works = await getAllWorks();
+    const work = works.find(w => w.id === workId);
+    if (work) {
+        work.name = newName;
+        work.updatedAt = new Date().toISOString();
+        await saveWorksIndex(works);
+    }
+    return works;
 }
 
 // ==================== 节点初始化与迁移 ====================
 
-// 获取默认节点树（包含一个默认作品 + 全局规则）
-function getDefaultNodes() {
-    const { workNode, subNodes } = createWorkNode('默认作品', 'work-default');
-    return [workNode, ...subNodes];
+// 获取默认节点树（只含子分类，不含 work 节点本身）
+function getDefaultWorkNodes(workId) {
+    const wid = workId || 'work-default';
+    return WORK_SUB_CATEGORIES.map((cat, i) => ({
+        id: `${wid}-${cat.suffix}`,
+        name: cat.name,
+        type: cat.type,
+        category: cat.category,
+        parentId: wid,
+        order: i,
+        icon: cat.icon,
+        content: {},
+        collapsed: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+    }));
 }
 
-// 获取所有设定节点 (Async)
-export async function getSettingsNodes() {
-    if (typeof window === 'undefined') return getDefaultNodes();
+// ==================== 全局 → 按作品迁移（一次性） ====================
+
+let _migrationDone = false;
+
+/**
+ * 将旧的单一 author-settings-nodes 拆分为每个作品一个 key
+ * 旧数据保留为 author-settings-nodes-backup 以防万一
+ */
+async function migrateGlobalToPerWork() {
+    if (_migrationDone) return;
+    if (typeof window === 'undefined') { _migrationDone = true; return; }
+
+    // 已有索引 → 说明已经迁移过
+    const existingIndex = await persistGet(WORKS_INDEX_KEY);
+    if (existingIndex) { _migrationDone = true; return; }
+
+    // 读旧数据
+    let oldNodes = await persistGet(LEGACY_NODES_KEY);
+    if (!oldNodes) {
+        // 尝试最古老的迁移（从 localStorage 项目设定）
+        const migrated = await migrateOldSettings();
+        if (migrated) {
+            oldNodes = await migrateToWorkStructure(migrated);
+        }
+    } else {
+        // 依次跑旧的迁移链
+        oldNodes = await migrateToWorkStructure(oldNodes);
+        oldNodes = await migrateGlobalRulesToWork(oldNodes);
+        oldNodes = await ensureWorkExistsLegacy(oldNodes);
+        oldNodes = await migrateBookInfoToNodeLegacy(oldNodes);
+    }
+
+    if (!oldNodes || oldNodes.length === 0) {
+        // 全新用户 → 创建默认作品
+        const { workNode, subNodes } = createWorkNode('默认作品', 'work-default');
+        await saveWorksIndex([workNode]);
+        await persistSet(getNodesKey('work-default'), subNodes);
+        if (!getActiveWorkId()) setActiveWorkId('work-default');
+        _migrationDone = true;
+        return;
+    }
+
+    // 按作品拆分
+    const workNodes = oldNodes.filter(n => n.type === 'work');
+    for (const work of workNodes) {
+        // 收集该作品的所有后代
+        const descendants = [];
+        const collect = (pid) => {
+            oldNodes.filter(n => n.parentId === pid).forEach(n => {
+                descendants.push(n);
+                collect(n.id);
+            });
+        };
+        collect(work.id);
+        await persistSet(getNodesKey(work.id), descendants);
+    }
+
+    // 保存索引
+    await saveWorksIndex(workNodes);
+
+    // 备份旧数据（不删除，以防万一）
+    await persistSet('author-settings-nodes-backup', oldNodes);
+    // 删除旧 key
+    await persistDel(LEGACY_NODES_KEY);
+
+    if (!getActiveWorkId() && workNodes.length > 0) {
+        setActiveWorkId(workNodes[0].id);
+    }
+
+    _migrationDone = true;
+}
+
+/**
+ * 获取指定作品的设定节点（不含 work 节点本身） (Async)
+ * @param {string} workId - 作品 ID，默认取当前活跃作品
+ */
+export async function getSettingsNodes(workId) {
+    if (typeof window === 'undefined') return getDefaultWorkNodes(workId);
+    await migrateGlobalToPerWork();
+
+    const wid = workId || getActiveWorkId() || 'work-default';
     try {
-        let nodes = await persistGet(NODES_KEY);
-        if (!nodes) {
-            const migrated = await migrateOldSettings();
-            if (migrated) {
-                nodes = await migrateToWorkStructure(migrated);
-                return nodes;
-            }
-            const defaults = getDefaultNodes();
-            await saveSettingsNodes(defaults);
-            if (!getActiveWorkId()) setActiveWorkId('work-default');
+        let nodes = await persistGet(getNodesKey(wid));
+        if (!nodes || !Array.isArray(nodes) || nodes.length === 0) {
+            // 首次打开该作品 → 初始化子分类
+            const defaults = getDefaultWorkNodes(wid);
+            await persistSet(getNodesKey(wid), defaults);
             return defaults;
         }
-
-        nodes = await migrateToWorkStructure(nodes);
-        nodes = await migrateGlobalRulesToWork(nodes);
-        nodes = await ensureWorkExists(nodes);
-        nodes = await migrateBookInfoToNode(nodes);
         return nodes;
     } catch {
-        return getDefaultNodes();
+        return getDefaultWorkNodes(wid);
     }
 }
 
-// 保存设定集节点 (Async)
-export async function saveSettingsNodes(nodes) {
+/**
+ * 保存指定作品的设定节点 (Async)
+ * @param {Array} nodes - 节点数组
+ * @param {string} workId - 作品 ID，默认取当前活跃作品
+ */
+export async function saveSettingsNodes(nodes, workId) {
     if (typeof window === 'undefined') return;
-    await persistSet(NODES_KEY, nodes);
+    const wid = workId || getActiveWorkId() || 'work-default';
+    await persistSet(getNodesKey(wid), nodes);
 }
 
 /**
@@ -499,7 +648,7 @@ async function migrateToWorkStructure(nodes) {
         }
     }
 
-    await saveSettingsNodes(newNodes);
+    await persistSet(LEGACY_NODES_KEY, newNodes);
     if (!getActiveWorkId()) setActiveWorkId('work-default');
     return newNodes;
 }
@@ -522,16 +671,14 @@ async function migrateGlobalRulesToWork(nodes) {
         });
     }
     nodes = nodes.filter(n => n.id !== 'root-rules');
-    await saveSettingsNodes(nodes);
     return nodes;
 }
 
-// 确保至少有一个作品存在 (Async)
-async function ensureWorkExists(nodes) {
+// 确保至少有一个作品存在（旧迁移链专用）
+async function ensureWorkExistsLegacy(nodes) {
     if (!nodes.some(n => n.type === 'work')) {
         const { workNode, subNodes } = createWorkNode('默认作品', 'work-default');
         nodes.push(workNode, ...subNodes);
-        await saveSettingsNodes(nodes);
     }
     if (!getActiveWorkId()) {
         const firstWork = nodes.find(n => n.type === 'work');
@@ -579,8 +726,8 @@ export async function addSettingsNode({ name, type, category, parentId, icon, co
 // Embedding 防抖定时器 — 避免每次编辑都触发 embedding API 调用
 const _embeddingTimers = {};
 
-export async function updateSettingsNode(id, updates) {
-    const nodes = await getSettingsNodes();
+export async function updateSettingsNode(id, updates, currentNodes) {
+    const nodes = currentNodes || await getSettingsNodes();
     const idx = nodes.findIndex(n => n.id === id);
     if (idx === -1) return null;
     const isProtected = GLOBAL_ROOT_CATEGORIES.some(c => c.id === id) ||
@@ -723,21 +870,17 @@ export async function getNodePath(id) {
     return path;
 }
 
-// ==================== bookInfo 迁移到作品节点 ====================
-
 /**
- * 将全局 settings.bookInfo 迁移到默认作品的 bookInfo 节点 content 中
+ * 将全局 settings.bookInfo 迁移到默认作品的 bookInfo 节点 content 中（旧迁移链专用）
  * 只执行一次：检查全局 bookInfo 是否有内容，迁移后清空
  */
-async function migrateBookInfoToNode(nodes) {
+async function migrateBookInfoToNodeLegacy(nodes) {
     if (typeof window === 'undefined') return nodes;
     try {
         const settings = getProjectSettings();
         const bi = settings.bookInfo;
-        // 检查是否有需要迁移的全局 bookInfo 数据
         if (!bi || !Object.values(bi).some(v => v)) return nodes;
 
-        // 找到当前活动作品（或默认作品）的 bookInfo 节点
         const activeWid = getActiveWorkId();
         const targetWorkId = activeWid || nodes.find(n => n.type === 'work')?.id;
         if (!targetWorkId) return nodes;
@@ -745,13 +888,10 @@ async function migrateBookInfoToNode(nodes) {
         const biNode = nodes.find(n => n.parentId === targetWorkId && n.category === 'bookInfo' && n.type === 'special');
         if (!biNode) return nodes;
 
-        // 只在节点内容为空时迁移（避免覆盖已有数据）
         if (!biNode.content || Object.keys(biNode.content).length === 0) {
             biNode.content = { ...bi };
-            await saveSettingsNodes(nodes);
         }
 
-        // 清空全局 bookInfo，防止重复迁移
         settings.bookInfo = {};
         saveProjectSettings(settings);
     } catch (e) {
@@ -771,7 +911,8 @@ async function migrateOldSettings() {
         if (!oldData) return null;
 
         const old = JSON.parse(oldData);
-        const nodes = getDefaultNodes();
+        const { workNode, subNodes } = createWorkNode('默认作品', 'work-default');
+        const nodes = [workNode, ...subNodes];
         let hasContent = false;
 
         // 迁移人物设定
@@ -874,7 +1015,7 @@ async function migrateOldSettings() {
         }
 
         if (hasContent) {
-            await saveSettingsNodes(nodes);
+            await persistSet(LEGACY_NODES_KEY, nodes);
             return nodes;
         }
         return null;

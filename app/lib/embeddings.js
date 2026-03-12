@@ -1,5 +1,9 @@
 // 文本向量化与余弦相似度计算库
 
+// 错误退避缓存：API 连续失败时暂停重试 60 秒
+let _embedErrorUntil = 0;
+const EMBED_BACKOFF_MS = 60000;
+
 /**
  * 获取文本的向量化表示 (Embeddings)
  * @param {string} text 要向量化的文本
@@ -8,6 +12,8 @@
  */
 export async function getEmbedding(text, apiConfig) {
     if (!text || text.trim() === '') return null;
+    // 如果上次失败的退避期还没过，直接跳过
+    if (Date.now() < _embedErrorUntil) return null;
 
     try {
         const res = await fetch('/api/embed', {
@@ -18,6 +24,7 @@ export async function getEmbedding(text, apiConfig) {
 
         if (!res.ok) {
             console.error('getEmbedding HTTP error:', await res.text());
+            _embedErrorUntil = Date.now() + EMBED_BACKOFF_MS;
             return null;
         }
 
@@ -30,6 +37,7 @@ export async function getEmbedding(text, apiConfig) {
         return data.embedding;
     } catch (err) {
         console.error('getEmbedding fetch error:', err);
+        _embedErrorUntil = Date.now() + EMBED_BACKOFF_MS;
         return null;
     }
 }

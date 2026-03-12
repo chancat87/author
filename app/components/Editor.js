@@ -21,6 +21,7 @@ import { useEffect, useCallback, useRef, useState, useMemo, useId, forwardRef, u
 import { ragRecommend } from '../lib/context-engine';
 import { useAppStore } from '../store/useAppStore';
 import ModelPicker from './ModelPicker';
+import { PanelLeftOpen, PanelLeftClose } from 'lucide-react';
 
 // ==================== AI 模式配置 ====================
 const AI_MODES = [
@@ -68,6 +69,7 @@ const Editor = forwardRef(function Editor({ content, onUpdate, editable = true, 
         extensions: [
             StarterKit.configure({
                 heading: { levels: [1, 2, 3] },
+                underline: false, // 避免与下方显式 Underline 重复注册
             }),
             Placeholder.configure({
                 placeholder: '开始写作…让灵感自由流淌',

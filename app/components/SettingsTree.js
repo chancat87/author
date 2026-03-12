@@ -222,8 +222,9 @@ export default function SettingsTree({
         }
     }, [expandedCategory, nodes, onSelect, onExpandComplete]);
 
-    // 获取根节点
-    const rootNodes = nodes.filter(n => n.parentId === null);
+    // 获取根节点: 如果 parentId 为 null，或者其父节点不在当前渲染的节点列表中，就认为是根节点
+    const nodeIds = new Set(nodes.map(n => n.id));
+    const rootNodes = nodes.filter(n => n.parentId === null || !nodeIds.has(n.parentId));
 
     // 搜索过滤
     const filteredNodes = useMemo(() => {

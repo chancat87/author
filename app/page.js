@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { useAppStore } from './store/useAppStore';
 import { useI18n } from './lib/useI18n';
+import { Menu, Sparkles, PanelLeftOpen, PanelLeftClose } from 'lucide-react';
+import Tooltip from './components/ui/Tooltip';
 import {
   getChapters,
   createChapter,
@@ -463,27 +465,20 @@ export default function Home() {
             </>
           )}
 
-          {/* 侧边栏展开按钮（编辑器画布左上角） */}
-          {!sidebarOpen && (
-            <button
-              className="sidebar-open-btn"
-              onClick={() => setSidebarOpen(true)}
-              title={t('page.expandSidebar')}
-            >
-              ☰
-            </button>
-          )}
+
 
           {/* AI 侧栏浮动开关 */}
           {!aiSidebarOpen && (
-            <button
-              id="tour-ai-btn"
-              className="ai-sidebar-toggle"
-              onClick={() => setAiSidebarOpen(true)}
-              title={t('page.openAiAssistant')}
-            >
-              ✦
-            </button>
+            <Tooltip content={t('page.openAiAssistant')} side="left">
+              <button
+                id="tour-ai-btn"
+                className="ai-sidebar-toggle"
+                onClick={() => setAiSidebarOpen(true)}
+                aria-label={t('page.openAiAssistant')}
+              >
+                <Sparkles size={18} />
+              </button>
+            </Tooltip>
           )}
         </main>
 

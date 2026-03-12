@@ -52,7 +52,8 @@ export const useAppStore = create((set, get) => ({
     },
 
     showSettings: false,
-    setShowSettings: (show) => set({ showSettings: show }),
+    settingsInitialTab: null,
+    setShowSettings: (show, tab) => set({ showSettings: show, settingsInitialTab: tab || null }),
 
     jumpToNodeId: null,
     setJumpToNodeId: (id) => set({ jumpToNodeId: id }),

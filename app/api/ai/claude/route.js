@@ -82,7 +82,7 @@ export async function POST(request) {
         };
 
         // 扩展思考 (extended thinking)
-        if (reasoningEffort && reasoningEffort !== 'auto') {
+        if (reasoningEffort && reasoningEffort !== 'auto' && reasoningEffort !== 'none') {
             const budgetMap = { low: 2048, medium: 8192, high: 32768 };
             baseParams.thinking = {
                 type: 'enabled',

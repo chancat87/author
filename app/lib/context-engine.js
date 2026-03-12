@@ -27,21 +27,8 @@ export async function ragRecommend(queryText, topN = 10) {
     const queryVector = await getEmbedding(enrichedQuery, apiConfig);
     if (!queryVector) return [];
 
-    // 获取所有设定节点
-    const allNodes = await getSettingsNodes();
-    const activeWorkId = getActiveWorkId();
-
-    // 按当前作品过滤
-    let nodes;
-    if (activeWorkId) {
-        const workDesc = new Set();
-        const coll = (pid) => { allNodes.filter(n => n.parentId === pid).forEach(n => { workDesc.add(n.id); coll(n.id); }); };
-        workDesc.add(activeWorkId);
-        coll(activeWorkId);
-        nodes = allNodes.filter(n => workDesc.has(n.id));
-    } else {
-        nodes = allNodes;
-    }
+    // getSettingsNodes() 已按当前作品过滤
+    const nodes = await getSettingsNodes();
 
     const itemNodes = nodes.filter(n => n.type === 'item' && n.enabled !== false);
 
@@ -95,20 +82,8 @@ export async function getContextItems(activeChapterId) {
     const chapters = await getChapters(getActiveWorkId());
     const currentIndex = chapters.findIndex(ch => ch.id === activeChapterId);
 
-    const allNodes = await getSettingsNodes();
-    const activeWorkId = getActiveWorkId();
-
-    // 按当前作品过滤
-    let nodes;
-    if (activeWorkId) {
-        const workDesc = new Set();
-        const coll = (pid) => { allNodes.filter(n => n.parentId === pid).forEach(n => { workDesc.add(n.id); coll(n.id); }); };
-        workDesc.add(activeWorkId);
-        coll(activeWorkId);
-        nodes = allNodes.filter(n => workDesc.has(n.id));
-    } else {
-        nodes = allNodes;
-    }
+    // getSettingsNodes() 已按当前作品过滤
+    const nodes = await getSettingsNodes();
     const itemNodes = nodes.filter(n => n.type === 'item');
 
     const items = [];
@@ -212,25 +187,8 @@ export async function buildContext(activeChapterId, selectedText, selectedIds = 
     const currentIndex = chapters.findIndex(ch => ch.id === activeChapterId);
 
     // 从树形节点读取设定（过滤掉禁用项，并按当前作品过滤）
-    const allNodes = await getSettingsNodes();
-    const activeWorkId = getActiveWorkId();
-
-    // 收集当前作品的所有后代节点
-    let nodes;
-    if (activeWorkId) {
-        const workDescendants = new Set();
-        const collectDesc = (pid) => {
-            allNodes.filter(n => n.parentId === pid).forEach(n => {
-                workDescendants.add(n.id);
-                collectDesc(n.id);
-            });
-        };
-        workDescendants.add(activeWorkId);
-        collectDesc(activeWorkId);
-        nodes = allNodes.filter(n => workDescendants.has(n.id));
-    } else {
-        nodes = allNodes;
-    }
+    // getSettingsNodes() 已按当前作品过滤
+    const nodes = await getSettingsNodes();
 
     // 获取所有有效的设定条目
     const allValidItemNodes = nodes.filter(n => n.type === 'item' && n.enabled !== false);
@@ -365,20 +323,8 @@ export async function getContextPreview(activeChapterId, selectedText) {
     const currentChapter = chapters.find(ch => ch.id === activeChapterId);
     const currentIndex = chapters.findIndex(ch => ch.id === activeChapterId);
 
-    const allNodes = await getSettingsNodes();
-    const activeWorkId = getActiveWorkId();
-
-    // 按当前作品过滤
-    let nodes;
-    if (activeWorkId) {
-        const workDesc = new Set();
-        const coll = (pid) => { allNodes.filter(n => n.parentId === pid).forEach(n => { workDesc.add(n.id); coll(n.id); }); };
-        workDesc.add(activeWorkId);
-        coll(activeWorkId);
-        nodes = allNodes.filter(n => workDesc.has(n.id));
-    } else {
-        nodes = allNodes;
-    }
+    // getSettingsNodes() 已按当前作品过滤
+    const nodes = await getSettingsNodes();
     const allItemNodes = nodes.filter(n => n.type === 'item');
     const enabledItemNodes = allItemNodes.filter(n => n.enabled !== false);
 

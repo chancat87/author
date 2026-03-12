@@ -40,7 +40,7 @@ export async function POST(request) {
         // 添加思考等级（默认 medium，不受高级参数面板影响）
         const rawEffort = apiConfig?.reasoningEffort;
         const effort = (!rawEffort || rawEffort === 'auto') ? 'medium' : rawEffort;
-        if (['low', 'medium', 'high', 'xhigh'].includes(effort)) {
+        if (effort !== 'none' && ['low', 'medium', 'high', 'xhigh'].includes(effort)) {
             requestBody.reasoning = { effort, summary: 'auto' };
         }
 

@@ -46,7 +46,7 @@ export async function POST(request) {
                 ...(maxTokens ? { maxOutputTokens: maxTokens } : {}),
                 ...(reasoningEffort && reasoningEffort !== 'auto' ? {
                     thinkingConfig: {
-                        thinkingBudget: { low: 1024, medium: 8192, high: 32768 }[reasoningEffort] || 8192,
+                        thinkingBudget: reasoningEffort === 'none' ? 0 : ({ low: 1024, medium: 8192, high: 32768 }[reasoningEffort] || 8192),
                     },
                 } : {}),
             },

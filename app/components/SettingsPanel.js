@@ -13,11 +13,12 @@ import {
     WRITING_MODES,
     getWritingMode,
     setWritingMode,
-    createWorkNode,
     saveSettingsNodes,
     getActiveWorkId,
     setActiveWorkId,
     getAllWorks,
+    addWork,
+    removeWork,
     rebuildAllEmbeddings,
 } from '../lib/settings';
 import SettingsTree from './SettingsTree';
@@ -49,6 +50,7 @@ export default function SettingsPanel() {
     const {
         showSettings: open,
         setShowSettings,
+        settingsInitialTab,
         setWritingMode: setGlobalWritingMode,
         incrementSettingsVersion,
         jumpToNodeId,
@@ -63,7 +65,18 @@ export default function SettingsPanel() {
 
     const [settings, setSettings] = useState(null);
     const [activeTab, setActiveTab] = useState('settings');
+
+    // 当面板打开时，如果有 settingsInitialTab 则跳转到指定 tab
+    useEffect(() => {
+        if (open && settingsInitialTab) {
+            setActiveTab(settingsInitialTab);
+        } else if (open) {
+            // 默认打开时回到设定集 tab
+            setActiveTab('settings');
+        }
+    }, [open, settingsInitialTab]);
     const [nodes, setNodes] = useState([]);
+    const [works, setWorks] = useState([]);
     const [selectedNodeId, setSelectedNodeId] = useState(null);
     const [writingMode, setWritingModeState] = useState('webnovel');
     const [searchQuery, setSearchQuery] = useState('');
@@ -93,19 +106,24 @@ export default function SettingsPanel() {
     useEffect(() => {
         if (open) {
             setSettings(getProjectSettings());
-            const loadNodes = async () => {
-                const allNodes = await getSettingsNodes();
-                setNodes(allNodes);
-                setWritingModeState(getWritingMode());
-                setSearchQuery('');
+            const loadData = async () => {
+                // 加载作品列表
+                const allWorks = await getAllWorks();
+                setWorks(allWorks);
+
                 // 初始化激活作品
                 let wid = getActiveWorkId();
-                if (!wid || !allNodes.find(n => n.id === wid)) {
-                    const firstWork = allNodes.find(n => n.type === 'work');
-                    wid = firstWork?.id || null;
+                if (!wid || !allWorks.find(w => w.id === wid)) {
+                    wid = allWorks[0]?.id || null;
                     if (wid) setActiveWorkId(wid);
                 }
                 setActiveWorkIdState(wid);
+
+                // 加载当前作品节点
+                const workNodes = await getSettingsNodes(wid);
+                setNodes(workNodes);
+                setWritingModeState(getWritingMode());
+                setSearchQuery('');
 
                 // 跳转到指定节点
                 if (jumpToNodeId) {
@@ -114,28 +132,12 @@ export default function SettingsPanel() {
                     setJumpToNodeId(null);
                 }
             };
-            loadNodes();
+            loadData();
         }
     }, [open]);
 
-    // 所有作品列表
-    const works = useMemo(() => getAllWorks(nodes), [nodes]);
-
-    // 当前作品下的节点
-    const visibleNodes = useMemo(() => {
-        if (!activeWorkId) return nodes;
-        // 递归收集当前作品的所有后代 id
-        const workDescendants = new Set();
-        const collectDescendants = (parentId) => {
-            nodes.filter(n => n.parentId === parentId).forEach(n => {
-                workDescendants.add(n.id);
-                collectDescendants(n.id);
-            });
-        };
-        workDescendants.add(activeWorkId);
-        collectDescendants(activeWorkId);
-        return nodes.filter(n => workDescendants.has(n.id));
-    }, [nodes, activeWorkId]);
+    // 当前作品节点即可见节点（无需再按作品过滤）
+    const visibleNodes = nodes;
 
     const stats = useMemo(() => {
         const items = visibleNodes.filter(n => n.type === 'item');
@@ -147,29 +149,25 @@ export default function SettingsPanel() {
         }));
     }, [visibleNodes, t]);
 
-    // 作品管理
-    const handleSwitchWork = (workId) => {
+    const handleSwitchWork = async (workId) => {
         setActiveWorkIdState(workId);
         setActiveWorkId(workId);
         // 同步 Zustand store，触发 page.js 重载章节
         useAppStore.getState().setActiveWorkId(workId);
         setSelectedNodeId(null);
+        // 重新加载该作品的节点
+        const workNodes = await getSettingsNodes(workId);
+        setNodes(workNodes);
     };
 
     const handleCreateWork = async () => {
         const name = newWorkName.trim();
         if (!name) return;
-        const { workNode, subNodes } = createWorkNode(name);
-        const updatedNodes = [...nodes, workNode, ...subNodes];
-        await saveSettingsNodes(updatedNodes);
-        setNodes(updatedNodes);
-        setActiveWorkIdState(workNode.id);
-        setActiveWorkId(workNode.id);
-        // 同步 Zustand store，触发 page.js 重载章节
-        useAppStore.getState().setActiveWorkId(workNode.id);
+        const workNode = await addWork(name);
+        setWorks(await getAllWorks());
+        await handleSwitchWork(workNode.id);
         setNewWorkName('');
         setShowNewWorkInput(false);
-        setSelectedNodeId(null);
     };
 
     const handleDeleteWork = async (workId) => {
@@ -190,33 +188,23 @@ export default function SettingsPanel() {
     };
 
     const doDeleteWork = async (workId) => {
-        // 递归删除作品及其所有后代
-        const toDelete = new Set();
-        const collect = (pid) => { toDelete.add(pid); nodes.filter(n => n.parentId === pid).forEach(n => collect(n.id)); };
-        collect(workId);
-        const updatedNodes = nodes.filter(n => !toDelete.has(n.id));
-        await saveSettingsNodes(updatedNodes);
-        setNodes(updatedNodes);
+        const updatedWorks = await removeWork(workId);
+        setWorks(updatedWorks);
         // 切换到第一个存活的作品
-        const nextWork = updatedNodes.find(n => n.type === 'work');
+        const nextWork = updatedWorks[0];
         if (nextWork) {
-            setActiveWorkIdState(nextWork.id);
-            setActiveWorkId(nextWork.id);
+            await handleSwitchWork(nextWork.id);
+        } else {
+            setNodes([]);
         }
-        setSelectedNodeId(null);
     };
 
     // 一键清空当前作品的所有条目（保留文件夹结构）
     const handleClearAllItems = async () => {
         if (!activeWorkId) return;
-        const workNode = nodes.find(n => n.id === activeWorkId);
-        const workName = workNode?.name || '';
-        // 统计当前作品下的 item 数量
-        const workDescendants = new Set();
-        const collectWork = (pid) => { nodes.filter(n => n.parentId === pid).forEach(n => { workDescendants.add(n.id); collectWork(n.id); }); };
-        workDescendants.add(activeWorkId);
-        collectWork(activeWorkId);
-        const itemCount = nodes.filter(n => workDescendants.has(n.id) && n.type === 'item').length;
+        const workEntry = works.find(w => w.id === activeWorkId);
+        const workName = workEntry?.name || '';
+        const itemCount = nodes.filter(n => n.type === 'item').length;
         if (itemCount === 0) return;
 
         const msg = t('settings.clearAllPrompt').replace('{name}', workName).replace('{count}', itemCount);
@@ -224,8 +212,8 @@ export default function SettingsPanel() {
             message: msg,
             onConfirm: async () => {
                 setDeleteConfirm(null);
-                const updatedNodes = nodes.filter(n => !(workDescendants.has(n.id) && n.type === 'item'));
-                await saveSettingsNodes(updatedNodes);
+                const updatedNodes = nodes.filter(n => n.type !== 'item');
+                await saveSettingsNodes(updatedNodes, activeWorkId);
                 setNodes(updatedNodes);
                 setSelectedNodeId(null);
             },
@@ -233,28 +221,16 @@ export default function SettingsPanel() {
         });
     };
 
-    // 收集当前作品的所有节点
-    const getWorkNodes = () => {
-        if (!activeWorkId) return [];
-        const workDescendants = new Set();
-        const collect = (parentId) => {
-            nodes.filter(n => n.parentId === parentId).forEach(n => {
-                workDescendants.add(n.id);
-                collect(n.id);
-            });
-        };
-        workDescendants.add(activeWorkId);
-        collect(activeWorkId);
-        return nodes.filter(n => workDescendants.has(n.id));
-    };
+    // 收集当前作品的所有节点（现在就是 nodes 本身）
+    const getWorkNodes = () => nodes;
 
     // 导出当前作品的设定集
     const handleExportSettings = async (format = 'json') => {
         if (!activeWorkId) return;
-        const workNode = nodes.find(n => n.id === activeWorkId);
-        if (!workNode) return;
+        const workEntry = works.find(w => w.id === activeWorkId);
+        if (!workEntry) return;
         const workNodes = getWorkNodes();
-        const baseName = workNode.name || '设定集';
+        const baseName = workEntry.name || '设定集';
         setShowExportFormat(false);
 
         if (format === 'txt') {
@@ -275,7 +251,7 @@ export default function SettingsPanel() {
             const data = {
                 type: 'author-settings-export',
                 version: 2,
-                workName: workNode.name,
+                workName: workEntry.name,
                 exportedAt: new Date().toISOString(),
                 nodes: exportNodes,
                 writingMode: projectSettings.writingMode || 'webnovel',
@@ -345,8 +321,10 @@ export default function SettingsPanel() {
                     alert(t('settings.importInvalidFile')); return;
                 }
                 const importedNodes = data.nodes;
-                const workNode = importedNodes.find(n => n.type === 'work');
-                if (!workNode) { alert(t('settings.importNoWork')); return; }
+                const importedWorkNode = importedNodes.find(n => n.type === 'work');
+                if (!importedWorkNode) { alert(t('settings.importNoWork')); return; }
+                // 分离 work 节点和子节点
+                const importedSubNodes = importedNodes.filter(n => n.type !== 'work');
 
                 const restorePS = () => {
                     if (data.writingMode) {
@@ -355,29 +333,29 @@ export default function SettingsPanel() {
                         saveProjectSettings(ps); setSettings(ps);
                         if (data.writingMode) { setWritingModeState(data.writingMode); setWritingMode(data.writingMode); }
                     }
-                    // 兼容旧版导出：如果 JSON 中有 bookInfo，写入作品的 bookInfo 节点
+                    // 兼容旧版导出
                     if (data.bookInfo && Object.values(data.bookInfo).some(v => v)) {
-                        const importedNodes = data.nodes;
-                        const importedWork = importedNodes.find(n => n.type === 'work');
-                        if (importedWork) {
-                            const biNode = importedNodes.find(n => n.parentId === importedWork.id && n.category === 'bookInfo');
-                            if (biNode && (!biNode.content || Object.keys(biNode.content).length === 0)) {
-                                biNode.content = data.bookInfo;
-                            }
+                        const biNode = importedSubNodes.find(n => n.parentId === importedWorkNode.id && n.category === 'bookInfo');
+                        if (biNode && (!biNode.content || Object.keys(biNode.content).length === 0)) {
+                            biNode.content = data.bookInfo;
                         }
                     }
                 };
-                const existingWork = nodes.find(n => n.type === 'work' && n.name === workNode.name);
+                const existingWork = works.find(w => w.name === importedWorkNode.name);
                 if (existingWork) {
-                    if (!confirm((t('settings.importOverwrite')).replace('{name}', workNode.name))) return;
-                    const toDelete = new Set();
-                    const collectDel = (pid) => { toDelete.add(pid); nodes.filter(n => n.parentId === pid).forEach(n => collectDel(n.id)); };
-                    collectDel(existingWork.id);
-                    const merged = [...nodes.filter(n => !toDelete.has(n.id)), ...importedNodes];
-                    await saveSettingsNodes(merged); setNodes(merged); restorePS(); handleSwitchWork(workNode.id);
+                    if (!confirm((t('settings.importOverwrite')).replace('{name}', importedWorkNode.name))) return;
+                    // 覆盖现有作品的节点
+                    await saveSettingsNodes(importedSubNodes, existingWork.id);
+                    restorePS();
+                    setWorks(await getAllWorks());
+                    await handleSwitchWork(existingWork.id);
                 } else {
-                    const merged = [...nodes, ...importedNodes];
-                    await saveSettingsNodes(merged); setNodes(merged); restorePS(); handleSwitchWork(workNode.id);
+                    // 创建新作品
+                    const newWork = await addWork(importedWorkNode.name, importedWorkNode.id);
+                    await saveSettingsNodes(importedSubNodes, newWork.id);
+                    restorePS();
+                    setWorks(await getAllWorks());
+                    await handleSwitchWork(newWork.id);
                 }
             } catch (err) { alert((t('settings.importError')) + err.message); }
             return;
@@ -580,9 +558,10 @@ export default function SettingsPanel() {
 
     const handleUpdateNode = (id, updates) => {
         // 乐观更新：立即同步 React 状态，防止异步操作（如 embedding API）导致文字回退
-        setNodes(prev => prev.map(n => n.id === id ? { ...n, ...updates, updatedAt: new Date().toISOString() } : n));
-        // 后台持久化（不 await，避免阻塞 UI）
-        updateSettingsNode(id, updates);
+        const updatedNodes = nodes.map(n => n.id === id ? { ...n, ...updates, updatedAt: new Date().toISOString() } : n);
+        setNodes(updatedNodes);
+        // 后台持久化（传入当前节点，避免重新读取 API）
+        updateSettingsNode(id, updates, updatedNodes);
     };
 
     const selectedNode = visibleNodes.find(n => n.id === selectedNodeId);
@@ -1544,6 +1523,7 @@ function ApiConfigForm({ data, onChange }) {
                             <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 6 }}>思考等级 (Reasoning Effort)</label>
                             <div style={{ display: 'flex', gap: 6 }}>
                                 {[
+                                    { key: 'none', label: '关闭' },
                                     { key: 'low', label: 'low' },
                                     { key: 'medium', label: 'medium' },
                                     { key: 'high', label: 'high' },
@@ -1552,7 +1532,7 @@ function ApiConfigForm({ data, onChange }) {
                                     <button key={opt.key} style={{ padding: '5px 14px', border: (data.reasoningEffort || 'medium') === opt.key ? '2px solid var(--accent)' : '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', background: (data.reasoningEffort || 'medium') === opt.key ? 'var(--accent-light)' : 'var(--bg-primary)', cursor: 'pointer', fontSize: 12, fontWeight: (data.reasoningEffort || 'medium') === opt.key ? 600 : 400, color: (data.reasoningEffort || 'medium') === opt.key ? 'var(--accent)' : 'var(--text-primary)', transition: 'all 0.15s' }} onClick={() => update('reasoningEffort', opt.key)}>{opt.label}</button>
                                 ))}
                             </div>
-                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>控制模型推理深度，默认 Medium，XHigh 质量最高但更慢</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>控制模型推理深度，“关闭”禁用思维链，默认 Medium，XHigh 质量最高但更慢</div>
                         </div>
                     )}
                 </div>
@@ -1620,6 +1600,7 @@ function ApiConfigForm({ data, onChange }) {
                             <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 5 }}>{t('apiConfig.reasoningEffort')}</label>
                             <select className="modal-input" style={{ margin: 0, width: 160, padding: '5px 8px', fontSize: 13 }} value={data.reasoningEffort || 'auto'} onChange={e => update('reasoningEffort', e.target.value)}>
                                 <option value="auto">{t('apiConfig.reasoningAuto')}</option>
+                                <option value="none">{t('apiConfig.reasoningNone') || '关闭思考'}</option>
                                 <option value="low">Low</option>
                                 <option value="medium">Medium</option>
                                 <option value="high">High</option>
