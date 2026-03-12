@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useI18n } from '../lib/useI18n';
+import MiniMarkdownEditor from './MiniMarkdownEditor';
 
 // ==================== 分类配色 ====================
 const CATEGORY_COLORS = {
@@ -136,15 +137,15 @@ function TextField({ label, value, onChange, placeholder, multiline = false, row
                 </div>
             </div>
             {multiline ? (
-                <textarea
-                    {...inputProps}
-                    rows={rows}
-                    style={{
-                        width: '100%', padding: '8px 12px', border: '1px solid var(--border-light)',
-                        borderRadius: 'var(--radius-sm)', background: 'var(--bg-primary)', color: 'var(--text-primary)',
-                        fontSize: 13, fontFamily: 'var(--font-ui)', resize: 'vertical', outline: 'none',
-                        lineHeight: 1.6, transition: 'border-color 0.15s',
+                <MiniMarkdownEditor
+                    value={localValue}
+                    onChange={(md) => {
+                        setLocalValue(md);
+                        localValueRef.current = md;
+                        scheduleFlush();
                     }}
+                    placeholder={placeholder}
+                    rows={rows}
                 />
             ) : (
                 <input
@@ -193,25 +194,20 @@ function TextField({ label, value, onChange, placeholder, multiline = false, row
                                 className="btn btn-ghost btn-icon"
                             >✕</button>
                         </div>
-                        <div style={{ flex: 1, padding: 16, overflow: 'hidden', display: 'flex' }}>
-                            <textarea
-                                value={localValue}
-                                onChange={handleChange}
-                                onCompositionStart={handleCompositionStart}
-                                onCompositionEnd={handleCompositionEnd}
-                                placeholder={placeholder}
-                                autoFocus
-                                style={{
-                                    width: '100%', height: '100%', minHeight: '60vh',
-                                    padding: '12px 16px', border: '1px solid var(--border-light)',
-                                    borderRadius: 'var(--radius-md)', background: 'var(--bg-primary)',
-                                    color: 'var(--text-primary)', fontSize: 14, fontFamily: 'var(--font-ui)',
-                                    resize: 'none', outline: 'none', lineHeight: 1.8,
-                                    transition: 'border-color 0.15s',
-                                }}
-                                onFocus={e => e.target.style.borderColor = 'var(--accent)'}
-                                onBlur={e => e.target.style.borderColor = 'var(--border-light)'}
-                            />
+                        <div style={{ flex: 1, padding: 16, overflow: 'auto', display: 'flex' }}>
+                            <div style={{ width: '100%' }}>
+                                <MiniMarkdownEditor
+                                    value={localValue}
+                                    onChange={(md) => {
+                                        setLocalValue(md);
+                                        localValueRef.current = md;
+                                        scheduleFlush();
+                                    }}
+                                    placeholder={placeholder}
+                                    rows={20}
+                                    autoFocus
+                                />
+                            </div>
                         </div>
                     </div>
                 </div>

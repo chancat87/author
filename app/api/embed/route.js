@@ -1,10 +1,13 @@
 // Gemini 原生 API & OpenAI 兼容 API — 文本向量化 (Text Embeddings)
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
+
+import { proxyFetch } from '../../lib/proxy-fetch';
 
 export async function POST(request) {
     try {
         const { text, apiConfig } = await request.json();
+        const proxyUrl = apiConfig?.proxyUrl || '';
 
         const isCustomEmbed = apiConfig?.useCustomEmbed;
         const provider = isCustomEmbed ? apiConfig.embedProvider : (apiConfig?.provider || 'zhipu');
@@ -51,14 +54,14 @@ export async function POST(request) {
             const geminiModel = embedModelName || 'text-embedding-004';
             const url = `${baseUrl}/models/${geminiModel}:embedContent?key=${apiKey}`;
             console.log('Fetching Gemini Embeddings:', url);
-            const res = await fetch(url, {
+            const res = await proxyFetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     model: `models/${geminiModel}`,
                     content: { parts: [{ text }] }
                 })
-            });
+            }, proxyUrl);
 
             if (!res.ok) {
                 const errText = await res.text();
@@ -70,7 +73,7 @@ export async function POST(request) {
             // OpenAI 兼容格式
             const url = `${baseUrl}/embeddings`;
 
-            const res = await fetch(url, {
+            const res = await proxyFetch(url, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -80,7 +83,7 @@ export async function POST(request) {
                     input: text,
                     model: embedModelName
                 })
-            });
+            }, proxyUrl);
 
             if (!res.ok) {
                 const errText = await res.text();

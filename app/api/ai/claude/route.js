@@ -21,27 +21,27 @@ const WEB_SEARCH_TOOL = {
 };
 
 // 内联搜索执行（与 /api/ai/route.js 共享逻辑）
-async function executeSearch(query, searchConfig) {
+async function executeSearch(query, searchConfig, proxyUrl) {
     const provider = searchConfig.provider || 'tavily';
     switch (provider) {
         case 'tavily': {
             const tavilyBase = (searchConfig.baseUrl || 'https://api.tavily.com').replace(/\/$/, '');
-            const res = await fetch(`${tavilyBase}/search`, {
+            const res = await proxyFetch(`${tavilyBase}/search`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ api_key: searchConfig.apiKey, query, max_results: 5, include_answer: false }),
-            });
+            }, proxyUrl);
             if (!res.ok) { console.error('Tavily Search error:', res.status); return []; }
             const data = await res.json();
             return (data.results || []).map(item => ({ title: item.title || '', url: item.url || '', snippet: item.content || '' }));
         }
         case 'exa': {
             const exaBase = (searchConfig.baseUrl || 'https://api.exa.ai').replace(/\/$/, '');
-            const res = await fetch(`${exaBase}/search`, {
+            const res = await proxyFetch(`${exaBase}/search`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'x-api-key': searchConfig.apiKey },
                 body: JSON.stringify({ query, type: 'auto', numResults: 5, contents: { highlights: { numSentences: 3 } } }),
-            });
+            }, proxyUrl);
             if (!res.ok) { console.error('Exa Search error:', res.status); return []; }
             const data = await res.json();
             return (data.results || []).map(item => ({ title: item.title || '', url: item.url || '', snippet: (item.highlights || []).join(' ') || item.text || '' }));
@@ -133,7 +133,7 @@ export async function POST(request) {
                         const searchQuery = toolBlock.input?.query || userPrompt;
 
                         try {
-                            const results = await executeSearch(searchQuery, toolsConfig.searchConfig);
+                            const results = await executeSearch(searchQuery, toolsConfig.searchConfig, proxyUrl);
 
                             const resultText = results.length > 0
                                 ? results.map((r, i) => `[${i + 1}] ${r.title}\n${r.url}\n${r.snippet}`).join('\n\n')
