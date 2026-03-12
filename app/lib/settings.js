@@ -270,6 +270,8 @@ export function getChatApiConfig() {
             maxContextLength: chat.maxContextLength ?? main.maxContextLength,
             maxOutputTokens: chat.maxOutputTokens ?? main.maxOutputTokens,
             reasoningEffort: chat.reasoningEffort || main.reasoningEffort,
+            // 继承代理设置（代理是全局配置，不分主/聊天）
+            proxyUrl: chat.proxyUrl || main.proxyUrl,
         };
     }
     return settings.apiConfig;

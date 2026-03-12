@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
+import { proxyFetch } from '../../../../lib/proxy-fetch';
 
 // 拉取 Gemini 可用模型列表（支持分页，兼容中转）
 export async function POST(request) {
     try {
-        const { apiKey, baseUrl } = await request.json();
+        const { apiKey, baseUrl, proxyUrl } = await request.json();
 
         if (!apiKey) {
             return NextResponse.json(
@@ -20,19 +21,19 @@ export async function POST(request) {
         do {
             const url = `${base}/models?key=${apiKey}&pageSize=1000${pageToken ? `&pageToken=${pageToken}` : ''}`;
 
-            const response = await fetch(url, {
+            const response = await proxyFetch(url, {
                 method: 'GET',
                 headers: { 'Content-Type': 'application/json' },
-            });
+            }, proxyUrl);
 
             if (!response.ok) {
                 // 首页失败时，不带 pageSize 重试（有些中转不支持分页参数）
                 if (allModels.length === 0) {
                     const fallbackUrl = `${base}/models?key=${apiKey}`;
-                    const fallbackRes = await fetch(fallbackUrl, {
+                    const fallbackRes = await proxyFetch(fallbackUrl, {
                         method: 'GET',
                         headers: { 'Content-Type': 'application/json' },
-                    });
+                    }, proxyUrl);
                     if (!fallbackRes.ok) {
                         const errorText = await fallbackRes.text();
                         console.error('拉取模型列表失败:', fallbackRes.status, errorText);
