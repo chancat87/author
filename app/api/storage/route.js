@@ -66,6 +66,16 @@ export async function GET(request) {
             return NextResponse.json({ data: JSON.parse(content) });
         } catch (e) {
             if (e.code === 'ENOENT') {
+                // 尝试自动领养：当前用户目录为空但 data/ 下有其他用户数据
+                // 用于跨电脑拷贝项目目录后 cookie userId 不同的场景
+                const adopted = await tryAdoptOrphanData(userId);
+                if (adopted) {
+                    // 领养成功，重试读取
+                    try {
+                        const content2 = await fs.readFile(filePath, 'utf-8');
+                        return NextResponse.json({ data: JSON.parse(content2) });
+                    } catch { }
+                }
                 return NextResponse.json({ data: null });
             }
             throw e;
@@ -73,6 +83,58 @@ export async function GET(request) {
     } catch (error) {
         console.error('Storage GET error:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}
+
+/**
+ * 自动领养孤儿数据：如果当前用户目录不存在或为空，且 data/ 下恰好只有一个其他用户目录，
+ * 则将其重命名为当前用户目录，实现数据无缝继承。
+ * 适用场景：用户拷贝项目目录到另一台电脑，浏览器生成了新的 userId。
+ */
+async function tryAdoptOrphanData(currentUserId) {
+    try {
+        const currentUserDir = path.join(DATA_ROOT, currentUserId);
+        
+        // 检查当前用户目录是否已有数据
+        try {
+            const entries = await fs.readdir(currentUserDir);
+            if (entries.length > 0) return false; // 已有数据，不需要领养
+        } catch (e) {
+            if (e.code !== 'ENOENT') return false;
+            // 目录不存在，继续尝试领养
+        }
+
+        // 扫描 data/ 下的所有用户目录
+        let allDirs;
+        try {
+            allDirs = await fs.readdir(DATA_ROOT, { withFileTypes: true });
+        } catch {
+            return false; // data/ 目录不存在
+        }
+
+        const otherDirs = allDirs
+            .filter(d => d.isDirectory() && d.name !== currentUserId)
+            .map(d => d.name);
+
+        if (otherDirs.length !== 1) return false; // 只有恰好一个其他用户时才自动领养
+
+        const orphanDir = path.join(DATA_ROOT, otherDirs[0]);
+        
+        // 检查孤儿目录是否有数据
+        try {
+            const orphanEntries = await fs.readdir(orphanDir);
+            if (orphanEntries.length === 0) return false;
+        } catch {
+            return false;
+        }
+
+        // 重命名孤儿目录为当前用户目录
+        await fs.rename(orphanDir, currentUserDir);
+        console.log(`[Storage] Auto-adopted data from user ${otherDirs[0]} → ${currentUserId}`);
+        return true;
+    } catch (e) {
+        console.warn('[Storage] Auto-adopt failed:', e.message);
+        return false;
     }
 }
 

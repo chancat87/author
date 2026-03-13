@@ -14,7 +14,7 @@ export const useAppStore = create((set, get) => ({
     updateChapter: (id, updates) => set((state) => ({
         chapters: state.chapters.map((ch) => (ch.id === id ? { ...ch, ...updates } : ch))
     })),
-    addVolume: (volume) => set((state) => ({ chapters: [volume, ...state.chapters] })),
+    addVolume: (volume) => set((state) => ({ chapters: [...state.chapters, volume] })),
     toggleVolumeCollapsed: (id) => set((state) => ({
         chapters: state.chapters.map((ch) => (ch.id === id && ch.type === 'volume' ? { ...ch, collapsed: !ch.collapsed } : ch))
     })),
@@ -51,9 +51,8 @@ export const useAppStore = create((set, get) => ({
         if (Object.keys(updates).length) set(updates);
     },
 
-    showSettings: false,
-    settingsInitialTab: null,
-    setShowSettings: (show, tab) => set({ showSettings: show, settingsInitialTab: tab || null }),
+    showSettings: false, // false | 'settings' | 'apiConfig' | 'preferences'
+    setShowSettings: (show, tab) => set({ showSettings: (show === true ? (tab || 'settings') : show) || false }),
 
     jumpToNodeId: null,
     setJumpToNodeId: (id) => set({ jumpToNodeId: id }),

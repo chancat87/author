@@ -17,7 +17,10 @@ import { Markdown } from 'tiptap-markdown';
 import { MathInline, MathBlock, openMathEditor } from './MathExtension';
 import { PageBreakExtension } from './PageBreakExtension';
 import GhostMark from './GhostMark';
+import EditorBubbleMenu from './EditorBubbleMenu';
+import { createSlashExtension, SlashCommandMenu } from './SlashCommands';
 import { useEffect, useCallback, useRef, useState, useMemo, useId, forwardRef, useImperativeHandle } from 'react';
+import { ChevronUp, ChevronDown } from 'lucide-react';
 import { ragRecommend } from '../lib/context-engine';
 import { useAppStore } from '../store/useAppStore';
 import ModelPicker from './ModelPicker';
@@ -45,6 +48,17 @@ const Editor = forwardRef(function Editor({ content, onUpdate, editable = true, 
     // 页数状态
     const [pageCount, setPageCount] = useState(1);
 
+    // 斜杠命令菜单状态
+    const [slashRange, setSlashRange] = useState(null);
+
+    // 工具栏折叠状态
+    const [toolbarCollapsed, setToolbarCollapsed] = useState(() => {
+        if (typeof window !== 'undefined') {
+            return localStorage.getItem('author-toolbar-collapsed') === 'true';
+        }
+        return false;
+    });
+
     // 搜索栏
     const [findBarVisible, setFindBarVisible] = useState(false);
 
@@ -63,6 +77,11 @@ const Editor = forwardRef(function Editor({ content, onUpdate, editable = true, 
     useEffect(() => {
         localStorage.setItem('author-margins', JSON.stringify(margins));
     }, [margins]);
+
+    // 斜杠命令扩展
+    const slashExtension = useMemo(() => createSlashExtension((range) => {
+        setSlashRange(range);
+    }), []);
 
     const editor = useEditor({
         immediatelyRender: false,
@@ -104,6 +123,7 @@ const Editor = forwardRef(function Editor({ content, onUpdate, editable = true, 
             MathBlock,
             PageBreakExtension,
             GhostMark,
+            slashExtension,
         ],
         content: content || '',
         editable,
@@ -307,6 +327,14 @@ const Editor = forwardRef(function Editor({ content, onUpdate, editable = true, 
                     >
                         <div ref={contentCallbackRef}>
                             <EditorContent editor={editor} />
+                            <EditorBubbleMenu editor={editor} />
+                            {slashRange && (
+                                <SlashCommandMenu
+                                    editor={editor}
+                                    range={slashRange}
+                                    onClose={() => setSlashRange(null)}
+                                />
+                            )}
                         </div>
                     </div>
                 </div>
@@ -1125,7 +1153,7 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
                         ragLoadingRef={ragLoadingRef}
                         onJumpToNode={(nodeId) => {
                             setJumpToNodeId(nodeId);
-                            setShowSettings(true);
+                            setShowSettings('settings');
                         }}
                     />
 

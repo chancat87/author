@@ -14,42 +14,145 @@ import ChatMarkdown from './ChatMarkdown';
 import ModelPicker from './ModelPicker';
 import { useI18n } from '../lib/useI18n';
 
-// 解析消息中的 [SETTINGS_ACTION] 块（支持可选的代码围栏包裹）
+// 解析消息中的 [SETTINGS_ACTION] 块
+// 彻底版：多模式匹配 + 流式不完整块隐藏 + 渐进式 JSON 修复
 function parseSettingsActions(content) {
     if (!content) return { parts: [content || ''], actions: [] };
-    // 匹配带或不带 ``` 包裹的 [SETTINGS_ACTION] 块（兼容 ```json / ```JSON / ``` 等）
-    const regex = /(?:```(?:\w*)\s*\n?)?\[SETTINGS_ACTION\]\s*([\s\S]*?)\s*\[\/SETTINGS_ACTION\](?:\s*\n?```)?/g;
-    const parts = [];
-    const actions = [];
-    let lastIndex = 0;
-    let match;
-    while ((match = regex.exec(content)) !== null) {
-        if (match.index > lastIndex) parts.push(content.slice(lastIndex, match.index));
-        try {
-            // 清理 AI 可能添加的多余格式（如行首 ```json 残留、注释等）
-            let jsonStr = match[1].trim();
-            // 有时 AI 在 JSON 外再套一层 ``` ，去掉
-            jsonStr = jsonStr.replace(/^```\w*\s*\n?/, '').replace(/\n?```\s*$/, '');
-            const action = JSON.parse(jsonStr);
-            actions.push(action);
-            parts.push({ _action: true, index: actions.length - 1 });
-        } catch {
-            // JSON 解析失败 — 尝试修复常见问题（尾部逗号等）
-            try {
-                let fixedJson = match[1].trim()
-                    .replace(/^```\w*\s*\n?/, '').replace(/\n?```\s*$/, '')
-                    .replace(/,\s*([}\]])/g, '$1');  // 去掉尾部逗号
-                const action = JSON.parse(fixedJson);
-                actions.push(action);
+
+    // === 阶段 1：用多个正则模式尝试匹配完整的 action 块 ===
+    // 从严格到宽松：覆盖所有已知的 AI 输出变体
+    const patterns = [
+        // 模式 A：标准格式（带/不带代码围栏），关闭标签允许 \ 转义
+        /(?:```\w*\s*\n?)?\[SETTINGS_ACTION\]\s*([\s\S]*?)\s*\[\\?\/SETTINGS_ACTION\](?:\s*\n?```)?/g,
+        // 模式 B：AI 在标签外面又包了一层代码围栏（整个块在 ``` 内）
+        /```\w*\s*\n\[SETTINGS_ACTION\]\s*([\s\S]*?)\s*\[\\?\/SETTINGS_ACTION\]\s*\n?```/g,
+        // 模式 C：AI 忘记斜杠，写成 [SETTINGS_ACTION]...[SETTINGS_ACTION] 作为关闭
+        /\[SETTINGS_ACTION\]\s*([\s\S]*?)\s*\[SETTINGS_ACTION\]/g,
+    ];
+
+    let parts = [];
+    let actions = [];
+    let matched = false;
+
+    for (const regex of patterns) {
+        parts = [];
+        actions = [];
+        let lastIndex = 0;
+        let match;
+        regex.lastIndex = 0; // 重置
+        while ((match = regex.exec(content)) !== null) {
+            matched = true;
+            if (match.index > lastIndex) parts.push(content.slice(lastIndex, match.index));
+            const parsed = tryParseActionJson(match[1]);
+            if (parsed) {
+                actions.push(parsed);
                 parts.push({ _action: true, index: actions.length - 1 });
-            } catch {
-                parts.push(match[0]); // 真的无法解析，显示原文
+            } else {
+                parts.push(match[0]);
+            }
+            lastIndex = regex.lastIndex;
+        }
+        if (matched) {
+            if (lastIndex < content.length) {
+                const tail = content.slice(lastIndex);
+                // === 阶段 2：隐藏流式传输中不完整的 action 块 ===
+                // 如果剩余文本包含 [SETTINGS_ACTION] 但没有关闭标签，说明正在流式传输中
+                const incompleteIdx = tail.indexOf('[SETTINGS_ACTION]');
+                if (incompleteIdx >= 0) {
+                    // 只保留不完整块之前的文本，隐藏正在传输的 action 块
+                    if (incompleteIdx > 0) parts.push(tail.slice(0, incompleteIdx));
+                    // 不完整块部分不输出 → 等待关闭标签到达后再完整渲染
+                } else {
+                    parts.push(tail);
+                }
+            }
+            return { parts, actions };
+        }
+    }
+
+    // === 阶段 3：没有匹配到任何模式 ===
+    // 检查是否有不完整的 action 块（流式传输中）
+    const incompleteIdx = content.indexOf('[SETTINGS_ACTION]');
+    if (incompleteIdx >= 0) {
+        // 检查是否也可能被代码围栏包裹（``` 后紧跟 [SETTINGS_ACTION]）
+        let hideFrom = incompleteIdx;
+        // 向前查找可能的 ``` 开头
+        const before = content.slice(Math.max(0, incompleteIdx - 20), incompleteIdx);
+        const fenceMatch = before.match(/```\w*\s*\n?\s*$/);
+        if (fenceMatch) {
+            hideFrom = incompleteIdx - fenceMatch[0].length;
+        }
+        const visible = content.slice(0, hideFrom);
+        if (visible.trim()) {
+            return { parts: [visible], actions: [] };
+        }
+        return { parts: [content], actions: [] };
+    }
+
+    // === 阶段 4：兜底 —— 扫描裸 JSON 对象（AI 完全没用标签的罕见情况）===
+    // 只在内容中有 "action" 关键字时尝试
+    if (content.includes('"action"') && content.includes('"category"')) {
+        const jsonRegex = /\{[^{}]*"action"\s*:\s*"(?:add|update|delete)"[^{}]*"category"\s*:\s*"[^"]*"[^{}]*(?:\{[^{}]*\}[^{}]*)?\}/g;
+        let match;
+        let lastIndex = 0;
+        while ((match = jsonRegex.exec(content)) !== null) {
+            const parsed = tryParseActionJson(match[0]);
+            if (parsed && parsed.action && parsed.category) {
+                matched = true;
+                if (match.index > lastIndex) parts.push(content.slice(lastIndex, match.index));
+                actions.push(parsed);
+                parts.push({ _action: true, index: actions.length - 1 });
+                lastIndex = jsonRegex.lastIndex;
             }
         }
-        lastIndex = regex.lastIndex;
+        if (matched) {
+            if (lastIndex < content.length) parts.push(content.slice(lastIndex));
+            return { parts, actions };
+        }
     }
-    if (lastIndex < content.length) parts.push(content.slice(lastIndex));
-    return { parts, actions };
+
+    return { parts: [content], actions: [] };
+}
+
+// 尝试解析 action JSON，兼容各种 AI 输出格式问题
+function tryParseActionJson(raw) {
+    if (!raw) return null;
+    let jsonStr = raw.trim();
+    // 去掉 AI 可能嵌套的代码围栏
+    jsonStr = jsonStr.replace(/^```\w*\s*\n?/, '').replace(/\n?```\s*$/, '');
+    jsonStr = jsonStr.trim();
+    if (!jsonStr) return null;
+
+    // 第一次尝试：直接解析
+    try { return JSON.parse(jsonStr); } catch { /* continue */ }
+
+    // 第二次尝试：提取第一个 { ... } 对象（处理 AI 在 JSON 前后加了说明文字）
+    const objMatch = jsonStr.match(/\{[\s\S]*\}/);
+    if (objMatch) {
+        const extracted = objMatch[0];
+        try { return JSON.parse(extracted); } catch { /* continue */ }
+
+        // 第三次尝试：修复常见 JSON 问题
+        try {
+            let fixed = extracted
+                .replace(/,\s*([}\]])/g, '$1')           // 尾部逗号
+                .replace(/([{,]\s*)(\w+)\s*:/g, '$1"$2":') // 无引号的 key
+                .replace(/:\s*'([^']*)'/g, ':"$1"');      // 单引号值
+            return JSON.parse(fixed);
+        } catch { /* continue */ }
+
+        // 第四次尝试：处理值中含未转义换行符
+        try {
+            let fixed = extracted
+                .replace(/,\s*([}\]])/g, '$1')
+                .replace(/"([^"]*?)"/g, (m, content) => {
+                    return '"' + content.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t') + '"';
+                });
+            return JSON.parse(fixed);
+        } catch { /* continue */ }
+    }
+
+    return null;
 }
 
 // Helper to generate dynamic elegant gradients for providers
@@ -131,7 +234,7 @@ export default function AiSidebar({ onInsertText }) {
     const { t } = useI18n();
 
     const onClose = useCallback(() => setAiSidebarOpen(false), [setAiSidebarOpen]);
-    const onOpenSettings = useCallback(() => { setAiSidebarOpen(false); setShowSettings(true); }, [setAiSidebarOpen, setShowSettings]);
+    const onOpenSettings = useCallback(() => { setAiSidebarOpen(false); setShowSettings('settings'); }, [setAiSidebarOpen, setShowSettings]);
 
     // 派生状态
     const activeSession = useMemo(() => getActiveSession(sessionStore), [sessionStore]);
@@ -476,7 +579,7 @@ export default function AiSidebar({ onInsertText }) {
 
             const apiEndpoint = ['gemini-native', 'custom-gemini'].includes(apiConfig?.provider) ? '/api/ai/gemini'
                 : apiConfig?.provider === 'openai-responses' ? '/api/ai/responses'
-                    : ['claude', 'custom-claude'].includes(apiConfig?.provider) ? '/api/ai/claude'
+                    : (['claude', 'custom-claude'].includes(apiConfig?.provider) || apiConfig?.apiFormat === 'anthropic') ? '/api/ai/claude'
                         : '/api/ai';
 
             const context = await buildContext(activeChapterId, userMsg.content, contextSelection.size > 0 ? contextSelection : null);
@@ -829,13 +932,86 @@ export default function AiSidebar({ onInsertText }) {
                         >＋</button>
                         <button className="btn btn-ghost btn-icon btn-sm" onClick={onClose} title={t('aiSidebar.btnClose')}>✕</button>
                     </div>
-                </div>
-
-                {/* 会话列表面板 */}
-                {showSessionList && (
-                    <div className="session-list-panel">
+                    {/* 会话列表下拉面板 */}
+                    {showSessionList && (<>
+                        <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setShowSessionList(false)} />
+                        <div className="session-list-panel">
                         <div className="session-list-header">
-                            <span>{t('aiSidebar.historyCount').replace('{count}', sessions.length)}</span>
+                            <span style={{ fontSize: 13, fontWeight: 700 }}>{t('aiSidebar.historyCount').replace('{count}', sessions.length)}</span>
+                            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                <button
+                                    className="btn btn-ghost btn-sm"
+                                    style={{ fontSize: 11, padding: '2px 8px', lineHeight: 1.4 }}
+                                    onClick={() => {
+                                        const data = JSON.stringify(sessionStore, null, 2);
+                                        const blob = new Blob([data], { type: 'application/json' });
+                                        const url = URL.createObjectURL(blob);
+                                        const a = document.createElement('a');
+                                        const ts = new Date().toISOString().slice(0, 10);
+                                        a.href = url;
+                                        a.download = `chat-sessions-${ts}.json`;
+                                        a.click();
+                                        URL.revokeObjectURL(url);
+                                        showToast(t('aiSidebar.exportSessionsOk') || '对话记录已导出', 'success');
+                                    }}
+                                >导出</button>
+                                <button
+                                    className="btn btn-ghost btn-sm"
+                                    style={{ fontSize: 11, padding: '2px 8px', lineHeight: 1.4 }}
+                                    onClick={() => {
+                                        const input = document.createElement('input');
+                                        input.type = 'file';
+                                        input.accept = '.json';
+                                        input.onchange = async (e) => {
+                                            const file = e.target.files?.[0];
+                                            if (!file) return;
+                                            try {
+                                                const text = await file.text();
+                                                const imported = JSON.parse(text);
+                                                const importedSessions = imported.sessions || [];
+                                                if (!importedSessions.length) {
+                                                    showToast(t('aiSidebar.importSessionsEmpty') || '文件中没有对话记录', 'error');
+                                                    return;
+                                                }
+                                                setSessionStore(prev => {
+                                                    const existingIds = new Set(prev.sessions.map(s => s.id));
+                                                    const newSessions = importedSessions.filter(s => !existingIds.has(s.id));
+                                                    const merged = {
+                                                        ...prev,
+                                                        sessions: [...prev.sessions, ...newSessions],
+                                                    };
+                                                    saveSessionStore(merged);
+                                                    return merged;
+                                                });
+                                                const newCount = importedSessions.length;
+                                                showToast((t('aiSidebar.importSessionsOk') || '已导入 {count} 个对话').replace('{count}', newCount), 'success');
+                                            } catch (err) {
+                                                showToast((t('aiSidebar.importSessionsFail') || '导入失败: {error}').replace('{error}', err.message), 'error');
+                                            }
+                                        };
+                                        input.click();
+                                    }}
+                                >导入</button>
+                                <div style={{ width: 1, height: 14, background: 'var(--border-light)' }} />
+                                <button
+                                    className="btn btn-ghost btn-sm"
+                                    style={{ fontSize: 11, padding: '2px 8px', lineHeight: 1.4, color: 'var(--danger, #e53e3e)' }}
+                                    onClick={() => {
+                                        if (!confirm('确定要清空所有对话历史吗？此操作不可撤销。')) return;
+                                        setSessionStore(prev => {
+                                            const cleared = { activeSessionId: prev.activeSessionId, sessions: prev.sessions.filter(s => s.id === prev.activeSessionId) };
+                                            if (cleared.sessions.length === 0) {
+                                                const fresh = { id: `session-${Date.now()}`, title: '新对话', createdAt: Date.now(), updatedAt: Date.now(), messages: [] };
+                                                cleared.sessions = [fresh];
+                                                cleared.activeSessionId = fresh.id;
+                                            }
+                                            saveSessionStore(cleared);
+                                            return cleared;
+                                        });
+                                        showToast('已清空对话历史', 'success');
+                                    }}
+                                >清空</button>
+                            </div>
                         </div>
                         <div className="session-list">
                             {[...sessions].reverse().map(s => (
@@ -892,7 +1068,8 @@ export default function AiSidebar({ onInsertText }) {
                             ))}
                         </div>
                     </div>
-                )}
+                    </>)}
+                </div>
 
                 {/* Tab 切换 */}
                 <div className="ai-sidebar-tabs">
@@ -1179,6 +1356,7 @@ export default function AiSidebar({ onInsertText }) {
                                                         // 提取正文：去掉系统块、markdown标记、编辑点评
                                                         let text = (msg.content || '')
                                                             .replace(/(?:```[^\n]*\n)?\[SETTINGS_ACTION\][\s\S]*?\[\\?\/SETTINGS_ACTION\](?:\n```)?/g, '')
+                                                            .replace(/\[SETTINGS_ACTION\][\s\S]*?\[SETTINGS_ACTION\]/g, '')
                                                             .replace(/^#{1,6}\s+/gm, '')            // 去掉标题 #
                                                             .replace(/\*\*(.+?)\*\*/g, '$1')         // **粗体** → 粗体
                                                             .replace(/\*(.+?)\*/g, '$1')             // *斜体* → 斜体

@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useAppStore } from '../store/useAppStore';
 import { useI18n } from '../lib/useI18n';
 import { createChapter, deleteChapter, updateChapter, saveChapters, getChapters, createVolume, insertChapterInVolume, reorderItems } from '../lib/storage';
@@ -11,6 +12,56 @@ import { estimateTokens } from '../lib/context-engine';
 import { Settings, Moon, Sun, History, Save, FolderOpen, FileDown, BookOpen, HelpCircle, Github, PanelLeftClose, ListOrdered, Library, Plus, FileText, FileType, BookMarked, FileOutput, Printer, Book, X, MoreHorizontal, ChevronUp, KeyRound, SlidersHorizontal } from 'lucide-react';
 import Tooltip from './ui/Tooltip';
 import IconButton from './ui/IconButton';
+
+/** 更多操作下拉菜单（Portal 渲染到 body，彻底避免 overflow 裁剪） */
+function MoreMenuPortal({ anchorRef, t, setShowSettings, setShowMoreMenu, onOpenHelp, setShowGitPopup }) {
+    const menuRef = useRef(null);
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => { setMounted(true); }, []);
+
+    useLayoutEffect(() => {
+        const anchor = anchorRef?.current;
+        const menu = menuRef.current;
+        if (!anchor || !menu) return;
+        const rect = anchor.getBoundingClientRect();
+        const menuH = menu.offsetHeight;
+        const vh = window.innerHeight;
+        let top = rect.bottom - menuH;
+        if (top + menuH > vh - 4) top = vh - menuH - 4;
+        if (top < 4) top = 4;
+        menu.style.left = (rect.right + 8) + 'px';
+        menu.style.top = top + 'px';
+    });
+
+    if (!mounted) return null;
+
+    return createPortal(
+        <>
+            <div style={{ position: 'fixed', inset: 0, zIndex: 9990 }} onClick={() => setShowMoreMenu(false)} />
+            <div ref={menuRef} style={{
+                position: 'fixed', zIndex: 9991,
+                background: 'var(--bg-card)', border: '1px solid var(--border-light)',
+                borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)',
+                padding: 4, minWidth: 140,
+            }}>
+                <button className="dropdown-item" style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => { setShowSettings('apiConfig'); setShowMoreMenu(false); }}>
+                    <KeyRound size={14} style={{ flexShrink: 0 }} /> <span>{t('settings.tabApi') || 'API 配置'}</span>
+                </button>
+                <button className="dropdown-item" style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => { setShowSettings('preferences'); setShowMoreMenu(false); }}>
+                    <SlidersHorizontal size={14} style={{ flexShrink: 0 }} /> <span>{t('settings.tabPreferences') || '偏好设置'}</span>
+                </button>
+                <div style={{ height: 1, background: 'var(--border-light)', margin: '4px 0' }} />
+                <button className="dropdown-item" style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => { onOpenHelp?.(); setShowMoreMenu(false); }}>
+                    <HelpCircle size={14} style={{ flexShrink: 0 }} /> <span>{t('sidebar.menuHelp') || '帮助'}</span>
+                </button>
+                <button className="dropdown-item" style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => { setShowGitPopup(true); setShowMoreMenu(false); }}>
+                    <Github size={14} style={{ flexShrink: 0 }} /> <span>{t('sidebar.menuCommunity') || '社区'}</span>
+                </button>
+            </div>
+        </>,
+        document.body
+    );
+}
 
 export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
     const {
@@ -35,7 +86,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
     const [conflictModal, setConflictModal] = useState(null);
     const [showGitPopup, setShowGitPopup] = useState(false);
     const [showMoreMenu, setShowMoreMenu] = useState(false); // "更多操作" 下拉菜单
-    const [moreMenuPos, setMoreMenuPos] = useState({ right: 0, bottom: 0 }); // 下拉菜单定位
+    const moreMenuAnchorRef = useRef(null);
     const [outlineCollapsed, setOutlineCollapsed] = useState(false); // 手动折叠大纲
     const [headings, setHeadings] = useState([]); // 文档大纲标题列表
     const [headingStats, setHeadingStats] = useState([]); // 每个标题下的字数+token
@@ -113,9 +164,29 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
     };
 
     // 从章节列表中向前搜索最近的带数字章节，推算下一章名
-    const getNextChapterTitle = useCallback(() => {
+    // volumeId: 如果指定，只在该分卷内的章节中查找编号
+    const getNextChapterTitle = useCallback((volumeId) => {
         if (chapters.length === 0) return t('sidebar.defaultChapterTitle').replace('{num}', 1);
-        // 从最后一章向前找，跳过"更新说明"等非标准章节
+
+        // 如果指定了分卷，只在该分卷的子章节中查找
+        if (volumeId) {
+            const volIdx = chapters.findIndex(c => c.id === volumeId);
+            if (volIdx !== -1) {
+                // 找到该分卷下的所有子章节
+                const volChapters = [];
+                for (let i = volIdx + 1; i < chapters.length && (chapters[i].type || 'chapter') !== 'volume'; i++) {
+                    volChapters.push(chapters[i]);
+                }
+                // 从该分卷的最后一章向前找
+                for (let i = volChapters.length - 1; i >= 0; i--) {
+                    const next = tryNextTitle(volChapters[i].title);
+                    if (next) return next;
+                }
+                // 该分卷内没有章节，从分卷在全局中的位置推断
+            }
+        }
+
+        // 全局：从最后一章向前找，跳过"更新说明"等非标准章节
         for (let i = chapters.length - 1; i >= 0; i--) {
             const next = tryNextTitle(chapters[i].title);
             if (next) return next;
@@ -126,7 +197,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
     // 创建新章节 — 支持分卷内创建
     const handleCreateChapter = useCallback(async (volumeId) => {
         const targetVol = volumeId || activeVolumeId;
-        const title = getNextChapterTitle();
+        const title = getNextChapterTitle(targetVol);
         if (targetVol) {
             // 在分卷内创建
             const result = await insertChapterInVolume(title, targetVol, activeWorkId);
@@ -198,6 +269,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
         const afterId = activeVolumeId || activeChapterId || null;
         const result = await createVolume(title, activeWorkId, afterId);
         setChapters(result.chapters);
+        setActiveVolumeId(result.vol.id); // 选中新分卷，使连续创建时按顺序排列
         setRenameId(result.vol.id);
         setRenameTitle(title);
         showToast((t('sidebar.volumeCreated') || '已创建「{title}」').replace('{title}', title), 'success');
@@ -465,43 +537,24 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
             <aside className={`sidebar ${sidebarOpen ? '' : 'collapsed'}${pushMode ? ' push-mode' : ''}`}>
                 
                 {/* ===== 左侧垂直导航栏 (Nav Pane) ===== */}
-                <div className="sidebar-nav-pane">
+                <div className={`sidebar-nav-pane${sidebarOpen ? ' sidebar-nav-expanded' : ''}`}>
                     <div className="sidebar-nav-top">
-                        <IconButton icon={<BookOpen size={20} />} label={t('sidebar.chapterList') || '章节大纲'} className="nav-item active" onClick={() => setSidebarOpen(!sidebarOpen)} />
-                        <IconButton icon={<Library size={20} />} label={t('sidebar.tooltipSettings') || '设定集管理'} onClick={() => setShowSettings(true)} className="nav-item" />
+                        <IconButton icon={<BookOpen size={18} />} label={t('sidebar.chapterList') || '章节大纲'} text={sidebarOpen ? (t('sidebar.navChapter') || '章节') : undefined} tooltipSide="right" className="nav-item active" onClick={() => setSidebarOpen(!sidebarOpen)} />
+                        <IconButton icon={<Library size={18} />} label={t('sidebar.tooltipSettings') || '设定集管理'} text={sidebarOpen ? (t('sidebar.navSettings') || '设定集') : undefined} tooltipSide="right" onClick={() => setShowSettings('settings')} className="nav-item" />
                     </div>
                     <div className="sidebar-nav-bottom">
-                        <IconButton icon={theme === 'light' ? <Moon size={20} /> : <Sun size={20} />} label={theme === 'light' ? t('sidebar.tooltipThemeDark') : t('sidebar.tooltipThemeLight')} onClick={toggleTheme} className="nav-item" />
-                        <IconButton icon={<History size={20} />} label={t('sidebar.tooltipTimeMachine')} onClick={() => setShowSnapshots(true)} className="nav-item" />
-                        <IconButton icon={<FolderOpen size={20} />} label={t('sidebar.menuLoad') || '读档'} onClick={() => document.getElementById('project-import-input')?.click()} className="nav-item" />
-                        <IconButton icon={<Save size={20} />} label={t('sidebar.menuSave') || '存档'} onClick={() => { exportProject(); showToast(t('sidebar.exportedProject') || '已导出', 'success'); }} className="nav-item" />
-                        <IconButton icon={<FileDown size={20} />} label={t('sidebar.menuImportWork') || '导入作品'} onClick={() => document.getElementById('work-import-input')?.click()} className="nav-item" />
+                        <IconButton icon={theme === 'light' ? <Moon size={18} /> : <Sun size={18} />} label={theme === 'light' ? t('sidebar.tooltipThemeDark') : t('sidebar.tooltipThemeLight')} text={sidebarOpen ? (theme === 'light' ? (t('sidebar.navThemeDark') || '暗色') : (t('sidebar.navThemeLight') || '亮色')) : undefined} tooltipSide="right" onClick={toggleTheme} className="nav-item" />
+                        <IconButton icon={<History size={18} />} label={t('sidebar.tooltipTimeMachine')} text={sidebarOpen ? (t('sidebar.navSnapshots') || '快照') : undefined} tooltipSide="right" onClick={() => setShowSnapshots(true)} className="nav-item" />
+                        <IconButton icon={<FolderOpen size={18} />} label={t('sidebar.menuLoad') || '读档'} text={sidebarOpen ? (t('sidebar.menuLoad') || '读档') : undefined} tooltipSide="right" onClick={() => document.getElementById('project-import-input')?.click()} className="nav-item" />
+                        <IconButton icon={<Save size={18} />} label={t('sidebar.menuSave') || '存档'} text={sidebarOpen ? (t('sidebar.menuSave') || '存档') : undefined} tooltipSide="right" onClick={() => { exportProject(); showToast(t('sidebar.exportedProject') || '已导出', 'success'); }} className="nav-item" />
+                        <IconButton icon={<FileDown size={18} />} label={t('sidebar.menuImportWork') || '导入'} text={sidebarOpen ? (t('sidebar.navImport') || '导入') : undefined} tooltipSide="right" onClick={() => document.getElementById('work-import-input')?.click()} className="nav-item" />
                         
                         {/* 更多操作下拉（仅保留帮助和社区） */}
-                        <div style={{ position: 'relative' }}>
-                            <IconButton id="tour-settings" icon={<Settings size={20} />} label={t('sidebar.moreActions') || '更多操作'} onClick={() => setShowMoreMenu(!showMoreMenu)} className="nav-item" />
-                            {showMoreMenu && (<>
-                                <div style={{ position: 'fixed', inset: 0, zIndex: 99 }} onClick={() => setShowMoreMenu(false)} />
-                                <div style={{
-                                    position: 'absolute', left: '100%', bottom: 0, marginLeft: 8, zIndex: 100,
-                                    background: 'var(--bg-card)', border: '1px solid var(--border-light)',
-                                    borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)', padding: 4, minWidth: 140
-                                }}>
-                                    <button className="dropdown-item" style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => { setShowSettings(true, 'apiConfig'); setShowMoreMenu(false); }}>
-                                        <KeyRound size={14} style={{ flexShrink: 0 }} /> <span>{t('settings.tabApi') || 'API 配置'}</span>
-                                    </button>
-                                    <button className="dropdown-item" style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => { setShowSettings(true, 'preferences'); setShowMoreMenu(false); }}>
-                                        <SlidersHorizontal size={14} style={{ flexShrink: 0 }} /> <span>{t('settings.tabPreferences') || '偏好设置'}</span>
-                                    </button>
-                                    <div style={{ height: 1, background: 'var(--border-light)', margin: '4px 0' }} />
-                                    <button className="dropdown-item" style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => { onOpenHelp?.(); setShowMoreMenu(false); }}>
-                                        <HelpCircle size={14} style={{ flexShrink: 0 }} /> <span>{t('sidebar.menuHelp') || '帮助'}</span>
-                                    </button>
-                                    <button className="dropdown-item" style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => { setShowGitPopup(true); setShowMoreMenu(false); }}>
-                                        <Github size={14} style={{ flexShrink: 0 }} /> <span>{t('sidebar.menuCommunity') || '社区'}</span>
-                                    </button>
-                                </div>
-                            </>)}
+                        <div ref={moreMenuAnchorRef}>
+                            <IconButton id="tour-settings" icon={<Settings size={18} />} label={showMoreMenu ? '' : (t('sidebar.moreActions') || '更多操作')} text={sidebarOpen ? (t('sidebar.navMore') || '更多') : undefined} tooltipSide="right" onClick={() => setShowMoreMenu(!showMoreMenu)} className="nav-item" />
+                            {showMoreMenu && (
+                                <MoreMenuPortal anchorRef={moreMenuAnchorRef} t={t} setShowSettings={setShowSettings} setShowMoreMenu={setShowMoreMenu} onOpenHelp={onOpenHelp} setShowGitPopup={setShowGitPopup} />
+                            )}
                         </div>
                     </div>
                 </div>
@@ -573,8 +626,9 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                                         ) : (
                                             <>
                                                 <span className="gdocs-tab-arrow" style={{ transform: ch.collapsed ? 'none' : 'rotate(90deg)' }}>▶</span>
+                                                <Book size={14} style={{ marginRight: 4, flexShrink: 0, color: 'var(--accent)' }} />
                                                 <span style={{ flex: 1, minWidth: 0 }}>
-                                                    <span className="gdocs-tab-title" style={{ fontWeight: 600 }}><Book size={14} style={{ marginRight: 4, verticalAlign: -2, flexShrink: 0 }} />{ch.title}</span>
+                                                    <span className="gdocs-tab-title" style={{ fontWeight: 600 }}>{ch.title}</span>
                                                     {volWords > 0 && (
                                                         <span style={{ display: 'block', fontSize: '10px', color: 'var(--text-muted)', marginTop: '1px' }}>
                                                             {volWords.toLocaleString()}字
@@ -695,7 +749,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                         {(() => {
                             const modeConfig = WRITING_MODES[writingMode];
                             return modeConfig ? (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', borderRadius: 'var(--radius-sm)', background: `${modeConfig.color}10`, border: `1px solid ${modeConfig.color}30`, cursor: 'pointer', transition: 'all 0.15s ease' }} onClick={() => setShowSettings(true)} title={t('sidebar.clickToSwitchMode')}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', borderRadius: 'var(--radius-sm)', background: `${modeConfig.color}10`, border: `1px solid ${modeConfig.color}30`, cursor: 'pointer', transition: 'all 0.15s ease' }} onClick={() => setShowSettings('settings')} title={t('sidebar.clickToSwitchMode')}>
                                     <span style={{ fontSize: '14px' }}>{modeConfig.icon}</span>
                                     <span style={{ fontSize: '12px', fontWeight: '600', color: modeConfig.color }}>{t('sidebar.modeLabel').replace('{mode}', modeConfig.label)}</span>
                                 </div>

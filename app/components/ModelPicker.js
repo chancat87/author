@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { getProjectSettings, saveProjectSettings, getChatApiConfig } from '../lib/settings';
 import { PROVIDERS } from './SettingsPanel';
 import { useAppStore } from '../store/useAppStore';
@@ -51,8 +52,12 @@ export default function ModelPicker({ target = 'editor', onOpenSettings, classNa
     const [search, setSearch] = useState('');
     const [config, setConfig] = useState(null);
     const dropdownRef = useRef(null);
+    const triggerRef = useRef(null);
+    const panelRef = useRef(null);
     const { showToast, setShowSettings } = useAppStore();
     const { t } = useI18n();
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => { setMounted(true); }, []);
 
     // 读取当前配置
     const refreshConfig = useCallback(() => {
@@ -64,6 +69,7 @@ export default function ModelPicker({ target = 'editor', onOpenSettings, classNa
                 providerConfigs: settings.apiConfig?.providerConfigs || {},
                 mainProvider: settings.apiConfig?.provider,
                 mainModel: settings.apiConfig?.model,
+                mainApiKey: settings.apiConfig?.apiKey,
             });
         } else {
             setConfig({
@@ -80,14 +86,40 @@ export default function ModelPicker({ target = 'editor', onOpenSettings, classNa
     useEffect(() => {
         if (!open) return;
         const handler = (e) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-                setOpen(false);
-                setSearch('');
-            }
+            if (triggerRef.current?.contains(e.target)) return;
+            if (panelRef.current?.contains(e.target)) return;
+            setOpen(false);
+            setSearch('');
         };
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
     }, [open]);
+
+    // Portal 下拉菜单定位
+    useLayoutEffect(() => {
+        if (!open || !triggerRef.current || !panelRef.current) return;
+        const rect = triggerRef.current.getBoundingClientRect();
+        const panel = panelRef.current;
+        const ph = panel.offsetHeight;
+        const vh = window.innerHeight;
+        const vw = window.innerWidth;
+
+        let left = rect.left;
+        let top;
+        if (dropDirection === 'down') {
+            top = rect.bottom + 6;
+            if (top + ph > vh - 8) top = rect.top - ph - 6; // 放不下就向上
+        } else {
+            top = rect.top - ph - 6;
+            if (top < 8) top = rect.bottom + 6; // 放不下就向下
+        }
+        if (left + 280 > vw - 8) left = vw - 288;
+        if (left < 8) left = 8;
+
+        panel.style.position = 'fixed';
+        panel.style.left = left + 'px';
+        panel.style.top = top + 'px';
+    });
 
     // 构建供应商分组列表
     const groups = useMemo(() => {
@@ -98,7 +130,7 @@ export default function ModelPicker({ target = 'editor', onOpenSettings, classNa
 
         for (const p of PROVIDERS) {
             const cfg = pc[p.key];
-            const hasKey = !!(cfg?.apiKey || (config.active?.provider === p.key && config.active?.apiKey));
+            const hasKey = !!(cfg?.apiKey || (config.active?.provider === p.key && config.active?.apiKey) || (config.mainProvider === p.key && config.mainApiKey));
             // 只显示用户在设置中勾选加入快切列表的模型
             const userModels = cfg?.models || [];
 
@@ -202,9 +234,10 @@ export default function ModelPicker({ target = 'editor', onOpenSettings, classNa
         <div className={`model-picker ${className}`} ref={dropdownRef} style={{ position: 'relative' }}>
             {/* 触发按钮 */}
             <button
+                ref={triggerRef}
                 className="model-picker-trigger"
                 onClick={() => { setOpen(!open); if (!open) refreshConfig(); }}
-                title={`${targetLabel}: ${activeProvider} / ${activeModel}`}
+                title={`${targetLabel}: ${providerDef?.label || activeProvider} / ${activeModel}`}
             >
                 <MiniProviderIcon provider={activeProvider} model={activeModel} />
                 <span className="model-picker-label">
@@ -216,9 +249,9 @@ export default function ModelPicker({ target = 'editor', onOpenSettings, classNa
                 <span className="model-picker-arrow">{open ? (dropDirection === 'down' ? '▴' : '▾') : '▾'}</span>
             </button>
 
-            {/* 下拉面板 */}
-            {open && (
-                <div className={`model-picker-dropdown ${dropDirection === 'down' ? 'drop-down' : ''}`}>
+            {/* 下拉面板（Portal 渲染到 body） */}
+            {open && mounted && createPortal(
+                <div ref={panelRef} className={`model-picker-dropdown ${dropDirection === 'down' ? 'drop-down' : ''}`} style={{ position: 'fixed', zIndex: 9999 }}>
                     {/* 搜索 */}
                     <div className="model-picker-search-wrap">
                         <input
@@ -265,7 +298,7 @@ export default function ModelPicker({ target = 'editor', onOpenSettings, classNa
                                                         onClick={() => {
                                                             setOpen(false);
                                                             if (onOpenSettings) onOpenSettings();
-                                                            else setShowSettings(true);
+                                                            else setShowSettings('apiConfig');
                                                         }}
                                                     >
                                                         {t('modelPicker.noKey') || '配置 →'}
@@ -284,7 +317,7 @@ export default function ModelPicker({ target = 'editor', onOpenSettings, classNa
                                                             } else {
                                                                 setOpen(false);
                                                                 if (onOpenSettings) onOpenSettings();
-                                                                else setShowSettings(true);
+                                                                else setShowSettings('apiConfig');
                                                             }
                                                         }}
                                                     >
@@ -313,13 +346,14 @@ export default function ModelPicker({ target = 'editor', onOpenSettings, classNa
                             onClick={() => {
                                 setOpen(false);
                                 if (onOpenSettings) onOpenSettings();
-                                else setShowSettings(true);
+                                else setShowSettings('apiConfig');
                             }}
                         >
                             ⚙️ {t('modelPicker.openSettings') || '管理供应商'}
                         </button>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );

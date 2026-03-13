@@ -681,6 +681,26 @@ function setupAutoUpdater() {
         }
     });
 
+    ipcMain.handle('download-and-install-update', async () => {
+        try {
+            log('download-and-install-update: starting download...');
+            // 注册一次性监听器，下载完成后自动安装
+            autoUpdater.once('update-downloaded', () => {
+                log('download-and-install-update: download complete, quitting and installing...');
+                if (serverProcess) {
+                    serverProcess.kill();
+                    serverProcess = null;
+                }
+                autoUpdater.quitAndInstall(false, true);
+            });
+            await autoUpdater.downloadUpdate();
+            return { success: true };
+        } catch (err) {
+            log('download-and-install-update error: ' + err.message);
+            return { success: false, error: err.message };
+        }
+    });
+
     ipcMain.handle('quit-and-install', () => {
         log('User requested quit-and-install');
         if (serverProcess) {

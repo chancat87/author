@@ -60,6 +60,16 @@ export default function Home() {
   const [showHelp, setShowHelp] = useState(false);
   const editorRef = useRef(null);
 
+  // ===== AI 助手按钮拖拽位置 =====
+  const [aiTogglePos, setAiTogglePos] = useState(null);
+  const aiToggleDragRef = useRef(null);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('ai-toggle-pos'));
+      if (saved) setAiTogglePos(saved);
+    } catch {}
+  }, []);
+
   // ===== 侧栏宽度拖拽调整 =====
   const [leftWidth, setLeftWidth] = useState(280);
   const [rightWidth, setRightWidth] = useState(380);
@@ -293,7 +303,7 @@ export default function Home() {
       const { apiConfig } = getProjectSettings();
       const apiEndpoint = ['gemini-native', 'custom-gemini'].includes(apiConfig?.provider) ? '/api/ai/gemini'
         : apiConfig?.provider === 'openai-responses' ? '/api/ai/responses'
-          : ['claude', 'custom-claude'].includes(apiConfig?.provider) ? '/api/ai/claude'
+          : (['claude', 'custom-claude'].includes(apiConfig?.provider) || apiConfig?.apiFormat === 'anthropic') ? '/api/ai/claude'
             : '/api/ai';
 
       const res = await fetch(apiEndpoint, {
@@ -467,16 +477,57 @@ export default function Home() {
 
 
 
-          {/* AI 侧栏浮动开关 */}
+          {/* AI 侧栏浮动开关（可拖拽） */}
           {!aiSidebarOpen && (
             <Tooltip content={t('page.openAiAssistant')} side="left">
               <button
                 id="tour-ai-btn"
                 className="ai-sidebar-toggle"
-                onClick={() => setAiSidebarOpen(true)}
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  const startX = e.clientX;
+                  const startY = e.clientY;
+                  const btn = e.currentTarget;
+                  const rect = btn.getBoundingClientRect();
+                  let moved = false;
+
+                  const onMove = (ev) => {
+                    const dx = ev.clientX - startX;
+                    const dy = ev.clientY - startY;
+                    if (!moved && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+                    if (!moved) {
+                      btn.style.transition = 'none';
+                      btn.style.animation = 'none';
+                    }
+                    moved = true;
+                    const newX = Math.max(0, Math.min(window.innerWidth - rect.width, rect.left + dx));
+                    const newY = Math.max(0, Math.min(window.innerHeight - rect.height, rect.top + dy));
+                    btn.style.left = newX + 'px';
+                    btn.style.top = newY + 'px';
+                    btn.style.right = 'auto';
+                    btn.style.transform = 'none';
+                    aiToggleDragRef.current = { left: newX, top: newY };
+                  };
+                  const onUp = () => {
+                    document.removeEventListener('pointermove', onMove);
+                    document.removeEventListener('pointerup', onUp);
+                    btn.style.transition = '';
+                    btn.style.animation = '';
+                    if (moved && aiToggleDragRef.current) {
+                      setAiTogglePos(aiToggleDragRef.current);
+                      try { localStorage.setItem('ai-toggle-pos', JSON.stringify(aiToggleDragRef.current)); } catch {}
+                    } else {
+                      setAiSidebarOpen(true);
+                    }
+                  };
+                  document.addEventListener('pointermove', onMove);
+                  document.addEventListener('pointerup', onUp);
+                }}
                 aria-label={t('page.openAiAssistant')}
+                style={aiTogglePos ? { left: aiTogglePos.left, top: aiTogglePos.top, right: 'auto', transform: 'none' } : undefined}
               >
-                <Sparkles size={18} />
+                <Sparkles size={16} />
+                <span>{t('page.aiAssistantLabel') || 'AI 助手'}</span>
               </button>
             </Tooltip>
           )}

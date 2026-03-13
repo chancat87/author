@@ -154,7 +154,7 @@ export async function getContextItems(activeChapterId) {
             items.push({
                 id: `chapter-current`,
                 group: '📑 章节',
-                name: `第${i + 1}章 ${ch.title}（当前）`,
+                name: `${ch.title}（当前）`,
                 tokens: estimateTokens(buildCurrentContext(ch, i, chapters.length)),
                 category: 'currentChapter',
                 enabled: true,
@@ -163,7 +163,7 @@ export async function getContextItems(activeChapterId) {
             items.push({
                 id: `chapter-${ch.id}`,
                 group: '📑 章节',
-                name: `第${i + 1}章 ${ch.title}${i > currentIndex ? '（后续）' : ''}`,
+                name: `${ch.title}${i > currentIndex ? '（后续）' : ''}`,
                 tokens: estimateTokens(text),
                 category: 'chapter',
                 enabled: i < currentIndex, // 前文章节默认启用，后续章节默认不启用

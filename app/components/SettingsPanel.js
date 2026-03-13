@@ -50,7 +50,6 @@ export default function SettingsPanel() {
     const {
         showSettings: open,
         setShowSettings,
-        settingsInitialTab,
         setWritingMode: setGlobalWritingMode,
         incrementSettingsVersion,
         jumpToNodeId,
@@ -64,17 +63,7 @@ export default function SettingsPanel() {
     };
 
     const [settings, setSettings] = useState(null);
-    const [activeTab, setActiveTab] = useState('settings');
 
-    // 当面板打开时，如果有 settingsInitialTab 则跳转到指定 tab
-    useEffect(() => {
-        if (open && settingsInitialTab) {
-            setActiveTab(settingsInitialTab);
-        } else if (open) {
-            // 默认打开时回到设定集 tab
-            setActiveTab('settings');
-        }
-    }, [open, settingsInitialTab]);
     const [nodes, setNodes] = useState([]);
     const [works, setWorks] = useState([]);
     const [selectedNodeId, setSelectedNodeId] = useState(null);
@@ -127,7 +116,6 @@ export default function SettingsPanel() {
 
                 // 跳转到指定节点
                 if (jumpToNodeId) {
-                    setActiveTab('settings');
                     setSelectedNodeId(jumpToNodeId);
                     setJumpToNodeId(null);
                 }
@@ -567,11 +555,13 @@ export default function SettingsPanel() {
     const selectedNode = visibleNodes.find(n => n.id === selectedNodeId);
     const showBookInfo = selectedNode?.type === 'special' && selectedNode?.category === 'bookInfo';
 
-    const tabs = [
-        { key: 'settings', label: t('settings.tabSettings') },
-        { key: 'apiConfig', label: t('settings.tabApi') },
-        { key: 'preferences', label: t('settings.tabPreferences') },
-    ];
+    // 面板标题映射
+    const panelTitles = {
+        settings: { icon: '📚', title: t('settings.tabSettings'), subtitle: t('settings.subtitle') },
+        apiConfig: { icon: '🔑', title: t('settings.tabApi'), subtitle: '' },
+        preferences: { icon: '⚙️', title: t('settings.tabPreferences'), subtitle: '' },
+    };
+    const currentPanel = panelTitles[open] || panelTitles.settings;
 
     return (
         <div className="settings-panel-overlay" onMouseDown={e => { e.currentTarget._mouseDownTarget = e.target; }} onClick={e => { if (e.currentTarget._mouseDownTarget === e.currentTarget) onClose(); }}>
@@ -579,41 +569,23 @@ export default function SettingsPanel() {
                 {/* 头部 */}
                 <div className="settings-header" style={{ background: 'transparent' }}>
                     <h2>
-                        ⚙️ {t('settings.title')}
-                        <span className="subtitle">— {t('settings.subtitle')}</span>
+                        {currentPanel.icon} {currentPanel.title}
+                        {currentPanel.subtitle && <span className="subtitle">— {currentPanel.subtitle}</span>}
                     </h2>
                     <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                        <button className="btn btn-ghost btn-icon" onClick={() => setIsFullscreen(!isFullscreen)} title={isFullscreen ? '退出全屏' : '全屏'}>
+                        {open === 'settings' && <button className="btn btn-ghost btn-icon" onClick={() => setIsFullscreen(!isFullscreen)} title={isFullscreen ? '退出全屏' : '全屏'}>
                             {isFullscreen ? '⛶' : '⛶'}
-                        </button>
+                        </button>}
                         <button className="btn btn-ghost btn-icon" onClick={onClose}>✕</button>
                     </div>
                 </div>
 
-                {/* Tab 导航 */}
-                <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border-glass)', padding: '0 24px' }}>
-                    {tabs.map(tab => (
-                        <button
-                            key={tab.key}
-                            style={{
-                                padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer',
-                                fontSize: 13, color: activeTab === tab.key ? 'var(--accent)' : 'var(--text-secondary)',
-                                borderBottom: activeTab === tab.key ? '2px solid var(--accent)' : '2px solid transparent',
-                                fontWeight: activeTab === tab.key ? 600 : 400, transition: 'all 0.15s', whiteSpace: 'nowrap',
-                            }}
-                            onClick={() => setActiveTab(tab.key)}
-                        >
-                            {tab.label}
-                        </button>
-                    ))}
-                </div>
-
                 {/* 内容区 */}
-                {activeTab === 'apiConfig' ? (
+                {open === 'apiConfig' ? (
                     <div style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}>
                         <ApiConfigForm data={settings.apiConfig} onChange={data => handleSettingsSave('apiConfig', data)} />
                     </div>
-                ) : activeTab === 'preferences' ? (
+                ) : open === 'preferences' ? (
                     <div style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}>
                         <PreferencesForm />
                     </div>

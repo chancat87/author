@@ -369,12 +369,20 @@
     "deleteVolume": "✕ Delete Volume",
     "newChapterInVolume": "＋ New Chapter",
     "renumber": "Renumber",
-    "renumbered": "Renumbered successfully"
+    "renumbered": "Renumbered successfully",
+    "navChapter": "Chapters",
+    "navSettings": "Settings",
+    "navThemeDark": "Dark",
+    "navThemeLight": "Light",
+    "navSnapshots": "Snapshots",
+    "navMore": "More",
+    "navImport": "Import"
   },
   "page": {
     "noChapterHint": "Select or create a chapter to start writing",
     "expandSidebar": "Expand Sidebar",
     "openAiAssistant": "Open AI Assistant",
+    "aiAssistantLabel": "AI Assistant",
     "helpAndGuide": "Help & User Guide",
     "toastInserted": "Inserted into editor",
     "toastRequestFailed": "Request failed",

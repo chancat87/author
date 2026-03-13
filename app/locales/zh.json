@@ -369,12 +369,20 @@
         "deleteVolume": "✕ 删除分卷",
         "newChapterInVolume": "＋ 新建章节",
         "renumber": "重新编号",
-        "renumbered": "已重新编号"
+        "renumbered": "已重新编号",
+        "navChapter": "章节",
+        "navSettings": "设定集",
+        "navThemeDark": "暗色",
+        "navThemeLight": "亮色",
+        "navSnapshots": "快照",
+        "navMore": "更多",
+        "navImport": "导入"
     },
     "page": {
         "noChapterHint": "请选择或创建一个章节开始写作",
         "expandSidebar": "展开侧栏",
         "openAiAssistant": "打开 AI 助手",
+        "aiAssistantLabel": "AI 助手",
         "helpAndGuide": "帮助与操作指南",
         "toastInserted": "已插入到编辑器",
         "toastRequestFailed": "请求失败",

@@ -361,12 +361,20 @@
         "previewClose": "Закрыть предпросмотр",
         "previewEmpty": "В этой главе пока нет содержимого",
         "previewAll": "Предпросмотр книги",
-        "untitled": "Без названия"
+        "untitled": "Без названия",
+        "navChapter": "Главы",
+        "navSettings": "Настройки",
+        "navThemeDark": "Тёмная",
+        "navThemeLight": "Светлая",
+        "navSnapshots": "Снимки",
+        "navMore": "Ещё",
+        "navImport": "Импорт"
     },
     "page": {
         "noChapterHint": "Выберите или создайте главу, чтобы начать писать",
         "expandSidebar": "Развернуть панель",
         "openAiAssistant": "Открыть ИИ-ассистент",
+        "aiAssistantLabel": "ИИ-ассистент",
         "helpAndGuide": "Справка и руководство",
         "toastInserted": "Вставлено в редактор",
         "toastRequestFailed": "Запрос не выполнен",
