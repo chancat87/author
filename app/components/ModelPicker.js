@@ -2,42 +2,55 @@
 
 import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { Link, Settings, KeyRound, Check, CircleDot } from 'lucide-react';
 import { getProjectSettings, saveProjectSettings, getChatApiConfig } from '../lib/settings';
 import { PROVIDERS } from './SettingsPanel';
 import { useAppStore } from '../store/useAppStore';
 import { useI18n } from '../lib/useI18n';
 
-// ProviderLogo 复用 — 简化版 SVG icons
-function MiniProviderIcon({ provider, model }) {
+// Provider icon filename mapping
+const PROVIDER_ICON_MAP = {
+    openai: 'openai', gpt: 'openai', 'o1': 'openai', 'o3': 'openai', 'o4': 'openai',
+    anthropic: 'anthropic', claude: 'anthropic',
+    gemini: 'gemini', google: 'gemini',
+    deepseek: 'deepseek',
+    qwen: 'qwen', dashscope: 'qwen', ali: 'qwen', bailian: 'qwen',
+    siliconflow: 'siliconflow',
+    ollama: 'ollama', llama: 'ollama',
+    openrouter: 'openrouter',
+    volcengine: 'volcengine', doubao: 'volcengine',
+    minimax: 'minimax',
+    moonshot: 'moonshot', kimi: 'moonshot',
+    groq: 'groq',
+    mistral: 'mistral',
+    xai: 'xai', grok: 'xai',
+    zhipu: 'zhipu', glm: 'zhipu',
+    cerebras: 'cerebras',
+    baidu: 'baidu', ernie: 'baidu',
+};
+
+function getProviderIconName(provider, model) {
     const p = (provider || '').toLowerCase();
     const m = (model || '').toLowerCase();
+    for (const [key, icon] of Object.entries(PROVIDER_ICON_MAP)) {
+        if (p.includes(key) || m.includes(key)) return icon;
+    }
+    return 'generic';
+}
 
-    let color = '#888';
-    let emoji = '🤖';
-    if (p.includes('openai') || m.includes('gpt') || m.includes('o1') || m.includes('o3')) { color = '#10a37f'; emoji = '◉'; }
-    else if (p.includes('anthropic') || m.includes('claude')) { color = '#d97757'; emoji = '△'; }
-    else if (p.includes('gemini') || p.includes('google') || m.includes('gemini')) { color = '#4285f4'; emoji = '✦'; }
-    else if (p.includes('deepseek') || m.includes('deepseek')) { color = '#2563eb'; emoji = '◎'; }
-    else if (p.includes('qwen') || p.includes('dashscope') || p.includes('ali') || p.includes('bailian') || m.includes('qwen')) { color = '#8b5cf6'; emoji = '◈'; }
-    else if (p.includes('siliconflow')) { color = '#f59e0b'; emoji = '⬡'; }
-    else if (p.includes('ollama') || m.includes('llama')) { color = '#14b8a6'; emoji = '▲'; }
-    else if (p.includes('openrouter')) { color = '#818cf8'; emoji = '◐'; }
-    else if (p.includes('volcengine') || m.includes('doubao')) { color = '#f97316'; emoji = '⬢'; }
-    else if (p.includes('minimax')) { color = '#ec4899'; emoji = '▣'; }
-    else if (p.includes('moonshot') || m.includes('kimi')) { color = '#6366f1'; emoji = '☽'; }
-    else if (p.includes('groq')) { color = '#f97316'; emoji = '⚡'; }
-    else if (p.includes('mistral')) { color = '#ff7000'; emoji = '◆'; }
-    else if (p.includes('xai') || m.includes('grok')) { color = '#1d9bf0'; emoji = '✕'; }
-    else if (p.includes('zhipu') || m.includes('glm')) { color = '#1677ff'; emoji = '◇'; }
-    else if (p.includes('cerebras')) { color = '#22c55e'; emoji = '⊛'; }
-
+function MiniProviderIcon({ provider, model, size = 22 }) {
+    const iconName = getProviderIconName(provider, model);
     return (
-        <span style={{
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            width: 18, height: 18, borderRadius: 4,
-            background: color, color: '#fff',
-            fontSize: 11, fontWeight: 700, lineHeight: 1, flexShrink: 0,
-        }}>{emoji}</span>
+        <img
+            src={`/provider-icons/${iconName}.png`}
+            alt=""
+            width={size}
+            height={size}
+            style={{
+                borderRadius: 5, flexShrink: 0,
+                objectFit: 'cover',
+            }}
+        />
     );
 }
 
@@ -269,14 +282,14 @@ export default function ModelPicker({ target = 'editor', onOpenSettings, classNa
                             className={`model-picker-item follow ${config.isFallback ? 'active' : ''}`}
                             onClick={followMain}
                         >
-                            <span style={{ fontSize: 13 }}>🔗</span>
+                            <Link size={13} />
                             <span className="model-picker-item-name">
                                 {t('modelPicker.followMain') || '跟随主配置'}
                             </span>
                             <span className="model-picker-item-sub">
                                 {config.mainModel || ''}
                             </span>
-                            {config.isFallback && <span className="model-picker-check">✓</span>}
+                            {config.isFallback && <span className="model-picker-check"><Check size={12} /></span>}
                         </button>
                     )}
 
@@ -323,7 +336,7 @@ export default function ModelPicker({ target = 'editor', onOpenSettings, classNa
                                                     >
                                                         <span className="model-picker-item-name" style={!hasKey ? { opacity: 0.55 } : undefined}>{m}</span>
                                                         {isActive && <span className="model-picker-check">✓</span>}
-                                                        {!hasKey && <span className="model-picker-no-key-hint">🔑</span>}
+                                                        {!hasKey && <span className="model-picker-no-key-hint"><KeyRound size={11} /></span>}
                                                     </button>
                                                 );
                                             })}
@@ -349,7 +362,7 @@ export default function ModelPicker({ target = 'editor', onOpenSettings, classNa
                                 else setShowSettings('apiConfig');
                             }}
                         >
-                            ⚙️ {t('modelPicker.openSettings') || '管理供应商'}
+                            <Settings size={13} style={{ marginRight: 4 }} />{t('modelPicker.openSettings') || '管理供应商'}
                         </button>
                     </div>
                 </div>,

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import { ClipboardList, Bot, Sparkles, XCircle, FolderOpen, Download, CheckCircle2 } from 'lucide-react';
 import { getProjectSettings } from '../lib/settings';
 import { useI18n } from '../lib/useI18n';
 
@@ -256,7 +257,7 @@ ${importedFields}
                 display: 'flex', flexDirection: 'column', gap: 16,
                 maxHeight: '80vh', overflow: 'hidden',
             }}>
-                <h3 style={{ margin: 0, fontSize: 16 }}>📋 设定集导入 — 冲突解决</h3>
+                <h3 style={{ margin: 0, fontSize: 16 }}><ClipboardList size={16} style={{ marginRight: 6, verticalAlign: 'text-bottom' }} />设定集导入 — 冲突解决</h3>
                 <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>
                     发现 {conflicts.length} 个同名条目冲突，{noConflicts.length > 0 ? `另有 ${noConflicts.length} 个新条目将直接导入。` : ''}请选择处理方式：
                 </p>
@@ -310,7 +311,7 @@ ${importedFields}
                                         }}
                                         disabled={ms.loading}
                                     >
-                                        {ms.loading ? '⏳ 合并中...' : hasResults ? `✅ 已合并 (${totalResults})` : '🤖 AI 智能合并'}
+                                        {ms.loading ? '合并中...' : hasResults ? <><CheckCircle2 size={11} style={{ marginRight: 2 }} />已合并 ({totalResults})</> : <><Bot size={11} style={{ marginRight: 2 }} />AI 智能合并</>}
                                     </button>
                                 </div>
 
@@ -323,7 +324,7 @@ ${importedFields}
                                             background: res === 'existing' ? 'rgba(var(--accent-rgb, 180, 120, 60), 0.08)' : 'var(--bg-primary)',
                                             border: res === 'existing' ? '2px solid var(--accent)' : '1px solid var(--border-light)',
                                         }}>
-                                            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>📁 已有</div>
+                                            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}><FolderOpen size={11} style={{ marginRight: 4 }} />已有</div>
                                             {renderFieldSummary(conflict.existing.content, conflict.category)}
                                         </div>
                                         {/* 导入版本 */}
@@ -332,7 +333,7 @@ ${importedFields}
                                             background: res === 'imported' ? 'rgba(var(--accent-rgb, 180, 120, 60), 0.08)' : 'var(--bg-primary)',
                                             border: res === 'imported' ? '2px solid var(--accent)' : '1px solid var(--border-light)',
                                         }}>
-                                            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)', marginBottom: 4 }}>📥 导入</div>
+                                            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)', marginBottom: 4 }}><Download size={11} style={{ marginRight: 4 }} />导入</div>
                                             {renderFieldSummary(conflict.imported.content, conflict.category)}
                                         </div>
                                     </div>
@@ -360,10 +361,10 @@ ${importedFields}
                                                 style={btnStyle(false)}
                                                 onClick={() => handleAiMerge(i)}
                                                 disabled={ms.loading}
-                                            >{ms.loading ? '⏳' : '🤖 合并'}</button>
+                                            >{ms.loading ? '合并中...' : <><Bot size={11} style={{ marginRight: 2 }} />合并</>}</button>
                                         </div>
                                         {ms.error && (
-                                            <div style={{ fontSize: 11, color: '#e44', marginTop: 4 }}>❌ {ms.error}</div>
+                                            <div style={{ fontSize: 11, color: '#e44', marginTop: 4 }}><XCircle size={11} style={{ marginRight: 4 }} />{ms.error}</div>
                                         )}
                                         {hasResults && (
                                             <div style={{
@@ -373,7 +374,7 @@ ${importedFields}
                                                 cursor: 'pointer',
                                             }} onClick={() => setResolutions(prev => ({ ...prev, [i]: 'merged' }))}>
                                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                                                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)' }}>✨ 合并结果</span>
+                                                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)' }}><Sparkles size={11} style={{ marginRight: 4 }} />合并结果</span>
                                                     {totalResults > 1 && (
                                                         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                                                             <button

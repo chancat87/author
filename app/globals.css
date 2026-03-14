@@ -2515,6 +2515,27 @@ body.resizing .main-content {
   padding: 6px 8px;
 }
 
+.tree-add-category-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 100%;
+  padding: 6px 12px;
+  margin-top: 2px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+}
+.tree-add-category-btn:hover {
+  background: var(--bg-hover);
+  color: var(--accent);
+}
+
 .tree-node {
   user-select: none;
 }
@@ -3123,6 +3144,7 @@ body.resizing .main-content {
   display: flex;
   gap: 6px;
   align-items: center;
+  width: 100%;
 }
 
 .inline-ai-input {
@@ -3458,6 +3480,7 @@ body.resizing .main-content {
   gap: 8px;
   display: flex;
   align-items: center;
+  width: 100%;
 }
 
 .chat-input-area .inline-ai-input {
@@ -4388,6 +4411,36 @@ body.resizing .main-content {
   gap: 6px;
   margin-top: 6px;
   justify-content: flex-end;
+}
+
+/* ===== 总结撤销栏 ===== */
+
+.summary-undo-bar {
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--accent-light);
+  border-bottom: 1px solid var(--border-light);
+  flex-shrink: 0;
+  animation: fadeSlideIn 0.2s ease;
+}
+
+.summary-undo-bar span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.summary-undo-bar .btn-mini {
+  color: var(--accent);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.summary-undo-bar .btn-mini:hover {
+  background: var(--accent);
+  color: white;
 }
 
 /* ===== 聊天消息区 ===== */
@@ -6601,13 +6654,13 @@ h5.chat-md-heading {
 .model-picker-trigger {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
+  gap: 7px;
+  padding: 5px 12px;
   border: 1px solid var(--border-light);
   border-radius: var(--radius-sm, 6px);
   background: var(--bg-secondary);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-secondary);
   transition: all 0.15s;
   max-width: 100%;
@@ -6628,7 +6681,7 @@ h5.chat-md-heading {
   white-space: nowrap;
   font-family: var(--font-mono, monospace);
   font-weight: 500;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .model-picker-badge {
@@ -6651,8 +6704,8 @@ h5.chat-md-heading {
   position: absolute;
   bottom: calc(100% + 6px);
   left: 0;
-  min-width: 280px;
-  max-height: 420px;
+  min-width: 340px;
+  max-height: 500px;
   background: var(--bg-primary);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-md, 10px);
@@ -6740,9 +6793,9 @@ h5.chat-md-heading {
 .model-picker-provider-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  font-size: 12px;
+  gap: 8px;
+  padding: 7px 14px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-secondary);
 }
@@ -6770,13 +6823,13 @@ h5.chat-md-heading {
 .model-picker-item {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
-  padding: 5px 12px 5px 36px;
+  padding: 7px 14px 7px 24px;
   border: none;
   background: transparent;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-primary);
   text-align: left;
   transition: background 0.1s;

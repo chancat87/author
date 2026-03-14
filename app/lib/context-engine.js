@@ -90,13 +90,13 @@ export async function getContextItems(activeChapterId) {
 
     // 分类映射
     const categoryMap = {
-        rules: { group: '📐 写作规则', builder: (ns) => buildRulesContext(ns) },
-        character: { group: '👤 人物设定', builder: (ns) => buildCharactersContext(ns) },
-        location: { group: '🗺️ 空间/地点', builder: (ns) => buildLocationsContext(ns, nodes) },
-        world: { group: '🌍 世界观', builder: (ns) => buildWorldContext(ns, nodes) },
-        object: { group: '🔮 物品/道具', builder: (ns) => buildObjectsContext(ns, nodes) },
-        plot: { group: '📋 大纲', builder: (ns) => buildPlotContext(ns, nodes) },
-        custom: { group: '⚙️ 自定义', builder: (ns) => buildCustomContext(ns, nodes) },
+        rules: { group: '写作规则', builder: (ns) => buildRulesContext(ns) },
+        character: { group: '人物设定', builder: (ns) => buildCharactersContext(ns) },
+        location: { group: '空间/地点', builder: (ns) => buildLocationsContext(ns, nodes) },
+        world: { group: '世界观', builder: (ns) => buildWorldContext(ns, nodes) },
+        object: { group: '物品/道具', builder: (ns) => buildObjectsContext(ns, nodes) },
+        plot: { group: '大纲', builder: (ns) => buildPlotContext(ns, nodes) },
+        custom: { group: '自定义', builder: (ns) => buildCustomContext(ns, nodes) },
     };
 
     // 设定条目
@@ -138,7 +138,7 @@ export async function getContextItems(activeChapterId) {
     if (bookInfo && (bookInfo.title || bookInfo.author || bookInfo.genre || bookInfo.synopsis)) {
         items.push({
             id: 'bookinfo',
-            group: '📖 作品信息',
+            group: '作品信息',
             name: bookInfo.title || '作品信息',
             tokens: estimateTokens(buildBookInfoContext(bookInfo)),
             category: 'bookInfo',
@@ -153,7 +153,7 @@ export async function getContextItems(activeChapterId) {
             // 当前章节
             items.push({
                 id: `chapter-current`,
-                group: '📑 章节',
+                group: '章节',
                 name: `${ch.title}（当前）`,
                 tokens: estimateTokens(buildCurrentContext(ch, i, chapters.length)),
                 category: 'currentChapter',
@@ -162,7 +162,7 @@ export async function getContextItems(activeChapterId) {
         } else {
             items.push({
                 id: `chapter-${ch.id}`,
-                group: '📑 章节',
+                group: '章节',
                 name: `${ch.title}${i > currentIndex ? '（后续）' : ''}`,
                 tokens: estimateTokens(text),
                 category: 'chapter',
@@ -331,7 +331,7 @@ export async function getContextPreview(activeChapterId, selectedText) {
     const modules = [
         {
             key: 'writingRules',
-            label: '📐 写作规则',
+            label: '写作规则',
             count: enabledItemNodes.filter(n => n.category === 'rules').length,
             totalCount: allItemNodes.filter(n => n.category === 'rules').length,
             tokens: estimateTokens(buildRulesContext(enabledItemNodes.filter(n => n.category === 'rules'))),
@@ -339,7 +339,7 @@ export async function getContextPreview(activeChapterId, selectedText) {
         },
         {
             key: 'characters',
-            label: '👤 人物设定',
+            label: '人物设定',
             count: enabledItemNodes.filter(n => n.category === 'character').length,
             totalCount: allItemNodes.filter(n => n.category === 'character').length,
             tokens: estimateTokens(buildCharactersContext(enabledItemNodes.filter(n => n.category === 'character'))),
@@ -347,7 +347,7 @@ export async function getContextPreview(activeChapterId, selectedText) {
         },
         {
             key: 'locations',
-            label: '🗺️ 空间/地点',
+            label: '空间/地点',
             count: enabledItemNodes.filter(n => n.category === 'location').length,
             totalCount: allItemNodes.filter(n => n.category === 'location').length,
             tokens: estimateTokens(buildLocationsContext(enabledItemNodes.filter(n => n.category === 'location'), nodes)),
@@ -355,7 +355,7 @@ export async function getContextPreview(activeChapterId, selectedText) {
         },
         {
             key: 'worldbuilding',
-            label: '🌍 世界观',
+            label: '世界观',
             count: enabledItemNodes.filter(n => n.category === 'world').length,
             totalCount: allItemNodes.filter(n => n.category === 'world').length,
             tokens: estimateTokens(buildWorldContext(enabledItemNodes.filter(n => n.category === 'world'), nodes)),
@@ -363,7 +363,7 @@ export async function getContextPreview(activeChapterId, selectedText) {
         },
         {
             key: 'objects',
-            label: '🔮 物品/道具',
+            label: '物品/道具',
             count: enabledItemNodes.filter(n => n.category === 'object').length,
             totalCount: allItemNodes.filter(n => n.category === 'object').length,
             tokens: estimateTokens(buildObjectsContext(enabledItemNodes.filter(n => n.category === 'object'), nodes)),
@@ -371,7 +371,7 @@ export async function getContextPreview(activeChapterId, selectedText) {
         },
         {
             key: 'plotOutline',
-            label: '📋 大纲',
+            label: '大纲',
             count: enabledItemNodes.filter(n => n.category === 'plot').length,
             totalCount: allItemNodes.filter(n => n.category === 'plot').length,
             tokens: estimateTokens(buildPlotContext(enabledItemNodes.filter(n => n.category === 'plot'), nodes)),
@@ -379,7 +379,7 @@ export async function getContextPreview(activeChapterId, selectedText) {
         },
         {
             key: 'bookInfo',
-            label: '📖 作品信息',
+            label: '作品信息',
             count: (() => { const bi = nodes.find(n => n.category === 'bookInfo' && n.type === 'special'); return bi?.content?.title ? 1 : 0; })(),
             totalCount: 1,
             tokens: (() => { const bi = nodes.find(n => n.category === 'bookInfo' && n.type === 'special'); return estimateTokens(buildBookInfoContext(bi?.content || {})); })(),
@@ -387,7 +387,7 @@ export async function getContextPreview(activeChapterId, selectedText) {
         },
         {
             key: 'previousChapters',
-            label: '📑 前文回顾',
+            label: '前文回顾',
             count: Math.max(0, currentIndex),
             totalCount: Math.max(0, currentIndex),
             tokens: estimateTokens(buildPreviousContext(chapters, currentIndex)),
@@ -395,7 +395,7 @@ export async function getContextPreview(activeChapterId, selectedText) {
         },
         {
             key: 'currentChapter',
-            label: '✏️ 当前章节',
+            label: '当前章节',
             count: currentChapter ? 1 : 0,
             totalCount: 1,
             tokens: estimateTokens(buildCurrentContext(currentChapter, currentIndex, chapters.length)),

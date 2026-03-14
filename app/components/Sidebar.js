@@ -9,7 +9,7 @@ import { exportProject, importProject, importWork, exportWorkAsTxt, exportWorkAs
 import { WRITING_MODES, getAllWorks, getSettingsNodes, addWork, saveSettingsNodes, setActiveWorkId as setActiveWorkIdSetting } from '../lib/settings';
 import { detectConflicts, mergeChapters } from '../lib/chapter-number';
 import { estimateTokens } from '../lib/context-engine';
-import { Settings, Moon, Sun, History, Save, FolderOpen, FileDown, BookOpen, HelpCircle, Github, PanelLeftClose, ListOrdered, Library, Plus, FileText, FileType, BookMarked, FileOutput, Printer, Book, X, MoreHorizontal, ChevronUp, KeyRound, SlidersHorizontal } from 'lucide-react';
+import { Settings, Moon, Sun, History, Save, FolderOpen, FileDown, BookOpen, HelpCircle, Github, PanelLeftClose, ListOrdered, Library, Plus, FileText, FileType, BookMarked, FileOutput, Printer, Book, X, MoreHorizontal, ChevronUp, KeyRound, SlidersHorizontal, Eye, Smartphone, Clapperboard } from 'lucide-react';
 import Tooltip from './ui/Tooltip';
 import IconButton from './ui/IconButton';
 
@@ -750,7 +750,9 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                             const modeConfig = WRITING_MODES[writingMode];
                             return modeConfig ? (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', borderRadius: 'var(--radius-sm)', background: `${modeConfig.color}10`, border: `1px solid ${modeConfig.color}30`, cursor: 'pointer', transition: 'all 0.15s ease' }} onClick={() => setShowSettings('settings')} title={t('sidebar.clickToSwitchMode')}>
-                                    <span style={{ fontSize: '14px' }}>{modeConfig.icon}</span>
+                                    <span style={{ fontSize: '14px' }}>
+                                        {modeConfig.icon === 'smartphone' ? <Smartphone size={14} /> : modeConfig.icon === 'book-open' ? <BookOpen size={14} /> : modeConfig.icon === 'clapperboard' ? <Clapperboard size={14} /> : null}
+                                    </span>
                                     <span style={{ fontSize: '12px', fontWeight: '600', color: modeConfig.color }}>{t('sidebar.modeLabel').replace('{mode}', modeConfig.label)}</span>
                                 </div>
                             ) : null;
@@ -956,7 +958,7 @@ function ImportWorkModal({ chapters, totalWords, onClose, onImport, t }) {
                             style={{ justifyContent: 'flex-start', padding: '10px 14px', fontSize: 13 }}
                             onClick={() => onImport(w.id)}
                         >
-                            📕 {w.name}
+                            <BookOpen size={14} style={{ marginRight: 6, verticalAlign: 'text-bottom' }} />{w.name}
                         </button>
                     ))}
 
@@ -1581,7 +1583,7 @@ function ExportModal({ chapters, onClose, onExport, t }) {
                                                     onMouseEnter={e => { if (!isPreviewing) { e.currentTarget.style.opacity = '1'; e.currentTarget.style.background = 'var(--bg-secondary)'; } }}
                                                     onMouseLeave={e => { if (!isPreviewing) { e.currentTarget.style.opacity = '0.6'; e.currentTarget.style.background = 'transparent'; } }}
                                                 >
-                                                    👁
+                                                    <Eye size={14} />
                                                 </button>
                                             </div>
                                         );

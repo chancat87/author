@@ -104,12 +104,12 @@ const CATEGORY_KEYWORDS = {
 
 // 中文分类名 → category key 映射（用于解析节头）
 const CATEGORY_NAME_MAP = {
-    '人物设定': 'character', '人物': 'character',
-    '空间/地点': 'location', '地点': 'location', '场景': 'location',
-    '世界观/设定': 'world', '世界观': 'world', '世界': 'world',
-    '物品/道具': 'object', '物品': 'object', '道具': 'object',
-    '大纲': 'plot', '剧情': 'plot',
-    '写作规则': 'rules', '规则': 'rules',
+    '人物设定': 'character', '人物': 'character', '角色设定': 'character', '角色': 'character',
+    '空间/地点': 'location', '空间 / 地点': 'location', '地点': 'location', '场景': 'location', '地点设定': 'location', '空间': 'location',
+    '世界观/设定': 'world', '世界观 / 设定': 'world', '世界观': 'world', '世界': 'world', '世界设定': 'world',
+    '物品/道具': 'object', '物品 / 道具': 'object', '物品': 'object', '道具': 'object', '物品设定': 'object',
+    '大纲': 'plot', '剧情': 'plot', '剧情大纲': 'plot',
+    '写作规则': 'rules', '写作': 'rules', '规则': 'rules',
 };
 
 // ==================== 分类检测 ====================
@@ -319,11 +319,21 @@ export function parseStructuredText(text) {
             continue;
         }
 
-        // 只有在有条目名的情况下才解析字段
-        if (!currentEntryName) continue;
+        // 如果没有条目名但在分类下遇到了内容行，自动以分类名创建条目
+        if (!currentEntryName) {
+            // 检测当前行是否像内容行（有冒号标签、加粗标签、或列表项）
+            const looksLikeContent = /^(?:[-*]\s+)?(?:\*\*.+?\*\*\s*[：:]|[^\s：:\[\]【】]{1,15}[：:])/.test(trimmed)
+                || /^[-*]\s+/.test(trimmed);
+            if (looksLikeContent) {
+                const catNames = Object.entries(CATEGORY_NAME_MAP).find(([, v]) => v === currentCategory);
+                currentEntryName = catNames ? catNames[0] : currentCategory;
+            } else {
+                continue;
+            }
+        }
 
-        // === Markdown 加粗标签: **label**：value ===
-        const mdBold = trimmed.match(/^\*\*(.+?)\*\*\s*[：:]\s*(.*)/);
+        // === Markdown 加粗标签: **label**：value  或  - **label**：value ===
+        const mdBold = trimmed.match(/^(?:[-*]\s+)?\*\*(.+?)\*\*\s*[：:]\s*(.*)/);
         if (mdBold) {
             flushField();
             currentFieldLabel = mdBold[1].trim();
@@ -331,8 +341,8 @@ export function parseStructuredText(text) {
             continue;
         }
 
-        // === 冒号格式: label：value ===
-        const colonMatch = trimmed.match(/^([^\s：:\[\]【】]{1,15})[：:]\s*(.*)/);
+        // === 冒号格式: label：value  或  - label：value ===
+        const colonMatch = trimmed.match(/^(?:[-*]\s+)?([^\s：:\[\]【】]{1,15})[：:]\s*(.*)/);
         if (colonMatch) {
             flushField();
             currentFieldLabel = colonMatch[1].trim();
@@ -340,9 +350,16 @@ export function parseStructuredText(text) {
             continue;
         }
 
-        // === 普通内容行（追加到当前字段） ===
+        // === 普通内容行（追加到当前字段，或作为描述） ===
         if (currentFieldLabel) {
             currentFieldLines.push(line);
+        } else if (currentEntryName) {
+            // 没有字段标签时，将内容收集为 description（去掉 markdown 列表前缀）
+            const cleanLine = trimmed.replace(/^[-*]\s+/, '');
+            if (cleanLine) {
+                if (!currentFields.description) currentFields.description = '';
+                currentFields.description += (currentFields.description ? '\n' : '') + cleanLine;
+            }
         }
     }
     flushEntry();

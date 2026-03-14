@@ -1,6 +1,13 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import {
+    ClipboardList, Sparkles, BookOpen, FileText, Eye, Moon, Swords, BarChart3,
+    FolderOpen, PenLine, Target, Maximize2, Pencil, X,
+    User, MapPin, Globe, Gem, Ruler, Settings as SettingsIcon,
+    Heart, Star, Shield, Zap, Feather, Compass, Flag, Tag, Layers
+} from 'lucide-react';
+import { ICON_PICKER_OPTIONS } from './SettingsTree';
 import { useI18n } from '../lib/useI18n';
 import MiniMarkdownEditor from './MiniMarkdownEditor';
 
@@ -129,7 +136,7 @@ function TextField({ label, value, onChange, placeholder, multiline = false, row
                             }}
                             onMouseEnter={e => { e.target.style.color = 'var(--accent)'; e.target.style.background = 'var(--bg-hover)'; }}
                             onMouseLeave={e => { e.target.style.color = 'var(--text-muted)'; e.target.style.background = 'transparent'; }}
-                        >⛶</button>
+                        ><Maximize2 size={13} /></button>
                     )}
                     {aiBtn && (
                         <button className="field-ai-btn" title={t('settingsEditor.aiFill')}>✦</button>
@@ -187,12 +194,12 @@ function TextField({ label, value, onChange, placeholder, multiline = false, row
                             background: 'var(--bg-secondary)',
                         }}>
                             <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
-                                ✏️ {label}
+                                <Pencil size={13} style={{ marginRight: 4 }} />{label}
                             </span>
                             <button
                                 onClick={handleCloseExpand}
                                 className="btn btn-ghost btn-icon"
-                            >✕</button>
+                            ><X size={14} /></button>
                         </div>
                         <div style={{ flex: 1, padding: 16, overflow: 'auto', display: 'flex' }}>
                             <div style={{ width: '100%' }}>
@@ -247,7 +254,7 @@ function FieldGroup({ title, icon, children, defaultCollapsed = false }) {
     return (
         <div className={`field-group ${collapsed ? 'collapsed' : ''}`}>
             <div className="field-group-header" onClick={() => setCollapsed(!collapsed)}>
-                <h4>{icon && <span>{icon}</span>}{title}</h4>
+                <h4>{icon && <span style={{ marginRight: 4, verticalAlign: 'text-bottom' }}>{icon}</span>}{title}</h4>
                 <span className="field-group-chevron">▼</span>
             </div>
             <div className="field-group-content">
@@ -264,7 +271,7 @@ function ExtraFieldsSection({ content, knownFields, onUpdate }) {
     const extraKeys = Object.keys(content || {}).filter(k => !knownFields.includes(k) && content[k]);
     if (extraKeys.length === 0) return null;
     return (
-        <FieldGroup title={t('settingsEditor.aiExtraFields')} icon="✨" defaultCollapsed>
+        <FieldGroup title={t('settingsEditor.aiExtraFields')} icon={<Sparkles size={13} />} defaultCollapsed>
             {extraKeys.map(k => (
                 <TextField
                     key={k}
@@ -329,7 +336,7 @@ function CharacterEditor({ node, onUpdate }) {
         <div>
             <CharacterCardPreview name={node.name} content={content} />
 
-            <FieldGroup title={t('settingsEditor.tabBasic')} icon="📋">
+            <FieldGroup title={t('settingsEditor.tabBasic')} icon={<ClipboardList size={13} />}>
                 <ButtonGroup label={t('settingsEditor.charRole')} value={content.role} onChange={v => update('role', v)}
                     options={[
                         { value: 'protagonist', label: t('settingsEditor.roles.proLabel') },
@@ -344,24 +351,24 @@ function CharacterEditor({ node, onUpdate }) {
                 </div>
             </FieldGroup>
 
-            <FieldGroup title={t('settingsEditor.tabAppearance')} icon="✨">
+            <FieldGroup title={t('settingsEditor.tabAppearance')} icon={<Sparkles size={13} />}>
                 <TextField label={t('settingsEditor.charAppearance')} value={content.appearance} onChange={v => update('appearance', v)} placeholder={t('settingsEditor.charAppearancePlaceholder')} multiline aiBtn />
                 <TextField label={t('settingsEditor.charPersonality')} value={content.personality} onChange={v => update('personality', v)} placeholder={t('settingsEditor.charPersonalityPlaceholder')} multiline aiBtn />
                 <TextField label={t('settingsEditor.charSpeechStyle')} value={content.speechStyle} onChange={v => update('speechStyle', v)} placeholder={t('settingsEditor.charSpeechStylePlaceholder')} multiline aiBtn />
             </FieldGroup>
 
-            <FieldGroup title={t('settingsEditor.tabBackground')} icon="📖" defaultCollapsed>
+            <FieldGroup title={t('settingsEditor.tabBackground')} icon={<BookOpen size={13} />} defaultCollapsed>
                 <TextField label={t('settingsEditor.charBackground')} value={content.background} onChange={v => update('background', v)} placeholder={t('settingsEditor.charBackgroundPlaceholder')} multiline rows={4} aiBtn />
                 <TextField label={t('settingsEditor.charMotivation')} value={content.motivation} onChange={v => update('motivation', v)} placeholder={t('settingsEditor.charMotivationPlaceholder')} multiline aiBtn />
                 <TextField label={t('settingsEditor.charArc')} value={content.arc} onChange={v => update('arc', v)} placeholder={t('settingsEditor.charArcPlaceholder')} multiline aiBtn />
             </FieldGroup>
 
-            <FieldGroup title={t('settingsEditor.tabSkills')} icon="⚔️" defaultCollapsed>
+            <FieldGroup title={t('settingsEditor.tabSkills')} icon={<Swords size={13} />} defaultCollapsed>
                 <TextField label={t('settingsEditor.charSkills')} value={content.skills} onChange={v => update('skills', v)} placeholder={t('settingsEditor.charSkillsPlaceholder')} multiline aiBtn />
                 <TextField label={t('settingsEditor.charRelationships')} value={content.relationships} onChange={v => update('relationships', v)} placeholder={t('settingsEditor.charRelationshipsPlaceholder')} multiline aiBtn />
             </FieldGroup>
 
-            <FieldGroup title={t('settingsEditor.tabNotes')} icon="📝" defaultCollapsed>
+            <FieldGroup title={t('settingsEditor.tabNotes')} icon={<FileText size={13} />} defaultCollapsed>
                 <TextField label={t('settingsEditor.charNotes')} value={content.notes} onChange={v => update('notes', v)} placeholder={t('settingsEditor.charNotesPlaceholder')} multiline />
             </FieldGroup>
 
@@ -377,18 +384,18 @@ function LocationEditor({ node, onUpdate }) {
 
     return (
         <div>
-            <FieldGroup title={t('settingsEditor.tabBasic')} icon="📋">
+            <FieldGroup title={t('settingsEditor.tabBasic')} icon={<ClipboardList size={13} />}>
                 <TextField label={t('settingsEditor.locDescription')} value={content.description} onChange={v => update('description', v)} placeholder={t('settingsEditor.locDescriptionPlaceholder')} multiline rows={4} aiBtn />
                 <TextField label={t('settingsEditor.locSlugline')} value={content.slugline} onChange={v => update('slugline', v)} placeholder={t('settingsEditor.locSluglinePlaceholder')} />
             </FieldGroup>
 
-            <FieldGroup title={t('settingsEditor.tabSensory')} icon="👁">
+            <FieldGroup title={t('settingsEditor.tabSensory')} icon={<Eye size={13} />}>
                 <TextField label={t('settingsEditor.locVisual')} value={content.sensoryVisual} onChange={v => update('sensoryVisual', v)} placeholder={t('settingsEditor.locVisualPlaceholder')} multiline aiBtn />
                 <TextField label={t('settingsEditor.locAudio')} value={content.sensoryAudio} onChange={v => update('sensoryAudio', v)} placeholder={t('settingsEditor.locAudioPlaceholder')} multiline aiBtn />
                 <TextField label={t('settingsEditor.locSmell')} value={content.sensorySmell} onChange={v => update('sensorySmell', v)} placeholder={t('settingsEditor.locSmellPlaceholder')} multiline aiBtn />
             </FieldGroup>
 
-            <FieldGroup title={t('settingsEditor.tabMood')} icon="🌙" defaultCollapsed>
+            <FieldGroup title={t('settingsEditor.tabMood')} icon={<Moon size={13} />} defaultCollapsed>
                 <TextField label={t('settingsEditor.locMood')} value={content.mood} onChange={v => update('mood', v)} placeholder={t('settingsEditor.locMoodPlaceholder')} />
                 <ButtonGroup label={t('settingsEditor.locDangerLevel')} value={content.dangerLevel} onChange={v => update('dangerLevel', v)}
                     options={[
@@ -411,7 +418,7 @@ function ObjectEditor({ node, onUpdate }) {
 
     return (
         <div>
-            <FieldGroup title={t('settingsEditor.tabBasic')} icon="📋">
+            <FieldGroup title={t('settingsEditor.tabBasic')} icon={<ClipboardList size={13} />}>
                 <TextField label={t('settingsEditor.objDescription')} value={content.description} onChange={v => update('description', v)} placeholder={t('settingsEditor.objDescriptionPlaceholder')} multiline rows={4} aiBtn />
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                     <TextField label={t('settingsEditor.objType')} value={content.objectType} onChange={v => update('objectType', v)} placeholder={t('settingsEditor.objTypePlaceholder')} />
@@ -419,7 +426,7 @@ function ObjectEditor({ node, onUpdate }) {
                 </div>
             </FieldGroup>
 
-            <FieldGroup title={t('settingsEditor.tabStats')} icon="📊" defaultCollapsed>
+            <FieldGroup title={t('settingsEditor.tabStats')} icon={<BarChart3 size={13} />} defaultCollapsed>
                 <TextField label={t('settingsEditor.objHolder')} value={content.currentHolder} onChange={v => update('currentHolder', v)} placeholder={t('settingsEditor.objHolderPlaceholder')} />
                 <TextField label={t('settingsEditor.objStats')} value={content.numericStats} onChange={v => update('numericStats', v)} placeholder={t('settingsEditor.objStatsPlaceholder')} multiline />
                 <TextField label={t('settingsEditor.objSymbolism')} value={content.symbolism} onChange={v => update('symbolism', v)} placeholder={t('settingsEditor.objSymbolismPlaceholder')} multiline aiBtn />
@@ -524,12 +531,40 @@ function Breadcrumb({ node, allNodes, onSelect }) {
 
 // ==================== 文件夹信息 ====================
 
-function FolderInfo({ node, nodes, onAdd }) {
+// 图标名称 → 组件映射
+const ICON_COMPONENT_MAP = {
+    'user': User, 'map-pin': MapPin, 'globe': Globe, 'gem': Gem,
+    'clipboard-list': ClipboardList, 'ruler': Ruler, 'book-open': BookOpen,
+    'settings': SettingsIcon, 'sparkles': Sparkles, 'heart': Heart,
+    'star': Star, 'shield': Shield, 'zap': Zap, 'feather': Feather,
+    'compass': Compass, 'flag': Flag, 'tag': Tag, 'layers': Layers,
+};
+
+// 分类默认图标
+const CATEGORY_DEFAULT_ICONS = {
+    character: User, location: MapPin, world: Globe, object: Gem,
+    plot: ClipboardList, rules: Ruler, bookInfo: BookOpen, custom: SettingsIcon,
+};
+
+function FolderInfo({ node, nodes, onAdd, onUpdate }) {
     const { t } = useI18n();
     const catColor = CATEGORY_COLORS[node.category] || CATEGORY_COLORS.custom;
     const children = nodes.filter(n => n.parentId === node.id);
     const folders = children.filter(n => n.type === 'folder');
     const items = children.filter(n => n.type === 'item');
+    const isCustomCategory = node.category === 'custom';
+
+    // 获取当前图标组件
+    const CurrentIcon = (node.icon && ICON_COMPONENT_MAP[node.icon])
+        || CATEGORY_DEFAULT_ICONS[node.category]
+        || FolderOpen;
+
+    const [showIconPicker, setShowIconPicker] = useState(false);
+
+    const handleIconSelect = (iconName) => {
+        if (onUpdate) onUpdate(node.id, { icon: iconName });
+        setShowIconPicker(false);
+    };
 
     return (
         <div>
@@ -537,17 +572,61 @@ function FolderInfo({ node, nodes, onAdd }) {
                 padding: 24, borderRadius: 'var(--radius-md)', background: catColor.bg,
                 border: `1px solid ${catColor.color}20`, marginBottom: 20, textAlign: 'center',
             }}>
-                <div style={{ fontSize: 36, marginBottom: 8 }}>{node.icon || '📁'}</div>
+                <div
+                    style={{ fontSize: 36, marginBottom: 8, cursor: isCustomCategory ? 'pointer' : 'default', position: 'relative', display: 'inline-block' }}
+                    onClick={() => isCustomCategory && setShowIconPicker(!showIconPicker)}
+                    title={isCustomCategory ? '点击更换图标' : ''}
+                >
+                    <CurrentIcon size={36} style={{ color: catColor.color }} />
+                    {isCustomCategory && (
+                        <span style={{ position: 'absolute', bottom: -2, right: -8, background: 'var(--bg-primary)', borderRadius: '50%', padding: 2, boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }}>
+                            <Pencil size={10} style={{ color: 'var(--text-muted)' }} />
+                        </span>
+                    )}
+                </div>
                 <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4, color: 'var(--text-primary)' }}>{node.name}</h3>
                 <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
                     {folders.length > 0 && `${folders.length} 个子文件夹 · `}
                     {items.length} 个设定项
                 </p>
+
+                {/* 图标选择器 */}
+                {showIconPicker && (
+                    <div style={{
+                        display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 6,
+                        marginTop: 12, padding: 12, background: 'var(--bg-primary)',
+                        borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)',
+                        textAlign: 'center',
+                    }}>
+                        {ICON_PICKER_OPTIONS.map(opt => {
+                            const IconComp = ICON_COMPONENT_MAP[opt.name];
+                            const isActive = node.icon === opt.name;
+                            return (
+                                <button
+                                    key={opt.name}
+                                    onClick={(e) => { e.stopPropagation(); handleIconSelect(opt.name); }}
+                                    title={opt.label}
+                                    style={{
+                                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+                                        padding: '8px 4px', border: isActive ? `2px solid ${catColor.color}` : '1px solid transparent',
+                                        borderRadius: 'var(--radius-sm)', background: isActive ? catColor.bg : 'transparent',
+                                        cursor: 'pointer', color: isActive ? catColor.color : 'var(--text-secondary)',
+                                        transition: 'all 0.15s',
+                                        fontSize: 10,
+                                    }}
+                                >
+                                    {IconComp && <IconComp size={20} />}
+                                    <span>{opt.label}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
             </div>
 
             {children.length === 0 && (
                 <div className="settings-empty-state">
-                    <div className="empty-icon">📝</div>
+                    <div className="empty-icon"><PenLine size={28} /></div>
                     <h3>{t('settingsEditor.emptyTitle')}</h3>
                     <p>{t('settingsEditor.emptyDesc')}</p>
                 </div>
@@ -570,7 +649,7 @@ function EmptyState() {
     const { t } = useI18n();
     return (
         <div className="settings-empty-state">
-            <div className="empty-icon">🎯</div>
+            <div className="empty-icon"><Target size={28} /></div>
             <h3>{t('settingsEditor.selectTitle')}</h3>
             <p>{t('settingsEditor.selectDesc')}</p>
         </div>
@@ -587,7 +666,7 @@ export default function SettingsItemEditor({ selectedNode, allNodes, onUpdate, o
         return (
             <div style={{ padding: 20 }}>
                 <Breadcrumb node={selectedNode} allNodes={allNodes} onSelect={onSelect} />
-                <FolderInfo node={selectedNode} nodes={allNodes} onAdd={onAdd} />
+                <FolderInfo node={selectedNode} nodes={allNodes} onAdd={onAdd} onUpdate={onUpdate} />
             </div>
         );
     }

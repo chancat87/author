@@ -1,7 +1,12 @@
 'use client';
 
 import { useState, useMemo, useEffect, useRef } from 'react';
-
+import {
+    FolderOpen, FileText, Eye, EyeOff, Pencil, X,
+    User, MapPin, Globe, Gem, ClipboardList, Ruler, BookOpen,
+    Settings as SettingsIcon, Plus,
+    Sparkles, Heart, Star, Shield, Zap, Feather, Compass, Flag, Tag, Layers
+} from 'lucide-react';
 import { useI18n } from '../lib/useI18n';
 
 // 分类的颜色和标识
@@ -17,6 +22,78 @@ const CATEGORY_STYLES = {
     custom: { color: 'var(--cat-custom)', bg: 'var(--cat-custom-bg)' },
 };
 
+// 分类对应的 Lucide 图标
+const CATEGORY_ICONS = {
+    work: BookOpen,
+    bookInfo: BookOpen,
+    character: User,
+    location: MapPin,
+    world: Globe,
+    object: Gem,
+    plot: ClipboardList,
+    rules: Ruler,
+    custom: SettingsIcon,
+};
+
+// 图标名称 → 组件映射（用于 node.icon 字段持久化）
+const ICON_MAP = {
+    'user': User,
+    'map-pin': MapPin,
+    'globe': Globe,
+    'gem': Gem,
+    'clipboard-list': ClipboardList,
+    'ruler': Ruler,
+    'book-open': BookOpen,
+    'settings': SettingsIcon,
+    'file-text': FileText,
+    'folder-open': FolderOpen,
+    'sparkles': Sparkles,
+    'heart': Heart,
+    'star': Star,
+    'shield': Shield,
+    'zap': Zap,
+    'feather': Feather,
+    'compass': Compass,
+    'flag': Flag,
+    'tag': Tag,
+    'layers': Layers,
+};
+
+// 可选图标列表（用于图标选择器）
+export const ICON_PICKER_OPTIONS = [
+    { name: 'user', label: '人物' },
+    { name: 'map-pin', label: '地点' },
+    { name: 'globe', label: '世界' },
+    { name: 'gem', label: '宝石' },
+    { name: 'clipboard-list', label: '大纲' },
+    { name: 'ruler', label: '规则' },
+    { name: 'book-open', label: '书籍' },
+    { name: 'settings', label: '设置' },
+    { name: 'sparkles', label: '魔法' },
+    { name: 'heart', label: '爱心' },
+    { name: 'star', label: '星标' },
+    { name: 'shield', label: '盾牌' },
+    { name: 'zap', label: '闪电' },
+    { name: 'feather', label: '羽毛' },
+    { name: 'compass', label: '罗盘' },
+    { name: 'flag', label: '旗帜' },
+    { name: 'tag', label: '标签' },
+    { name: 'layers', label: '图层' },
+];
+
+// 获取节点应该显示的图标组件
+function getNodeIcon(node, nodes) {
+    // 优先使用节点自身的 icon 字段
+    if (node.icon && ICON_MAP[node.icon]) return ICON_MAP[node.icon];
+    // 如果是 item（条目），查找父级文件夹的 icon
+    if (node.type === 'item' && node.parentId) {
+        const parent = nodes.find(n => n.id === node.parentId);
+        if (parent?.icon && ICON_MAP[parent.icon]) return ICON_MAP[parent.icon];
+    }
+    // 使用分类默认图标
+    return CATEGORY_ICONS[node.category] || FileText;
+}
+
 function getCategoryStyle(category) {
     return CATEGORY_STYLES[category] || CATEGORY_STYLES.custom;
 }
@@ -30,7 +107,6 @@ function TreeNode({ node, nodes, selectedId, onSelect, onAdd, onDelete, onRename
     const isFolder = node.type === 'folder' || node.type === 'special' || node.type === 'work';
     const isWork = node.type === 'work';
     const isRoot = node.parentId === null;
-    // 内置子分类（作品下的固定分类，如人物设定、空间/地点等）不可删除
     const builtinSuffixes = ['bookinfo', 'characters', 'locations', 'world', 'objects', 'plot', 'rules'];
     const parentNode = node.parentId ? nodes.find(n => n.id === node.parentId) : null;
     const isBuiltinCategory = parentNode && parentNode.type === 'work' && builtinSuffixes.some(s => node.id.endsWith('-' + s));
@@ -42,7 +118,6 @@ function TreeNode({ node, nodes, selectedId, onSelect, onAdd, onDelete, onRename
 
     const nodeRef = useRef(null);
 
-    // 计算子项数目（递归）
     const descendantCount = useMemo(() => {
         if (!isFolder) return 0;
         let count = 0;
@@ -63,15 +138,15 @@ function TreeNode({ node, nodes, selectedId, onSelect, onAdd, onDelete, onRename
         setIsRenaming(false);
     };
 
-    // 如果是被点击并展开的节点，自动滚入视图
     useEffect(() => {
         if (isSelected && isFolder && nodeRef.current) {
-            // 给一点延迟让折叠动画/渲染完成
             setTimeout(() => {
                 nodeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }, 100);
         }
     }, [isSelected, isFolder]);
+
+    const NodeIcon = getNodeIcon(node, nodes);
 
     return (
         <div className="tree-node" style={{ paddingLeft: level > 0 ? 12 : 0 }} ref={nodeRef}>
@@ -92,8 +167,10 @@ function TreeNode({ node, nodes, selectedId, onSelect, onAdd, onDelete, onRename
                     </span>
                 )}
 
-                {/* 图标 */}
-                <span className="tree-node-icon">{node.icon || (isFolder ? '📁' : '📄')}</span>
+                {/* 图标 — 使用分类图标，支持自定义覆盖 */}
+                <span className="tree-node-icon" style={isFolder ? { color: style.color } : {}}>
+                    <NodeIcon size={14} />
+                </span>
 
                 {/* 名称 */}
                 {isRenaming ? (
@@ -118,7 +195,7 @@ function TreeNode({ node, nodes, selectedId, onSelect, onAdd, onDelete, onRename
                         onClick={e => { e.stopPropagation(); onToggleEnabled(node.id); }}
                         title={isDisabled ? t('settingsTree.enableHint') : t('settingsTree.disableHint')}
                     >
-                        {isDisabled ? '🚫' : '👁'}
+                        {isDisabled ? <EyeOff size={13} /> : <Eye size={13} />}
                     </button>
                 )}
 
@@ -140,11 +217,11 @@ function TreeNode({ node, nodes, selectedId, onSelect, onAdd, onDelete, onRename
                     )}
                     {/* 重命名 */}
                     {!isRoot && (
-                        <button className="tree-action-btn" onClick={e => { e.stopPropagation(); setRenameValue(node.name); setIsRenaming(true); }} title={t('common.rename')}>✏</button>
+                        <button className="tree-action-btn" onClick={e => { e.stopPropagation(); setRenameValue(node.name); setIsRenaming(true); }} title={t('common.rename')}><Pencil size={12} /></button>
                     )}
                     {/* 删除 */}
                     {canDelete && (
-                        <button className="tree-action-btn danger" onClick={e => { e.stopPropagation(); onDelete(node.id); }} title={t('common.delete')}>✕</button>
+                        <button className="tree-action-btn danger" onClick={e => { e.stopPropagation(); onDelete(node.id); }} title={t('common.delete')}><X size={12} /></button>
                     )}
                 </span>
             </div>
@@ -268,6 +345,21 @@ export default function SettingsTree({
                     level={0}
                 />
             ))}
+            {/* 新建分类按钮 */}
+            {onAdd && (
+                <button
+                    className="tree-add-category-btn"
+                    onClick={() => {
+                        // getSettingsNodes 不含 work 节点，从根文件夹的 parentId 获取 work ID
+                        const rootFolder = nodes.find(n => n.type === 'folder' && n.parentId);
+                        const workId = rootFolder?.parentId;
+                        if (workId) onAdd(workId, 'custom');
+                    }}
+                >
+                    <Plus size={13} />
+                    新建分类
+                </button>
+            )}
         </div>
     );
 }

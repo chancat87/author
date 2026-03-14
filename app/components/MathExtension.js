@@ -15,8 +15,8 @@ export function openMathEditor(currentLatex, onSave) {
     dialog.className = 'math-editor-dialog';
     dialog.innerHTML = `
         <div class="math-editor-header">
-            <span class="math-editor-title">📐 编辑公式</span>
-            <button class="math-editor-close">✕</button>
+            <span class="math-editor-title">∑ 编辑公式</span>
+            <button class="math-editor-close">×</button>
         </div>
         <div class="math-editor-preview"></div>
         <textarea class="math-editor-input" placeholder="输入 LaTeX 公式，如 E = mc^2" spellcheck="false"></textarea>

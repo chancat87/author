@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { X, Star } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { useI18n } from '../lib/useI18n';
 import { getSnapshots, createSnapshot, restoreSnapshot, deleteSnapshot } from '../lib/snapshots';
@@ -99,7 +100,7 @@ export default function SnapshotManager({ onRestored }) {
                     <h2>{t('snapshot.title')}
                         <span className="subtitle">— {t('snapshot.subtitle')}</span>
                     </h2>
-                    <button className="btn btn-ghost btn-icon" onClick={onClose}>✕</button>
+                    <button className="btn btn-ghost btn-icon" onClick={onClose}><X size={16} /></button>
                 </div>
 
                 <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
@@ -132,7 +133,7 @@ export default function SnapshotManager({ onRestored }) {
                                     >
                                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                                             <strong style={{ fontSize: 13, color: s.id === selectedId ? 'var(--accent)' : 'var(--text-primary)' }}>
-                                                {s.type === 'manual' ? '⭐ ' : ''}{s.label}
+                                                {s.type === 'manual' ? <><Star size={12} style={{ marginRight: 4 }} /></> : ''}{s.label}
                                             </strong>
                                             <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{formatDate(s.timestamp)}</span>
                                         </div>
@@ -164,7 +165,7 @@ export default function SnapshotManager({ onRestored }) {
                     <div style={{ flex: 1, padding: '30px', display: 'flex', flexDirection: 'column', background: 'var(--bg-secondary)', overflowY: 'auto' }}>
                         {selectedSnap ? (
                             <>
-                                <h3 style={{ fontSize: 20, marginBottom: 8 }}>{selectedSnap.type === 'manual' ? '⭐ ' : ''}{selectedSnap.label}</h3>
+                                <h3 style={{ fontSize: 20, marginBottom: 8 }}>{selectedSnap.type === 'manual' ? <Star size={16} style={{ marginRight: 6, verticalAlign: 'text-bottom', color: 'var(--accent)' }} /> : null}{selectedSnap.label}</h3>
                                 <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 24 }}>
                                     {t('snapshot.createdAt')} {new Date(selectedSnap.timestamp).toLocaleString()}
                                     {selectedSnap.type === 'auto' && ` ${t('snapshot.autoLabel')}`}

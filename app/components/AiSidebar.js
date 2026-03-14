@@ -12,6 +12,7 @@ import { getProjectSettings, getChatApiConfig, getActiveWorkId, getSettingsNodes
 import { useAppStore } from '../store/useAppStore';
 import ChatMarkdown from './ChatMarkdown';
 import ModelPicker from './ModelPicker';
+import { FolderOpen, Plus, X, Pencil, Trash2 } from 'lucide-react';
 import { useI18n } from '../lib/useI18n';
 
 // 解析消息中的 [SETTINGS_ACTION] 块
@@ -260,6 +261,10 @@ export default function AiSidebar({ onInsertText }) {
     const [slidingWindowSize, setSlidingWindowSize] = useState(8);
     // 总结编辑
     const [summaryDraft, setSummaryDraft] = useState(null);
+    // 总结撤销
+    const summaryUndoRef = useRef(null);
+    const summaryUndoTimerRef = useRef(null);
+    const [summaryUndoVisible, setSummaryUndoVisible] = useState(false);
     // 参考 Tab 状态
     const [contextSearch, setContextSearch] = useState('');
     const [collapsedGroups, setCollapsedGroups] = useState(new Set());
@@ -485,17 +490,17 @@ export default function AiSidebar({ onInsertText }) {
 
             // 保存上下文快照（不含提示词模板和安全策略）
             const contextSnapshot = {};
-            if (context.bookInfo) contextSnapshot['📖 作品信息'] = context.bookInfo;
-            if (context.characters) contextSnapshot['👤 人物档案'] = context.characters;
-            if (context.locations) contextSnapshot['📍 空间/地点'] = context.locations;
-            if (context.worldbuilding) contextSnapshot['🌍 世界观'] = context.worldbuilding;
-            if (context.objects) contextSnapshot['🔮 物品/道具'] = context.objects;
-            if (context.plotOutline) contextSnapshot['📋 剧情大纲'] = context.plotOutline;
-            if (context.writingRules) contextSnapshot['📏 写作规则'] = context.writingRules;
-            if (context.customSettings) contextSnapshot['📎 补充设定'] = context.customSettings;
-            if (context.previousChapters) contextSnapshot['📑 前文回顾'] = context.previousChapters;
-            if (context.currentChapter) contextSnapshot['✏️ 当前章节'] = context.currentChapter;
-            contextSnapshot['💬 对话历史'] = userPrompt;
+            if (context.bookInfo) contextSnapshot['作品信息'] = context.bookInfo;
+            if (context.characters) contextSnapshot['人物档案'] = context.characters;
+            if (context.locations) contextSnapshot['空间/地点'] = context.locations;
+            if (context.worldbuilding) contextSnapshot['世界观'] = context.worldbuilding;
+            if (context.objects) contextSnapshot['物品/道具'] = context.objects;
+            if (context.plotOutline) contextSnapshot['剧情大纲'] = context.plotOutline;
+            if (context.writingRules) contextSnapshot['写作规则'] = context.writingRules;
+            if (context.customSettings) contextSnapshot['补充设定'] = context.customSettings;
+            if (context.previousChapters) contextSnapshot['前文回顾'] = context.previousChapters;
+            if (context.currentChapter) contextSnapshot['当前章节'] = context.currentChapter;
+            contextSnapshot['对话历史'] = userPrompt;
 
             const aiPlaceholder = { id: aiMsgId, role: 'assistant', content: '', thinking: '', toolCalls: [], timestamp: Date.now(), _context: contextSnapshot };
             setSessionStore(prev => addMessage(prev, aiPlaceholder));
@@ -781,6 +786,8 @@ export default function AiSidebar({ onInsertText }) {
     // 确认总结
     const confirmSummary = useCallback(() => {
         if (!summaryDraft) return;
+        // 保存当前历史以便撤销
+        summaryUndoRef.current = [...chatHistory];
         const checkedIds = new Set(checkedHistory);
         const unchecked = chatHistory.filter(m => !checkedIds.has(m.id));
         const summaryMsg = {
@@ -792,7 +799,24 @@ export default function AiSidebar({ onInsertText }) {
         };
         setChatHistory?.([...unchecked, summaryMsg]);
         setSummaryDraft(null);
+        // 显示撤销栏
+        setSummaryUndoVisible(true);
+        if (summaryUndoTimerRef.current) clearTimeout(summaryUndoTimerRef.current);
+        summaryUndoTimerRef.current = setTimeout(() => {
+            setSummaryUndoVisible(false);
+            summaryUndoRef.current = null;
+        }, 8000);
     }, [summaryDraft, checkedHistory, chatHistory, setChatHistory]);
+
+    // 撤销总结
+    const undoSummary = useCallback(() => {
+        if (!summaryUndoRef.current) return;
+        setChatHistory?.(summaryUndoRef.current);
+        summaryUndoRef.current = null;
+        setSummaryUndoVisible(false);
+        if (summaryUndoTimerRef.current) clearTimeout(summaryUndoTimerRef.current);
+        showToast?.(t('aiSidebar.summaryUndone'), 'success');
+    }, [setChatHistory, showToast, t]);
 
     // 清空对话
     const handleClearChat = () => {
@@ -903,7 +927,7 @@ export default function AiSidebar({ onInsertText }) {
     const STATUS_LABELS = {
         accepted: '✓ 已接受',
         rejected: '✗ 已拒绝',
-        pending: '⏳ 待确认',
+        pending: '… 待确认',
     };
 
     // 会话列表
@@ -918,19 +942,18 @@ export default function AiSidebar({ onInsertText }) {
                 {/* 标题栏 */}
                 <div className="ai-sidebar-header">
                     <span className="ai-sidebar-title">{t('aiSidebar.title')}</span>
-                    <ModelPicker target="chat" dropDirection="down" />
                     <div style={{ display: 'flex', gap: '4px' }}>
                         <button
                             className="btn btn-ghost btn-icon btn-sm"
                             onClick={() => setShowSessionList(!showSessionList)}
                             title={t('aiSidebar.btnSessionList')}
-                        >📂</button>
+                        ><FolderOpen size={15} /></button>
                         <button
                             className="btn btn-ghost btn-icon btn-sm"
                             onClick={onNewSession}
                             title={t('aiSidebar.btnNewSession')}
-                        >＋</button>
-                        <button className="btn btn-ghost btn-icon btn-sm" onClick={onClose} title={t('aiSidebar.btnClose')}>✕</button>
+                        ><Plus size={15} /></button>
+                        <button className="btn btn-ghost btn-icon btn-sm" onClick={onClose} title={t('aiSidebar.btnClose')}><X size={15} /></button>
                     </div>
                     {/* 会话列表下拉面板 */}
                     {showSessionList && (<>
@@ -1053,13 +1076,13 @@ export default function AiSidebar({ onInsertText }) {
                                                     className="btn-mini-icon"
                                                     onClick={() => { setRenamingSessionId(s.id); setRenameTitle(s.title); }}
                                                     title={t('aiSidebar.rename')}
-                                                >✎</button>
+                                                ><Pencil size={12} /></button>
                                                 {sessions.length > 1 && (
                                                     <button
                                                         className="btn-mini-icon danger"
                                                         onClick={() => onDeleteSession?.(s.id)}
                                                         title={t('aiSidebar.delete')}
-                                                    >🗑</button>
+                                                    ><Trash2 size={12} /></button>
                                                 )}
                                             </div>
                                         </>
@@ -1133,6 +1156,14 @@ export default function AiSidebar({ onInsertText }) {
                                     <button className="btn-mini" onClick={() => setSummaryDraft(null)}>{t('aiSidebar.cancel')}</button>
                                     <button className="btn-mini primary" onClick={confirmSummary}>{t('aiSidebar.confirmReplace')}</button>
                                 </div>
+                            </div>
+                        )}
+
+                        {/* 撤销总结提示栏 */}
+                        {summaryUndoVisible && (
+                            <div className="summary-undo-bar">
+                                <span>{t('aiSidebar.summaryApplied')}</span>
+                                <button className="btn-mini" onClick={undoSummary}>{t('aiSidebar.undoSummary')}</button>
                             </div>
                         )}
 

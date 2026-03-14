@@ -35,7 +35,7 @@ export const WRITING_MODES = {
     webnovel: {
         key: 'webnovel',
         label: '网络小说',
-        icon: '📱',
+        icon: 'smartphone',
         color: '#3b82f6',
         desc: '适合日更连载、修仙玄幻、系统流等网文创作',
         painPoint: '数值膨胀与连载一致性',
@@ -57,7 +57,7 @@ export const WRITING_MODES = {
     traditional: {
         key: 'traditional',
         label: '传统文学',
-        icon: '📚',
+        icon: 'book-open',
         color: '#8b5cf6',
         desc: '适合严肃小说、纯文学、短篇、出版向作品',
         painPoint: '主题编织与草稿迭代',
@@ -80,7 +80,7 @@ export const WRITING_MODES = {
     screenplay: {
         key: 'screenplay',
         label: '剧本/脚本',
-        icon: '🎬',
+        icon: 'clapperboard',
         color: '#f59e0b',
         desc: '适合影视剧本、舞台剧、广播剧等脚本创作',
         painPoint: '连续性与制作可行性',
@@ -352,13 +352,13 @@ function generateNodeId() {
 
 // 每个作品下自动创建的子分类模板
 const WORK_SUB_CATEGORIES = [
-    { suffix: 'bookinfo', name: '作品信息', icon: '📖', category: 'bookInfo', type: 'special' },
-    { suffix: 'characters', name: '人物设定', icon: '👤', category: 'character', type: 'folder' },
-    { suffix: 'locations', name: '空间/地点', icon: '🗺️', category: 'location', type: 'folder' },
-    { suffix: 'world', name: '世界观/设定', icon: '🌍', category: 'world', type: 'folder' },
-    { suffix: 'objects', name: '物品/道具', icon: '🔮', category: 'object', type: 'folder' },
-    { suffix: 'plot', name: '大纲', icon: '📋', category: 'plot', type: 'folder' },
-    { suffix: 'rules', name: '写作规则', icon: '📐', category: 'rules', type: 'folder' },
+    { suffix: 'bookinfo', name: '作品信息', category: 'bookInfo', type: 'special' },
+    { suffix: 'characters', name: '人物设定', category: 'character', type: 'folder' },
+    { suffix: 'locations', name: '空间/地点', category: 'location', type: 'folder' },
+    { suffix: 'world', name: '世界观/设定', category: 'world', type: 'folder' },
+    { suffix: 'objects', name: '物品/道具', category: 'object', type: 'folder' },
+    { suffix: 'plot', name: '大纲', category: 'plot', type: 'folder' },
+    { suffix: 'rules', name: '写作规则', category: 'rules', type: 'folder' },
 ];
 
 // 全局根分类（不属于任何作品）— 已废弃，所有规则均归属各作品
@@ -384,7 +384,7 @@ export function createWorkNode(name, workId) {
         category: 'work',
         parentId: null,
         order: 0,
-        icon: '📕',
+        icon: '',
         content: {},
         collapsed: false,
         enabled: true,
@@ -398,7 +398,7 @@ export function createWorkNode(name, workId) {
         category: cat.category,
         parentId: id,
         order: i,
-        icon: cat.icon,
+        icon: cat.icon || '',
         content: {},
         collapsed: false,
         createdAt: now,
@@ -443,7 +443,7 @@ async function saveWorksIndex(workEntries) {
     // 只保留必要字段
     const slim = workEntries.map(w => ({
         id: w.id, name: w.name, type: 'work', category: 'work',
-        icon: w.icon || '📕', order: w.order ?? 0,
+        icon: w.icon || '', order: w.order ?? 0,
         createdAt: w.createdAt, updatedAt: w.updatedAt,
     }));
     await persistSet(WORKS_INDEX_KEY, slim);
@@ -698,7 +698,7 @@ export async function addSettingsNode({ name, type, category, parentId, icon, co
         category: category || 'custom',
         parentId: parentId || null,
         order: siblings.length,
-        icon: icon || (type === 'folder' ? '📁' : '📄'),
+        icon: icon || '',
         content: content || {},
         collapsed: false,
         createdAt: new Date().toISOString(),

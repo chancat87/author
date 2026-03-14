@@ -2,6 +2,13 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
+import {
+    Library, KeyRound, Settings, BookOpen, User, MapPin, Globe, Gem,
+    ClipboardList, Ruler, Upload, Download, Trash2, X, Maximize2, Minimize2,
+    FileText, Sparkles, Search, Coins, Plug, Radio, RefreshCw, CheckCircle2,
+    XCircle, AlertTriangle, Globe2, Shuffle, Eye, EyeOff, Ban, Pencil, FolderOpen,
+    Bell, RotateCcw, Monitor, CircleDot, Smartphone, Clapperboard
+} from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import {
     getProjectSettings,
@@ -36,14 +43,29 @@ import {
 } from '../lib/settings-io';
 import SettingsConflictModal from './SettingsConflictModal';
 
+// 分类图标映射（Lucide）
+const CAT_ICONS = {
+    work: BookOpen,
+    character: User,
+    location: MapPin,
+    world: Globe,
+    object: Gem,
+    plot: ClipboardList,
+    rules: Ruler,
+};
+function CatIcon({ category, size = 14, ...props }) {
+    const Icon = CAT_ICONS[category] || FileText;
+    return <Icon size={size} {...props} />;
+}
+
 const CAT_STYLES = {
-    work: { color: 'var(--cat-work)', bg: 'var(--cat-work-bg)', icon: '📕' },
-    character: { color: 'var(--cat-character)', bg: 'var(--cat-character-bg)', icon: '👤' },
-    location: { color: 'var(--cat-location)', bg: 'var(--cat-location-bg)', icon: '🗺️' },
-    world: { color: 'var(--cat-world)', bg: 'var(--cat-world-bg)', icon: '🌍' },
-    object: { color: 'var(--cat-object)', bg: 'var(--cat-object-bg)', icon: '🔮' },
-    plot: { color: 'var(--cat-plot)', bg: 'var(--cat-plot-bg)', icon: '📋' },
-    rules: { color: 'var(--cat-rules)', bg: 'var(--cat-rules-bg)', icon: '📐' },
+    work: { color: 'var(--cat-work)', bg: 'var(--cat-work-bg)' },
+    character: { color: 'var(--cat-character)', bg: 'var(--cat-character-bg)' },
+    location: { color: 'var(--cat-location)', bg: 'var(--cat-location-bg)' },
+    world: { color: 'var(--cat-world)', bg: 'var(--cat-world-bg)' },
+    object: { color: 'var(--cat-object)', bg: 'var(--cat-object-bg)' },
+    plot: { color: 'var(--cat-plot)', bg: 'var(--cat-plot-bg)' },
+    rules: { color: 'var(--cat-rules)', bg: 'var(--cat-rules-bg)' },
 };
 
 export default function SettingsPanel() {
@@ -465,7 +487,7 @@ export default function SettingsPanel() {
             updatedNodes.push({
                 id: nodeId, name: item.name, type: 'item',
                 category: item.category, parentId, order: importedCount,
-                icon: '📄', content: item.content,
+                content: item.content,
                 collapsed: false, enabled: true,
                 createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
             });
@@ -497,7 +519,8 @@ export default function SettingsPanel() {
         const parent = parentId ? nodes.find(n => n.id === parentId) : null;
         let cat = category || (parent ? parent.category : 'custom');
         // 如果父节点是作品节点，创建文件夹（大分类）；否则创建条目
-        const isParentWork = parent && parent.type === 'work';
+        // 注意：getSettingsNodes 不含 work 节点，parentId 存在但找不到 parent 说明是 work 节点
+        const isParentWork = (parent && parent.type === 'work') || (parentId && !parent);
         const newNode = await addSettingsNode({
             name: isParentWork ? t('settings.newFolder') : t('settings.newItem'),
             type: isParentWork ? 'folder' : 'item',
@@ -557,9 +580,9 @@ export default function SettingsPanel() {
 
     // 面板标题映射
     const panelTitles = {
-        settings: { icon: '📚', title: t('settings.tabSettings'), subtitle: t('settings.subtitle') },
-        apiConfig: { icon: '🔑', title: t('settings.tabApi'), subtitle: '' },
-        preferences: { icon: '⚙️', title: t('settings.tabPreferences'), subtitle: '' },
+        settings: { icon: <Library size={20} style={{ verticalAlign: 'text-bottom' }} />, title: t('settings.tabSettings'), subtitle: t('settings.subtitle') },
+        apiConfig: { icon: <KeyRound size={20} style={{ verticalAlign: 'text-bottom' }} />, title: t('settings.tabApi'), subtitle: '' },
+        preferences: { icon: <Settings size={20} style={{ verticalAlign: 'text-bottom' }} />, title: t('settings.tabPreferences'), subtitle: '' },
     };
     const currentPanel = panelTitles[open] || panelTitles.settings;
 
@@ -574,9 +597,9 @@ export default function SettingsPanel() {
                     </h2>
                     <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                         {open === 'settings' && <button className="btn btn-ghost btn-icon" onClick={() => setIsFullscreen(!isFullscreen)} title={isFullscreen ? '退出全屏' : '全屏'}>
-                            {isFullscreen ? '⛶' : '⛶'}
+                            {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
                         </button>}
-                        <button className="btn btn-ghost btn-icon" onClick={onClose}>✕</button>
+                        <button className="btn btn-ghost btn-icon" onClick={onClose}><X size={16} /></button>
                     </div>
                 </div>
 
@@ -603,7 +626,9 @@ export default function SettingsPanel() {
                                     }}
                                     onClick={() => { setWritingModeState(m.key); setWritingMode(m.key); }}
                                 >
-                                    <div style={{ fontSize: 18, marginBottom: 4 }}>{m.icon}</div>
+                                    <div style={{ fontSize: 18, marginBottom: 4 }}>
+                                        {m.icon === 'smartphone' ? <Smartphone size={18} /> : m.icon === 'book-open' ? <BookOpen size={18} /> : m.icon === 'clapperboard' ? <Clapperboard size={18} /> : null}
+                                    </div>
                                     <div style={{ fontSize: 13, fontWeight: 600, color: writingMode === m.key ? m.color : 'var(--text-primary)', marginBottom: 2 }}>{m.label}</div>
                                     <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.4 }}>{m.desc}</div>
                                 </button>
@@ -632,7 +657,7 @@ export default function SettingsPanel() {
                                                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 10, padding: '2px 4px', lineHeight: 1, opacity: 0.6 }}
                                                 onClick={() => handleDeleteWork(w.id)}
                                                 title={t('common.delete') + ' ' + w.name}
-                                            >✕</button>
+                                            ><X size={10} /></button>
                                         )}
                                     </div>
                                 ))}
@@ -659,15 +684,15 @@ export default function SettingsPanel() {
                                             style={{ padding: '5px 10px', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', background: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--accent)', transition: 'all 0.15s' }}
                                             onClick={() => setShowExportFormat(!showExportFormat)}
                                             title={t('settings.exportSettingsTitle')}
-                                        >📤 {t('settings.exportSettings')}</button>
+                                        ><Upload size={12} style={{ marginRight: 4 }} />{t('settings.exportSettings')}</button>
                                         {showExportFormat && (
                                             <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--bg-primary)', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-md)', zIndex: 10, overflow: 'hidden', minWidth: 130 }}>
-                                                {[{ key: 'json', label: 'JSON (完整)', icon: '📋' }, { key: 'txt', label: 'TXT (纯文本)', icon: '📝' }, { key: 'md', label: 'Markdown', icon: '📖' }, { key: 'docx', label: 'Word (.docx)', icon: '📘' }, { key: 'pdf', label: 'PDF (打印)', icon: '📕' }].map(f => (
+                                                {[{ key: 'json', label: 'JSON (完整)' }, { key: 'txt', label: 'TXT (纯文本)' }, { key: 'md', label: 'Markdown' }, { key: 'docx', label: 'Word (.docx)' }, { key: 'pdf', label: 'PDF (打印)' }].map(f => (
                                                     <button key={f.key} style={{ display: 'block', width: '100%', padding: '8px 14px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--text-primary)', textAlign: 'left', transition: 'background 0.1s' }}
                                                         onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
                                                         onMouseLeave={e => e.currentTarget.style.background = 'none'}
                                                         onClick={() => handleExportSettings(f.key)}
-                                                    >{f.icon} {f.label}</button>
+                                                    ><FileText size={12} style={{ marginRight: 6, flexShrink: 0 }} />{f.label}</button>
                                                 ))}
                                             </div>
                                         )}
@@ -676,14 +701,14 @@ export default function SettingsPanel() {
                                         style={{ padding: '5px 10px', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', background: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--accent)', transition: 'all 0.15s', display: 'inline-block' }}
                                         title={t('settings.importSettingsTitle')}
                                     >
-                                        📥 {t('settings.importSettings')}
+                                        <Download size={12} style={{ marginRight: 4 }} />{t('settings.importSettings')}
                                         <input type="file" accept=".json,.txt,.md,.markdown,.docx,.pdf,.pmpx" style={{ display: 'none' }} onChange={handleImportSettings} />
                                     </label>
                                     <button
                                         style={{ padding: '5px 10px', border: '1px solid rgba(229,62,62,0.3)', borderRadius: 'var(--radius-sm)', background: 'none', cursor: 'pointer', fontSize: 12, color: '#e53e3e', transition: 'all 0.15s' }}
                                         onClick={handleClearAllItems}
                                         title={t('settings.clearAllTitle')}
-                                    >🗑️ {t('settings.clearAll')}</button>
+                                    ><Trash2 size={12} style={{ marginRight: 4 }} />{t('settings.clearAll')}</button>
                                 </>)}
                             </div>
                         </div>
@@ -698,7 +723,7 @@ export default function SettingsPanel() {
                                     title={t('settings.statsTitle') + ': ' + s.label}
                                     onClick={() => setExpandedCategory(s.category)}
                                 >
-                                    <span>{s.icon}</span>
+                                    <CatIcon category={s.category} size={13} />
                                     <span className="stat-count">{s.count}</span>
                                     <span>{s.label}</span>
                                 </div>
@@ -965,7 +990,7 @@ function PreferencesForm() {
             <div style={{ marginBottom: 24 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                     <label style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)' }}>
-                        ✨ 自定义系统提示词
+                        <Sparkles size={14} style={{ marginRight: 4 }} /> 自定义系统提示词
                     </label>
                     {customPrompt && (
                         <button
@@ -1004,7 +1029,7 @@ function PreferencesForm() {
                 />
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
                     <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                        {customPrompt ? '✅ 使用自定义提示词' : '📝 使用内置默认提示词'}
+                        {customPrompt ? <><CheckCircle2 size={12} style={{ marginRight: 4, color: 'var(--success, #22c55e)' }} />使用自定义提示词</> : <><FileText size={12} style={{ marginRight: 4 }} />使用内置默认提示词</>}
                     </span>
                     <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                         {customPrompt.length} 字
@@ -1195,7 +1220,7 @@ function ApiConfigForm({ data, onChange }) {
                         {savedProfiles.map(p => (
                             <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-secondary)', fontSize: 12 }}>
                                 <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontWeight: 500, fontSize: 12, padding: 0 }} onClick={() => handleLoadProfile(p)} title={`${p.config.provider} | ${p.config.model}`}>{p.name}</button>
-                                <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 11, padding: '0 2px', lineHeight: 1 }} onClick={() => handleDeleteProfile(p.id)} title={t('apiConfig.deleteProfile')}>✕</button>
+                                <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 11, padding: '0 2px', lineHeight: 1 }} onClick={() => handleDeleteProfile(p.id)} title={t('apiConfig.deleteProfile')}><X size={10} /></button>
                             </div>
                         ))}
                     </div>
@@ -1210,15 +1235,15 @@ function ApiConfigForm({ data, onChange }) {
                 <div className="provider-list">
                     <input
                         className="provider-search"
-                        placeholder="🔍 搜索供应商..."
+                        placeholder="搜索供应商..."
                         value={providerSearch}
                         onChange={e => setProviderSearch(e.target.value)}
                     />
                     {[
                         { group: '🇨🇳 国内', keys: ['zhipu', 'deepseek', 'bailian', 'volcengine', 'moonshot', 'stepfun', 'yi', 'baichuan', 'hunyuan', 'baidu', 'minimax', 'siliconflow'] },
-                        { group: '🌍 国际', keys: ['openai', 'claude', 'gemini', 'gemini-native', 'openai-responses', 'groq', 'mistral', 'cohere', 'together', 'perplexity', 'xai', 'cerebras', 'github'] },
-                        { group: '🔀 聚合', keys: ['openrouter'] },
-                        { group: '⚙️ 自定义', keys: ['custom', 'custom-gemini', 'custom-claude'] },
+                        { group: '国际', keys: ['openai', 'claude', 'gemini', 'gemini-native', 'openai-responses', 'groq', 'mistral', 'cohere', 'together', 'perplexity', 'xai', 'cerebras', 'github'] },
+                        { group: '聚合', keys: ['openrouter'] },
+                        { group: '自定义', keys: ['custom', 'custom-gemini', 'custom-claude'] },
                     ].map(section => {
                         const items = section.keys
                             .map(k => PROVIDERS.find(p => p.key === k))
@@ -1237,7 +1262,7 @@ function ApiConfigForm({ data, onChange }) {
                                             onClick={() => handleProviderChange(p.key)}
                                         >
                                             <span className="provider-item-name">{p.label}</span>
-                                            {hasKey && <span className="provider-item-check">✓</span>}
+                                            {hasKey && <span className="provider-item-check"><CheckCircle2 size={12} /></span>}
                                         </button>
                                     );
                                 })}
@@ -1291,7 +1316,7 @@ function ApiConfigForm({ data, onChange }) {
                     {data.apiKey && (
                         <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 'var(--radius-md)', background: 'var(--bg-secondary)', border: '1px solid var(--border-light)' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                                <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}>💰 {t('apiConfig.balance') || 'API 余额'}</span>
+                                <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}><Coins size={13} style={{ marginRight: 4, verticalAlign: 'text-bottom' }} />{t('apiConfig.balance') || 'API 余额'}</span>
                                 <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '3px 10px' }} onClick={handleQueryBalance} disabled={balanceInfo === 'loading'}>
                                     {balanceInfo === 'loading' ? (t('apiConfig.balanceQuerying') || '查询中...') : (t('apiConfig.balanceQuery') || '查询余额')}
                                 </button>
@@ -1299,9 +1324,9 @@ function ApiConfigForm({ data, onChange }) {
                             {balanceInfo && balanceInfo !== 'loading' && (
                                 <div style={{ marginTop: 8 }}>
                                     {balanceInfo.error ? (
-                                        <div style={{ fontSize: 12, color: 'var(--error)' }}>❌ {balanceInfo.error}</div>
+                                        <div style={{ fontSize: 12, color: 'var(--error)' }}><XCircle size={12} style={{ marginRight: 4, verticalAlign: 'text-bottom' }} />{balanceInfo.error}</div>
                                     ) : !balanceInfo.supported ? (
-                                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>⚠️ {t('apiConfig.balanceNotSupported') || '该供应商暂不支持余额查询'}</div>
+                                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}><AlertTriangle size={12} style={{ marginRight: 4, verticalAlign: 'text-bottom' }} />{t('apiConfig.balanceNotSupported') || '该供应商暂不支持余额查询'}</div>
                                     ) : (
                                         <div>
                                             <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--accent)' }}>
@@ -1320,7 +1345,7 @@ function ApiConfigForm({ data, onChange }) {
                     <FieldInput label={isCustom ? t('apiConfig.apiAddress') : t('apiConfig.apiAddressAuto')} value={data.baseUrl} onChange={v => update('baseUrl', v)} placeholder={data.provider === 'custom-gemini' ? 'https://generativelanguage.googleapis.com/v1beta' : data.provider === 'custom-claude' ? 'https://api.anthropic.com' : t('apiConfig.apiAddressPlaceholder')} />
 
                     {/* 代理地址 */}
-                    <FieldInput label="🌐 代理地址（可选）" value={data.proxyUrl || ''} onChange={v => update('proxyUrl', v)} placeholder="http://127.0.0.1:7890" />
+                    <FieldInput label={<><Globe size={13} style={{ marginRight: 4, verticalAlign: 'text-bottom' }} />代理地址（可选）</>} value={data.proxyUrl || ''} onChange={v => update('proxyUrl', v)} placeholder="http://127.0.0.1:7890" />
                     {/* 模型选择 — 统一用弹窗管理，内联只显示当前模型 + 获取按钮 */}
                     <div style={{ marginBottom: 14 }}>
                         <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 5 }}>
@@ -1330,7 +1355,7 @@ function ApiConfigForm({ data, onChange }) {
                             <input className="modal-input" style={{ marginBottom: 0, flex: 1 }} value={data.model || ''} onChange={e => update('model', e.target.value)} placeholder={isCustom ? (data.provider === 'custom-gemini' ? '例如：gemini-2.0-flash' : data.provider === 'custom-claude' ? '例如：claude-sonnet-4-20250514' : '例如：gpt-4o-mini') : '选择或输入模型名称'} />
                             {(isCustom ? (data.apiKey && data.baseUrl) : data.apiKey) && (
                                 <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, whiteSpace: 'nowrap', flexShrink: 0 }} onClick={() => { if (Array.isArray(fetchedModels) && fetchedModels.length > 0) { setShowModelModal(true); setModelSearch(''); } else { handleFetchModels(); } }} disabled={fetchedModels === 'loading'}>
-                                    {fetchedModels === 'loading' ? '⏳ 获取中…' : Array.isArray(fetchedModels) && fetchedModels.length > 0 ? `📋 模型列表 (${fetchedModels.length})` : '📡 获取模型列表'}
+                                    {fetchedModels === 'loading' ? '获取中…' : Array.isArray(fetchedModels) && fetchedModels.length > 0 ? `模型列表 (${fetchedModels.length})` : '获取模型列表'}
                                 </button>
                             )}
                         </div>
@@ -1365,13 +1390,13 @@ function ApiConfigForm({ data, onChange }) {
                                         <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>可用模型列表</div>
                                         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{currentProvider.label} · 共 {fetchedModels.length} 个模型，勾选加入快切列表</div>
                                     </div>
-                                    <button style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--text-muted)', padding: '4px 8px', lineHeight: 1 }} onClick={() => setShowModelModal(false)}>✕</button>
+                                    <button style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--text-muted)', padding: '4px 8px', lineHeight: 1 }} onClick={() => setShowModelModal(false)}><X size={16} /></button>
                                 </div>
                                 {/* 搜索框 */}
                                 <div style={{ padding: '10px 20px 8px' }}>
                                     <input
                                         style={{ width: '100%', padding: '7px 12px', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm, 6px)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: 12, outline: 'none' }}
-                                        placeholder="🔍 搜索模型名称…"
+                                        placeholder="搜索模型名称…"
                                         value={modelSearch}
                                         onChange={e => setModelSearch(e.target.value)}
                                         autoFocus
@@ -1422,18 +1447,18 @@ function ApiConfigForm({ data, onChange }) {
                     {/* 连接测试 */}
                     <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
                         <button className="btn btn-ghost btn-sm" onClick={handleTestConnection} disabled={testStatus === 'loading'} style={{ fontSize: 12 }}>
-                            {testStatus === 'loading' ? '测试中...' : '🔌 测试连接'}
+                            {testStatus === 'loading' ? '测试中...' : <><Plug size={12} style={{ marginRight: 4 }} />测试连接</>}
                         </button>
                         {testStatus && testStatus !== 'loading' && (
                             <span style={{ fontSize: 12, color: testStatus.success ? 'var(--success)' : 'var(--error)', alignSelf: 'center' }}>
-                                {testStatus.success ? '✅ 连接成功' : `❌ ${testStatus.error || '连接失败'}`}
+                                {testStatus.success ? <><CheckCircle2 size={12} style={{ marginRight: 4 }} />连接成功</> : <><XCircle size={12} style={{ marginRight: 4 }} />{testStatus.error || '连接失败'}</>}
                             </span>
                         )}
                     </div>
 
                     {/* 搜索工具配置 */}
                     <div style={{ padding: '12px 14px', borderRadius: 'var(--radius-md)', background: 'var(--bg-secondary)', border: '1px solid var(--border-light)', marginBottom: 12 }}>
-                        <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 8 }}>🔍 {t('apiConfig.searchTools') || '联网搜索'}</div>
+                        <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 8 }}><Search size={13} style={{ marginRight: 4, verticalAlign: 'text-bottom' }} />{t('apiConfig.searchTools') || '联网搜索'}</div>
                         <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, color: 'var(--text-primary)', marginBottom: 4 }}>
                             <input type="checkbox" checked={data.tools?.searchEnabled || false} onChange={e => onChange({ ...data, tools: { ...(data.tools || {}), searchEnabled: e.target.checked } })} style={{ margin: 0 }} />
                             {t('apiConfig.enableSearch') || '启用联网搜索'}
@@ -1472,7 +1497,7 @@ function ApiConfigForm({ data, onChange }) {
                                     <FieldInput label={`${(data.searchConfig?.tool || 'Tavily').charAt(0).toUpperCase() + (data.searchConfig?.tool || 'tavily').slice(1)} API Key`} value={data.searchConfig?.apiKey || ''} onChange={v => onChange({ ...data, searchConfig: { ...(data.searchConfig || {}), apiKey: v } })} placeholder={`填入 ${data.searchConfig?.tool || 'Tavily'} API Key`} secret />
                                     {!data.searchConfig?.apiKey && (
                                         <div style={{ fontSize: 11, color: 'var(--error)', marginTop: -8, marginBottom: 6, paddingLeft: 2 }}>
-                                            ⚠️ 当前供应商需要外部搜索 API Key 才能使用联网搜索（<a href={data.searchConfig?.tool === 'exa' ? 'https://exa.ai' : 'https://tavily.com'} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>点此获取</a>）
+                                            <AlertTriangle size={12} style={{ marginRight: 4, verticalAlign: 'text-bottom' }} />当前供应商需要外部搜索 API Key 才能使用联网搜索（<a href={data.searchConfig?.tool === 'exa' ? 'https://exa.ai' : 'https://tavily.com'} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>点此获取</a>）
                                         </div>
                                     )}
                                 </div>
@@ -1482,7 +1507,7 @@ function ApiConfigForm({ data, onChange }) {
                             <>
                                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, color: 'var(--text-primary)', marginTop: 8 }}>
                                     <input type="checkbox" checked={data.tools?.codeExecution || false} onChange={e => onChange({ ...data, tools: { ...(data.tools || {}), codeExecution: e.target.checked } })} style={{ margin: 0 }} />
-                                    💻 {t('apiConfig.toolCodeExecution') || 'Code Execution（代码执行）'}
+                                    <Monitor size={13} style={{ marginRight: 4, verticalAlign: 'text-bottom' }} />{t('apiConfig.toolCodeExecution') || 'Code Execution（代码执行）'}
                                 </label>
                                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, paddingLeft: 22 }}>{t('apiConfig.toolCodeExecutionDesc') || '让 AI 编写并运行代码来解决数学计算等问题，回复中会显示代码和执行结果'}</div>
                             </>
@@ -1632,7 +1657,7 @@ function ApiConfigForm({ data, onChange }) {
                     {/* 重建向量 */}
                     <div style={{ marginTop: 8 }}>
                         <button style={{ padding: '8px 16px', border: '1px solid var(--accent)', borderRadius: 'var(--radius-md)', background: 'var(--bg-primary)', cursor: rebuildStatus && !rebuildStatus.finished ? 'wait' : 'pointer', fontSize: 12, color: 'var(--accent)', fontWeight: 500, opacity: rebuildStatus && !rebuildStatus.finished ? 0.7 : 1 }} onClick={handleRebuildEmbeddings} disabled={rebuildStatus && !rebuildStatus.finished && !rebuildStatus.error}>
-                            {rebuildStatus && !rebuildStatus.finished && !rebuildStatus.error ? `向量化中... ${rebuildStatus.done}/${rebuildStatus.total}` : '🔄 重建所有设定向量'}
+                            {rebuildStatus && !rebuildStatus.finished && !rebuildStatus.error ? `向量化中... ${rebuildStatus.done}/${rebuildStatus.total}` : <><RefreshCw size={12} style={{ marginRight: 4 }} />重建所有设定向量</>}
                         </button>
                         {rebuildStatus?.finished && (
                             <span style={{ marginLeft: 8, fontSize: 11, color: rebuildStatus.failed > 0 ? 'var(--warning)' : 'var(--success)' }}>
@@ -1700,7 +1725,7 @@ function FieldInput({ label, value, onChange, placeholder, multiline, rows, secr
                         }}
                         title={showSecret ? '隐藏' : '显示'}
                     >
-                        {showSecret ? '🙈' : '👁'}
+                        {showSecret ? <EyeOff size={14} /> : <Eye size={14} />}
                     </button>
                 )}
             </div>

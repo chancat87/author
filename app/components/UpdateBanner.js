@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { Bell, RefreshCw, X, Download } from 'lucide-react';
 import { useI18n } from '../lib/useI18n';
 
 export default function UpdateBanner() {
@@ -170,7 +171,7 @@ export default function UpdateBanner() {
     return (
         <div className="update-banner">
             <div className="update-banner-content">
-                <span className="update-banner-icon">🔔</span>
+                <span className="update-banner-icon"><Bell size={15} /></span>
                 <span className="update-banner-text">{versionText}</span>
 
                 {/* 下载完成 → 显示重启按钮（仅 Electron） */}
@@ -184,7 +185,7 @@ export default function UpdateBanner() {
                             fontWeight: 700, transition: 'all 0.15s', color: '#a7f3d0',
                         }}
                     >
-                        🔄 {t('update.restartNow') || '立即重启安装'}
+                        <RefreshCw size={13} style={{ marginRight: 4 }} />{t('update.restartNow') || '立即重启安装'}
                     </button>
                 )}
 
@@ -202,7 +203,7 @@ export default function UpdateBanner() {
                     >
                         {updating
                             ? (downloadProgress
-                                ? `⬇️ ${downloadProgress.progress}%`
+                                ? `⬇ ${downloadProgress.progress}%`
                                 : sourceProgress
                                     ? `${sourceProgress.label} (${sourceProgress.step}/${sourceProgress.total})`
                                     : t('update.updating'))
@@ -289,7 +290,7 @@ export default function UpdateBanner() {
                     onClick={handleDismiss}
                     title={t('update.dismiss')}
                 >
-                    ✕
+                    <X size={14} />
                 </button>
             </div>
         </div>

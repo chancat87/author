@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { Sparkles } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { useI18n } from '../lib/useI18n';
 
@@ -166,7 +167,7 @@ export default function TourOverlay({ onOpenHelp }) {
         return (
             <div className="tour-overlay-bg">
                 <div className="tour-intro-modal">
-                    <div className="tour-intro-icon">✨</div>
+                    <div className="tour-intro-icon"><Sparkles size={28} /></div>
                     <h2>{t('tour.introTitle')}</h2>
                     <p>{t('tour.introSubtitle')}</p>
                     <p className="tour-intro-sub">{t('tour.introHint')}</p>
