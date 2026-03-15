@@ -56,7 +56,7 @@ function MiniProviderIcon({ provider, model, size = 22 }) {
 
 /**
  * ModelPicker — 快速模型切换器
- * @param {string} target 'chat' | 'editor'
+ * @param {string} target 'chat' | 'editor' | 'embed'
  * @param {function} onOpenSettings 跳转到设置面板
  * @param {string} className 附加样式类
  */
@@ -75,7 +75,15 @@ export default function ModelPicker({ target = 'editor', onOpenSettings, classNa
     // 读取当前配置
     const refreshConfig = useCallback(() => {
         const settings = getProjectSettings();
-        if (target === 'chat') {
+        if (target === 'embed') {
+            const ac = settings.apiConfig || {};
+            setConfig({
+                active: { provider: ac.embedProvider || '', model: ac.embedModel || '', apiKey: ac.embedApiKey || ac.apiKey || '' },
+                isFallback: false,
+                providerConfigs: ac.embedProviderConfigs || {},
+                mainApiKey: ac.apiKey,
+            });
+        } else if (target === 'chat') {
             setConfig({
                 active: getChatApiConfig(),
                 isFallback: !settings.chatApiConfig?.provider,
@@ -143,7 +151,9 @@ export default function ModelPicker({ target = 'editor', onOpenSettings, classNa
 
         for (const p of PROVIDERS) {
             const cfg = pc[p.key];
-            const hasKey = !!(cfg?.apiKey || (config.active?.provider === p.key && config.active?.apiKey) || (config.mainProvider === p.key && config.mainApiKey));
+            const hasKey = target === 'embed'
+                ? !!(cfg?.apiKey || (config.active?.provider === p.key && config.active?.apiKey) || config.mainApiKey)
+                : !!(cfg?.apiKey || (config.active?.provider === p.key && config.active?.apiKey) || (config.mainProvider === p.key && config.mainApiKey));
             // 只显示用户在设置中勾选加入快切列表的模型
             const userModels = cfg?.models || [];
 
@@ -177,6 +187,35 @@ export default function ModelPicker({ target = 'editor', onOpenSettings, classNa
     // 切换模型
     const selectModel = useCallback((providerKey, modelId) => {
         const settings = getProjectSettings();
+
+        if (target === 'embed') {
+            // 嵌入模型切换
+            const ac = settings.apiConfig || {};
+            const epc = { ...(ac.embedProviderConfigs || {}) };
+            const providerCfg = epc[providerKey] || {};
+            const providerDef = PROVIDERS.find(p => p.key === providerKey);
+
+            // 保存当前 embed 供应商配置
+            if (ac.embedProvider && ac.embedProvider !== providerKey) {
+                if (!epc[ac.embedProvider]) epc[ac.embedProvider] = {};
+                epc[ac.embedProvider].apiKey = ac.embedApiKey || '';
+                epc[ac.embedProvider].baseUrl = ac.embedBaseUrl || '';
+                epc[ac.embedProvider].model = ac.embedModel || '';
+            }
+
+            ac.embedProvider = providerKey;
+            ac.embedModel = modelId;
+            ac.embedApiKey = providerCfg.apiKey || '';
+            ac.embedBaseUrl = providerCfg.baseUrl || providerDef?.baseUrl || '';
+            ac.embedProviderConfigs = epc;
+            settings.apiConfig = ac;
+            saveProjectSettings(settings);
+            refreshConfig();
+            setOpen(false);
+            setSearch('');
+            return;
+        }
+
         const pc = settings.apiConfig.providerConfigs || {};
         const providerCfg = pc[providerKey] || {};
         const providerDef = PROVIDERS.find(p => p.key === providerKey);
@@ -241,6 +280,8 @@ export default function ModelPicker({ target = 'editor', onOpenSettings, classNa
     const displayModel = activeModel.length > 28 ? activeModel.slice(0, 26) + '…' : activeModel;
     const targetLabel = target === 'chat'
         ? (t('modelPicker.chatModel') || '对话')
+        : target === 'embed'
+        ? '嵌入'
         : (t('modelPicker.editorModel') || '编辑');
 
     return (
@@ -252,9 +293,9 @@ export default function ModelPicker({ target = 'editor', onOpenSettings, classNa
                 onClick={() => { setOpen(!open); if (!open) refreshConfig(); }}
                 title={`${targetLabel}: ${providerDef?.label || activeProvider} / ${activeModel}`}
             >
-                <MiniProviderIcon provider={activeProvider} model={activeModel} />
+                {target === 'embed' ? <span style={{ fontSize: 12 }}>📐</span> : <MiniProviderIcon provider={activeProvider} model={activeModel} />}
                 <span className="model-picker-label">
-                    {displayModel || (t('modelPicker.notConfigured') || '未配置')}
+                    {displayModel || (target === 'embed' ? '嵌入未配置' : (t('modelPicker.notConfigured') || '未配置'))}
                 </span>
                 {target === 'chat' && config.isFallback && (
                     <span className="model-picker-badge">{t('modelPicker.follow') || '跟随'}</span>

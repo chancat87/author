@@ -1486,6 +1486,9 @@ function EditorToolbar({ editor, margins, setMargins }) {
             {/* 编辑器 AI 模型切换器 */}
             <ModelPicker target="editor" dropDirection="down" />
 
+            {/* 嵌入模型快切 */}
+            <ModelPicker target="embed" dropDirection="down" />
+
             <div className="toolbar-divider" />
 
             {/* 撤销/重做 */}

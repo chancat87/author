@@ -6,12 +6,14 @@ import { useAppStore } from '../store/useAppStore';
 import { useI18n } from '../lib/useI18n';
 import { createChapter, deleteChapter, updateChapter, saveChapters, getChapters, createVolume, insertChapterInVolume, reorderItems } from '../lib/storage';
 import { exportProject, importProject, importWork, exportWorkAsTxt, exportWorkAsMarkdown, exportWorkAsDocx, exportWorkAsEpub, exportWorkAsPdf } from '../lib/project-io';
-import { WRITING_MODES, getAllWorks, getSettingsNodes, addWork, saveSettingsNodes, setActiveWorkId as setActiveWorkIdSetting } from '../lib/settings';
+import { WRITING_MODES, getAllWorks, getSettingsNodes, addWork, saveSettingsNodes, setActiveWorkId as setActiveWorkIdSetting, getActiveWorkId } from '../lib/settings';
 import { detectConflicts, mergeChapters } from '../lib/chapter-number';
 import { estimateTokens } from '../lib/context-engine';
 import { Settings, Moon, Sun, History, Save, FolderOpen, FileDown, BookOpen, HelpCircle, Github, PanelLeftClose, ListOrdered, Library, Plus, FileText, FileType, BookMarked, FileOutput, Printer, Book, X, MoreHorizontal, ChevronUp, KeyRound, SlidersHorizontal, Eye, Smartphone, Clapperboard } from 'lucide-react';
 import Tooltip from './ui/Tooltip';
 import IconButton from './ui/IconButton';
+import SettingsCategoryPanel, { getCategoryIcon, getCategoryColor, getCategoryLabel, getIconByName } from './SettingsCategoryPanel';
+import SettingsCategoryPopover, { getPinnedCategories, savePinnedCategories } from './SettingsCategoryPopover';
 
 /** 更多操作下拉菜单（Portal 渲染到 body，彻底避免 overflow 裁剪） */
 function MoreMenuPortal({ anchorRef, t, setShowSettings, setShowMoreMenu, onOpenHelp, setShowGitPopup }) {
@@ -74,7 +76,9 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
         writingMode,
         setShowSettings,
         setShowSnapshots,
-        showToast
+        showToast,
+        setOpenCategoryModal,
+        settingsVersion,
     } = useAppStore();
 
     const [renameId, setRenameId] = useState(null);
@@ -87,6 +91,13 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
     const [showGitPopup, setShowGitPopup] = useState(false);
     const [showMoreMenu, setShowMoreMenu] = useState(false); // "更多操作" 下拉菜单
     const moreMenuAnchorRef = useRef(null);
+    const [activeNavTab, setActiveNavTab] = useState('chapters'); // 'chapters' | 'character' | 'location' | 'world' | 'object' | 'plot' | 'rules'
+    const [showCategoryPopover, setShowCategoryPopover] = useState(false);
+    const categoryPopoverAnchorRef = useRef(null);
+    const [pinnedCategories, setPinnedCategories] = useState(() => getPinnedCategories());
+    const [navDragCat, setNavDragCat] = useState(null); // 拖拽中的分类
+    const [navDragOverCat, setNavDragOverCat] = useState(null); // 拖拽悬停目标
+    const [catCustomIcons, setCatCustomIcons] = useState({}); // category → customIconName
     const [outlineCollapsed, setOutlineCollapsed] = useState(false); // 手动折叠大纲
     const [headings, setHeadings] = useState([]); // 文档大纲标题列表
     const [headingStats, setHeadingStats] = useState([]); // 每个标题下的字数+token
@@ -97,6 +108,22 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
     const [dragOverPos, setDragOverPos] = useState(null); // 'top' | 'bottom'
     const [activeVolumeId, setActiveVolumeId] = useState(null); // 当前选中的分卷
     const { t } = useI18n();
+
+    // 加载分类自定义图标（当 settingsVersion 变化时刷新）
+    useEffect(() => {
+        (async () => {
+            const workId = getActiveWorkId();
+            if (!workId) return;
+            const nodes = await getSettingsNodes(workId);
+            const iconMap = {};
+            nodes.forEach(n => {
+                if (n.type === 'folder' && n.parentId === workId && n.icon) {
+                    iconMap[n.category] = n.icon;
+                }
+            });
+            setCatCustomIcons(iconMap);
+        })();
+    }, [settingsVersion, activeWorkId]);
 
     // 切换主题
     const toggleTheme = useCallback(() => {
@@ -539,8 +566,96 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                 {/* ===== 左侧垂直导航栏 (Nav Pane) ===== */}
                 <div className={`sidebar-nav-pane${sidebarOpen ? ' sidebar-nav-expanded' : ''}`}>
                     <div className="sidebar-nav-top">
-                        <IconButton icon={<BookOpen size={18} />} label={t('sidebar.chapterList') || '章节大纲'} text={sidebarOpen ? (t('sidebar.navChapter') || '章节') : undefined} tooltipSide="right" className="nav-item active" onClick={() => setSidebarOpen(!sidebarOpen)} />
-                        <IconButton icon={<Library size={18} />} label={t('sidebar.tooltipSettings') || '设定集管理'} text={sidebarOpen ? (t('sidebar.navSettings') || '设定集') : undefined} tooltipSide="right" onClick={() => setShowSettings('settings')} className="nav-item" />
+                        {/* 章节 */}
+                        <IconButton icon={<BookOpen size={18} />} label={t('sidebar.chapterList') || '章节大纲'} text={sidebarOpen ? (t('sidebar.navChapter') || '章节') : undefined} tooltipSide="right" className={`nav-item ${activeNavTab === 'chapters' ? 'active' : ''}`} onClick={() => { if (activeNavTab === 'chapters' && sidebarOpen) { setSidebarOpen(false); } else { setActiveNavTab('chapters'); setSidebarOpen(true); } }} />
+                        
+                        <div className="nav-category-divider" />
+                        
+                        {/* 设定集 + 分类快捷入口 视觉分组 */}
+                        <div className="nav-settings-group" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', borderWidth: 1, borderStyle: 'solid', borderColor: 'var(--border-light, #e5e7eb)', borderRadius: 12, padding: '4px 2px', margin: '0 3px', background: 'var(--bg-secondary, #f9fafb)', gap: 1 }}>
+                        {/* 设定集 — 弹出缩略图菜单 */}
+                        <div ref={categoryPopoverAnchorRef}>
+                            <IconButton icon={<Library size={18} />} label={showCategoryPopover ? '' : (t('sidebar.tooltipSettings') || '设定集管理')} text={sidebarOpen ? (t('sidebar.navSettings') || '设定集') : undefined} tooltipSide="right" onClick={() => { setSidebarOpen(false); setShowCategoryPopover(!showCategoryPopover); }} className="nav-item" />
+                            {showCategoryPopover && (
+                                <SettingsCategoryPopover
+                                    anchorRef={categoryPopoverAnchorRef}
+                                    onClose={() => {
+                                        setShowCategoryPopover(false);
+                                        setPinnedCategories(getPinnedCategories());
+                                    }}
+                                    onOpenCategory={(category) => {
+                                        setOpenCategoryModal(category);
+                                        setShowCategoryPopover(false);
+                                    }}
+                                    onAddCategory={() => setShowSettings('settings')}
+                                />
+                            )}
+                        </div>
+                        
+                        {pinnedCategories.length > 0 && <div className="nav-settings-divider" style={{ width: 20, height: 1, background: 'var(--border-light, #e5e7eb)', margin: '3px auto' }} />}
+                        
+                        {/* 导航栏分类快捷入口（可拖拽排序） */}
+                        {pinnedCategories.map(cat => {
+                            const CatIcon = getCategoryIcon(cat, catCustomIcons[cat]);
+                            const colors = getCategoryColor(cat);
+                            const catLabel = getCategoryLabel(cat, t);
+                            const isDragging = navDragCat === cat;
+                            const isDragOver = navDragOverCat === cat;
+                            return (
+                                <div
+                                    key={cat}
+                                    draggable
+                                    onDragStart={(e) => {
+                                        setNavDragCat(cat);
+                                        e.dataTransfer.effectAllowed = 'move';
+                                        e.dataTransfer.setData('text/plain', cat);
+                                    }}
+                                    onDragEnd={() => {
+                                        setNavDragCat(null);
+                                        setNavDragOverCat(null);
+                                    }}
+                                    onDragOver={(e) => {
+                                        e.preventDefault();
+                                        e.dataTransfer.dropEffect = 'move';
+                                        if (navDragOverCat !== cat) setNavDragOverCat(cat);
+                                    }}
+                                    onDragLeave={() => {
+                                        if (navDragOverCat === cat) setNavDragOverCat(null);
+                                    }}
+                                    onDrop={(e) => {
+                                        e.preventDefault();
+                                        const from = navDragCat;
+                                        const to = cat;
+                                        if (from && to && from !== to) {
+                                            const newList = [...pinnedCategories];
+                                            const fromIdx = newList.indexOf(from);
+                                            const toIdx = newList.indexOf(to);
+                                            if (fromIdx !== -1 && toIdx !== -1) {
+                                                newList.splice(fromIdx, 1);
+                                                newList.splice(toIdx, 0, from);
+                                                setPinnedCategories(newList);
+                                                savePinnedCategories(newList);
+                                            }
+                                        }
+                                        setNavDragCat(null);
+                                        setNavDragOverCat(null);
+                                    }}
+                                    className={`nav-drag-wrapper${isDragging ? ' nav-dragging' : ''}${isDragOver ? ' nav-drag-over' : ''}`}
+                                >
+                                    <IconButton
+                                        icon={<CatIcon size={18} style={{ color: activeNavTab === cat ? colors.color : undefined }} />}
+                                        label={catLabel}
+                                        text={sidebarOpen ? catLabel : undefined}
+                                        tooltipSide="right"
+                                        className={`nav-item ${activeNavTab === cat ? 'active' : ''}`}
+                                        onClick={() => {
+                                            setOpenCategoryModal(cat);
+                                        }}
+                                    />
+                                </div>
+                            );
+                        })}
+                        </div>
                     </div>
                     <div className="sidebar-nav-bottom">
                         <IconButton icon={theme === 'light' ? <Moon size={18} /> : <Sun size={18} />} label={theme === 'light' ? t('sidebar.tooltipThemeDark') : t('sidebar.tooltipThemeLight')} text={sidebarOpen ? (theme === 'light' ? (t('sidebar.navThemeDark') || '暗色') : (t('sidebar.navThemeLight') || '亮色')) : undefined} tooltipSide="right" onClick={toggleTheme} className="nav-item" />
@@ -561,6 +676,8 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
 
                 {/* ===== 右侧内容区 (Content Pane) ===== */}
                 <div className="sidebar-content-pane">
+                    {activeNavTab === 'chapters' ? (
+                    <>
                     {/* ===== 文档分页 ===== */}
                 <div className="gdocs-section-header">
                     <span className="gdocs-section-title">文档分页</span>
@@ -782,6 +899,10 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                             <button className="btn btn-secondary btn-sm" style={{ flex: 1, justifyContent: 'center', fontSize: '11px' }} onClick={() => setShowExportModal(true)}>{t('sidebar.exportMore') || '导出更多'}</button>
                         </div>
                     </div>
+                    </>
+                    ) : (
+                        <SettingsCategoryPanel category={activeNavTab} />
+                    )}
                 </div>
 
                 {/* 隐藏的文件输入组件 */}

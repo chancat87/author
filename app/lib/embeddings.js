@@ -12,6 +12,8 @@ const EMBED_BACKOFF_MS = 60000;
  */
 export async function getEmbedding(text, apiConfig) {
     if (!text || text.trim() === '') return null;
+    // 没有配置 Embedding Key 时静默跳过，不发请求
+    if (!apiConfig?.embeddingApiKey && !apiConfig?.apiKey) return null;
     // 如果上次失败的退避期还没过，直接跳过
     if (Date.now() < _embedErrorUntil) return null;
 

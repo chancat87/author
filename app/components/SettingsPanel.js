@@ -7,7 +7,11 @@ import {
     ClipboardList, Ruler, Upload, Download, Trash2, X, Maximize2, Minimize2,
     FileText, Sparkles, Search, Coins, Plug, Radio, RefreshCw, CheckCircle2,
     XCircle, AlertTriangle, Globe2, Shuffle, Eye, EyeOff, Ban, Pencil, FolderOpen,
-    Bell, RotateCcw, Monitor, CircleDot, Smartphone, Clapperboard
+    Bell, RotateCcw, Monitor, CircleDot, Smartphone, Clapperboard,
+    Heart, Star, Shield, Zap, Feather, Compass, Flag, Tag, Layers,
+    Bookmark, Crown, Flame, Lightbulb, Music, Palette, Sword, Target,
+    Moon, Sun, Cloud, TreePine, Mountain, Waves, Building, Car,
+    Plus
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import {
@@ -68,6 +72,26 @@ const CAT_STYLES = {
     rules: { color: 'var(--cat-rules)', bg: 'var(--cat-rules-bg)' },
 };
 
+// 图标映射（与 CategorySettingsModal 共用同一套图标）
+const ICON_MAP = {
+    FolderOpen, User, MapPin, Globe, Gem, ClipboardList, Ruler,
+    Heart, Star, Shield, Zap, Feather, Compass, Flag, Tag, Layers,
+    Bookmark, Crown, Flame, Lightbulb, Music, Palette, Sword, Target,
+    Moon, Sun, Cloud, TreePine, Mountain, Waves, Building, Car,
+    FileText, BookOpen,
+};
+const ICON_GRID = [
+    'User', 'Heart', 'Star', 'Shield', 'Zap', 'Crown',
+    'Sword', 'Flag', 'Target', 'Compass', 'Feather', 'Flame',
+    'Lightbulb', 'Moon', 'Sun', 'Cloud', 'TreePine', 'Mountain',
+    'Waves', 'Building', 'Music', 'Palette', 'Bookmark', 'BookOpen',
+    'MapPin', 'Globe', 'Gem', 'Tag', 'Layers', 'Car',
+    'ClipboardList', 'Ruler', 'FolderOpen', 'FileText',
+];
+function getIconByName(name) {
+    return ICON_MAP[name] || null;
+}
+
 export default function SettingsPanel() {
     const {
         showSettings: open,
@@ -99,6 +123,8 @@ export default function SettingsPanel() {
     const [expandedCategory, setExpandedCategory] = useState(null);
     const [showExportFormat, setShowExportFormat] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(false);
+    const [iconPickerCat, setIconPickerCat] = useState(null); // 当前打开图标选择器的分类
+    const [iconPickerRect, setIconPickerRect] = useState(null);
 
     // 删除确认弹窗状态
     const [deleteConfirm, setDeleteConfirm] = useState(null); // { message, onConfirm }
@@ -151,13 +177,52 @@ export default function SettingsPanel() {
 
     const stats = useMemo(() => {
         const items = visibleNodes.filter(n => n.type === 'item');
-        return Object.entries(CAT_STYLES).filter(([cat]) => cat !== 'work').map(([cat, style]) => ({
+        const workId = getActiveWorkId();
+        // 内置分类
+        const builtIn = Object.entries(CAT_STYLES).filter(([cat]) => cat !== 'work').map(([cat, style]) => {
+            const rf = visibleNodes.find(n => n.type === 'folder' && n.category === cat && n.parentId && n.parentId.startsWith('work-') && !visibleNodes.some(p => p.id === n.parentId));
+            return {
+                category: cat,
+                count: items.filter(n => n.category === cat).length,
+                label: t(`settings.categories.${cat}`),
+                customIcon: rf?.icon || null,
+                rootFolderId: rf?.id || null,
+                ...style,
+            };
+        });
+        // 用户自建分类（parentId === workId 的 folder，且 category 不在 CAT_STYLES 内）
+        const builtInCats = new Set(Object.keys(CAT_STYLES));
+        const customFolders = visibleNodes.filter(n =>
+            n.type === 'folder' && n.parentId === workId && !builtInCats.has(n.category)
+        );
+        // 按 category 分组，每个唯一 category 只出一张卡片
+        const customCatMap = new Map();
+        customFolders.forEach(rf => {
+            if (!customCatMap.has(rf.category)) {
+                customCatMap.set(rf.category, rf);
+            }
+        });
+        const custom = Array.from(customCatMap.entries()).map(([cat, rf]) => ({
             category: cat,
             count: items.filter(n => n.category === cat).length,
-            label: t(`settings.categories.${cat}`),
-            ...style,
+            label: rf.name || cat,
+            customIcon: rf.icon || null,
+            rootFolderId: rf.id,
+            color: 'var(--cat-custom, #64748b)',
+            bg: 'var(--cat-custom-bg, rgba(100,116,139,0.08))',
+            isCustom: true,
         }));
+        return [...builtIn, ...custom];
     }, [visibleNodes, t]);
+
+    // 更换分类图标
+    const handleChangeCatIcon = async (category, iconName) => {
+        const catStat = stats.find(s => s.category === category);
+        if (!catStat?.rootFolderId) return;
+        await updateSettingsNode(catStat.rootFolderId, { icon: iconName });
+        setNodes(prev => prev.map(n => n.id === catStat.rootFolderId ? { ...n, icon: iconName } : n));
+        setIconPickerCat(null);
+    };
 
     const handleSwitchWork = async (workId) => {
         setActiveWorkIdState(workId);
@@ -614,171 +679,308 @@ export default function SettingsPanel() {
                     </div>
                 ) : (
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                        {/* 写作模式选择器 */}
-                        <div style={{ display: 'flex', gap: 10, padding: '14px 24px', borderBottom: '1px solid var(--border-light)', background: 'var(--bg-secondary)' }}>
-                            {Object.values(WRITING_MODES).map(m => (
-                                <button
-                                    key={m.key}
-                                    className={`writing-mode-card ${writingMode === m.key ? 'active' : ''}`}
+                        {/* 作品切换器 - 下拉菜单 */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 24px', borderBottom: '1px solid var(--border-light)', background: 'var(--bg-secondary)' }}>
+                            <BookOpen size={15} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                            <span style={{ fontSize: 13, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{t('settings.workLabel')}</span>
+                            <div style={{ position: 'relative', flex: '0 1 auto' }}>
+                                <select
+                                    value={activeWorkId || ''}
+                                    onChange={e => handleSwitchWork(e.target.value)}
                                     style={{
-                                        border: writingMode === m.key ? `2px solid ${m.color}` : '1px solid var(--border-light)',
-                                        background: writingMode === m.key ? `${m.color}10` : 'var(--bg-primary)',
+                                        padding: '6px 36px 6px 12px',
+                                        border: '1.5px solid var(--accent, #6366f1)',
+                                        borderRadius: 10,
+                                        background: 'var(--bg-card, #fff)',
+                                        color: 'var(--text-primary)',
+                                        fontSize: 13, fontWeight: 600,
+                                        cursor: 'pointer', outline: 'none',
+                                        appearance: 'none', WebkitAppearance: 'none',
+                                        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236366f1' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 10l5 5 5-5'/%3E%3C/svg%3E")`,
+                                        backgroundRepeat: 'no-repeat',
+                                        backgroundPosition: 'right 10px center',
+                                        boxShadow: '0 1px 4px rgba(99,102,241,0.08)',
+                                        transition: 'all 0.15s',
+                                        minWidth: 100,
                                     }}
-                                    onClick={() => { setWritingModeState(m.key); setWritingMode(m.key); }}
+                                    onFocus={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.boxShadow = '0 0 0 3px var(--accent-glow, rgba(99,102,241,0.15))'; }}
+                                    onBlur={e => { e.currentTarget.style.borderColor = 'var(--accent, #6366f1)'; e.currentTarget.style.boxShadow = '0 1px 4px rgba(99,102,241,0.08)'; }}
                                 >
-                                    <div style={{ fontSize: 18, marginBottom: 4 }}>
-                                        {m.icon === 'smartphone' ? <Smartphone size={18} /> : m.icon === 'book-open' ? <BookOpen size={18} /> : m.icon === 'clapperboard' ? <Clapperboard size={18} /> : null}
-                                    </div>
-                                    <div style={{ fontSize: 13, fontWeight: 600, color: writingMode === m.key ? m.color : 'var(--text-primary)', marginBottom: 2 }}>{m.label}</div>
-                                    <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.4 }}>{m.desc}</div>
-                                </button>
-                            ))}
+                                    {works.map(w => (
+                                        <option key={w.id} value={w.id}>{w.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            {showNewWorkInput ? (
+                                <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                                    <input style={{ padding: '5px 10px', border: '1.5px solid var(--accent)', borderRadius: 10, fontSize: 12, background: 'var(--bg-primary)', color: 'var(--text-primary)', outline: 'none', width: 120 }}
+                                        value={newWorkName} onChange={e => setNewWorkName(e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Enter') handleCreateWork(); if (e.key === 'Escape') setShowNewWorkInput(false); }}
+                                        placeholder={t('settings.workNamePlaceholder')} autoFocus />
+                                    <button className="btn btn-primary btn-sm" style={{ padding: '4px 10px', fontSize: 11, borderRadius: 8 }} onClick={handleCreateWork}>{t('settings.confirmBtn')}</button>
+                                    <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => setShowNewWorkInput(false)}>{t('common.cancel')}</button>
+                                </div>
+                            ) : (
+                                <button style={{ padding: '5px 10px', border: '1px dashed var(--border-light)', borderRadius: 8, background: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)', transition: 'all 0.15s' }}
+                                    onClick={() => { setNewWorkName(''); setShowNewWorkInput(true); }}>{t('settings.newWork')}</button>
+                            )}
+                            {works.length > 1 && (
+                                <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 11, padding: '4px 6px', opacity: 0.7, transition: 'opacity 0.15s' }}
+                                    onClick={() => handleDeleteWork(activeWorkId)} title={t('common.delete')}
+                                    onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+                                    onMouseLeave={e => e.currentTarget.style.opacity = '0.7'}
+                                ><Trash2 size={13} /></button>
+                            )}
+                            {/* 右侧导入导出清空 */}
+                            <div style={{ marginLeft: 'auto', display: 'flex', gap: 2, alignItems: 'center', position: 'relative' }}>
+                                <div style={{ position: 'relative', display: 'inline-block' }}>
+                                    <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '4px 6px', borderRadius: 6, transition: 'all 0.15s' }}
+                                        onClick={() => setShowExportFormat(!showExportFormat)} title={t('settings.exportSettingsTitle')}
+                                        onMouseEnter={e => { e.currentTarget.style.color = 'var(--accent)'; e.currentTarget.style.background = 'var(--accent-light, rgba(99,102,241,0.08))'; }}
+                                        onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'none'; }}
+                                    ><Upload size={13} /></button>
+                                    {showExportFormat && (
+                                        <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--bg-primary)', border: '1px solid var(--border-light)', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 20, overflow: 'hidden', minWidth: 120 }}>
+                                            {[{ key: 'json', label: 'JSON (完整)' }, { key: 'txt', label: 'TXT (纯文本)' }, { key: 'md', label: 'Markdown' }, { key: 'docx', label: 'Word (.docx)' }, { key: 'pdf', label: 'PDF (打印)' }].map(f => (
+                                                <button key={f.key} style={{ display: 'block', width: '100%', padding: '8px 14px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--text-primary)', textAlign: 'left', transition: 'background 0.1s' }}
+                                                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
+                                                    onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                                                    onClick={() => handleExportSettings(f.key)}
+                                                ><FileText size={12} style={{ marginRight: 6 }} />{f.label}</button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                                <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '4px 6px', borderRadius: 6, transition: 'all 0.15s' }}
+                                    onClick={() => document.getElementById('settings-import-input')?.click()} title={t('settings.importSettings')}
+                                    onMouseEnter={e => { e.currentTarget.style.color = 'var(--accent)'; e.currentTarget.style.background = 'var(--accent-light, rgba(99,102,241,0.08))'; }}
+                                    onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'none'; }}
+                                ><Download size={13} /></button>
+                                <input id="settings-import-input" type="file" accept=".json,.txt,.md,.docx,.pdf,.pmpx" onChange={handleImportSettings} style={{ display: 'none' }} />
+                                <div style={{ width: 1, height: 14, background: 'var(--border-light)', margin: '0 2px' }} />
+                                <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '4px 6px', borderRadius: 6, transition: 'all 0.15s' }}
+                                    onClick={handleClearAllItems} title={t('settings.clearAll') || '清空设定'}
+                                    onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = 'rgba(239,68,68,0.08)'; }}
+                                    onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'none'; }}
+                                ><Trash2 size={13} /></button>
+                            </div>
                         </div>
 
-                        {/* 作品切换器 */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 24px', borderBottom: '1px solid var(--border-light)', background: 'var(--bg-primary)' }}>
-                            <span style={{ fontSize: 13, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{t('settings.workLabel')}</span>
-                            <div style={{ display: 'flex', gap: 6, flex: 1, flexWrap: 'wrap', alignItems: 'center' }}>
-                                {works.map(w => (
-                                    <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
-                                        <button
-                                            style={{
-                                                padding: '5px 12px', border: activeWorkId === w.id ? '2px solid var(--cat-work)' : '1px solid var(--border-light)',
-                                                borderRadius: 'var(--radius-sm)', background: activeWorkId === w.id ? 'var(--cat-work-bg)' : 'var(--bg-secondary)',
-                                                cursor: 'pointer', fontSize: 12, fontWeight: activeWorkId === w.id ? 600 : 400,
-                                                color: activeWorkId === w.id ? 'var(--cat-work)' : 'var(--text-primary)', transition: 'all 0.15s',
+                        {/* ===== 分类看板 ===== */}
+                        <div style={{ flex: 1, padding: '24px 28px', overflow: 'auto' }}>
+                            {/* 统计摘要 */}
+                            <div style={{ display: 'flex', gap: 12, marginBottom: 20, maxWidth: 880, margin: '0 auto 20px' }}>
+                                <div style={{ padding: '10px 16px', borderRadius: 12, background: 'var(--bg-secondary)', border: '1px solid var(--border-light)', flex: 1 }}>
+                                    <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 700, marginBottom: 4 }}>词条总数</div>
+                                    <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>
+                                        {stats.reduce((s, c) => s + c.count, 0)}
+                                        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400, marginLeft: 6 }}>条设定</span>
+                                    </div>
+                                </div>
+                                <div style={{ padding: '10px 16px', borderRadius: 12, background: 'var(--bg-secondary)', border: '1px solid var(--border-light)', flex: 1 }}>
+                                    <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 700, marginBottom: 4 }}>分类数</div>
+                                    <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>
+                                        {stats.length}
+                                        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400, marginLeft: 6 }}>个分类</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 分类卡片网格 */}
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16, maxWidth: 880, margin: '0 auto' }}>
+                                {stats.map(cat => {
+                                    const defaultIcon = CAT_ICONS[cat.category] || FileText;
+                                    const CustomIcon = cat.customIcon ? (getIconByName(cat.customIcon) || defaultIcon) : defaultIcon;
+                                    const Icon = CustomIcon;
+                                    const color = CAT_STYLES[cat.category]?.color || '#64748b';
+                                    const bg = CAT_STYLES[cat.category]?.bg || 'var(--bg-secondary)';
+                                    // 获取该分类最近的几个条目名称
+                                    const catItems = visibleNodes
+                                        .filter(n => n.type === 'item' && n.category === cat.category && n.name)
+                                        .slice(0, 3)
+                                        .map(n => n.name);
+                                    const isPickerOpen = iconPickerCat === cat.category;
+                                    return (
+                                        <div key={cat.category} style={{ position: 'relative' }}>
+                                        <button style={{
+                                            position: 'relative', display: 'flex', flexDirection: 'column',
+                                            padding: '20px 22px 16px', textAlign: 'left', width: '100%',
+                                            border: '1px solid var(--border-light)', borderRadius: 18,
+                                            background: 'var(--bg-primary)',
+                                            cursor: 'pointer', transition: 'all 0.25s ease', overflow: 'hidden',
+                                            minHeight: 170,
+                                        }}
+                                            onClick={() => { onClose(); setTimeout(() => useAppStore.getState().setOpenCategoryModal(cat.category), 80); }}
+                                            onMouseEnter={e => {
+                                                e.currentTarget.style.transform = 'translateY(-4px)';
+                                                e.currentTarget.style.boxShadow = `0 12px 32px ${color}18, 0 0 0 1px ${color}30`;
+                                                e.currentTarget.style.borderColor = `${color}50`;
                                             }}
-                                            onClick={() => handleSwitchWork(w.id)}
+                                            onMouseLeave={e => {
+                                                e.currentTarget.style.transform = 'none';
+                                                e.currentTarget.style.boxShadow = 'none';
+                                                e.currentTarget.style.borderColor = 'var(--border-light)';
+                                            }}
                                         >
-                                            {w.name}
+                                            {/* 顶部：图标 + 计数 */}
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, width: '100%' }}>
+                                                <span
+                                                    title="点击更换图标"
+                                                    onClick={e => {
+                                                        e.stopPropagation();
+                                                        const rect = e.currentTarget.getBoundingClientRect();
+                                                        setIconPickerRect(rect);
+                                                        setIconPickerCat(isPickerOpen ? null : cat.category);
+                                                    }}
+                                                    style={{
+                                                        width: 44, height: 44, borderRadius: 13,
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                        color: '#fff', background: color,
+                                                        boxShadow: `0 6px 16px ${color}30`,
+                                                        cursor: 'pointer', transition: 'transform 0.15s',
+                                                    }}
+                                                    onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.12)'; }}
+                                                    onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+                                                >
+                                                    <Icon size={22} />
+                                                </span>
+                                                <div style={{ textAlign: 'right' }}>
+                                                    <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1, letterSpacing: '-0.5px' }}>
+                                                        {cat.count}
+                                                    </div>
+                                                    <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 2, fontWeight: 700, marginTop: 2 }}>
+                                                        ITEMS
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* 标题 */}
+                                            <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 10 }}>
+                                                {cat.label}
+                                            </div>
+
+                                            {/* 预览条目 */}
+                                            <div style={{ flex: 1, marginBottom: 12 }}>
+                                                {catItems.length > 0 ? catItems.map((name, idx) => (
+                                                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)', marginBottom: 4, lineHeight: 1.4 }}>
+                                                        <span style={{ width: 4, height: 4, borderRadius: 2, background: color, flexShrink: 0 }} />
+                                                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                                                    </div>
+                                                )) : (
+                                                    <div style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic', opacity: 0.6 }}>暂无条目</div>
+                                                )}
+                                            </div>
+
+                                            {/* 底部 */}
+                                            <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                                                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                                                    {cat.count > 0 ? `共 ${cat.count} 条` : '点击创建'}
+                                                </span>
+                                                <span style={{ width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-secondary)' }}>
+                                                    <span style={{ fontSize: 14, color: 'var(--text-muted)', lineHeight: 1 }}>›</span>
+                                                </span>
+                                            </div>
+
+                                            {/* 装饰水印图标 */}
+                                            <div style={{ position: 'absolute', bottom: 8, right: 8, opacity: 0.04, pointerEvents: 'none' }}>
+                                                <Icon size={64} />
+                                            </div>
                                         </button>
-                                        {works.length > 1 && (
-                                            <button
-                                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 10, padding: '2px 4px', lineHeight: 1, opacity: 0.6 }}
-                                                onClick={() => handleDeleteWork(w.id)}
-                                                title={t('common.delete') + ' ' + w.name}
-                                            ><X size={10} /></button>
-                                        )}
-                                    </div>
-                                ))}
-                                {showNewWorkInput ? (
-                                    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                                        <input
-                                            style={{ padding: '4px 8px', border: '1px solid var(--accent)', borderRadius: 'var(--radius-sm)', fontSize: 12, background: 'var(--bg-primary)', color: 'var(--text-primary)', outline: 'none', width: 120 }}
-                                            value={newWorkName}
-                                            onChange={e => setNewWorkName(e.target.value)}
-                                            onKeyDown={e => { if (e.key === 'Enter') handleCreateWork(); if (e.key === 'Escape') setShowNewWorkInput(false); }}
-                                            placeholder={t('settings.workNamePlaceholder')}
-                                            autoFocus
-                                        />
-                                        <button className="btn btn-primary btn-sm" style={{ padding: '4px 10px', fontSize: 11 }} onClick={handleCreateWork}>{t('settings.confirmBtn')}</button>
-                                        <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => setShowNewWorkInput(false)}>{t('common.cancel')}</button>
-                                    </div>
-                                ) : (<>
-                                    <button
-                                        style={{ padding: '5px 10px', border: '1px dashed var(--border-light)', borderRadius: 'var(--radius-sm)', background: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)', transition: 'all 0.15s' }}
-                                        onClick={() => { setNewWorkName(''); setShowNewWorkInput(true); }}
-                                    >{t('settings.newWork')}</button>
-                                    <div style={{ position: 'relative', display: 'inline-block' }}>
-                                        <button
-                                            style={{ padding: '5px 10px', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', background: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--accent)', transition: 'all 0.15s' }}
-                                            onClick={() => setShowExportFormat(!showExportFormat)}
-                                            title={t('settings.exportSettingsTitle')}
-                                        ><Upload size={12} style={{ marginRight: 4 }} />{t('settings.exportSettings')}</button>
-                                        {showExportFormat && (
-                                            <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--bg-primary)', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-md)', zIndex: 10, overflow: 'hidden', minWidth: 130 }}>
-                                                {[{ key: 'json', label: 'JSON (完整)' }, { key: 'txt', label: 'TXT (纯文本)' }, { key: 'md', label: 'Markdown' }, { key: 'docx', label: 'Word (.docx)' }, { key: 'pdf', label: 'PDF (打印)' }].map(f => (
-                                                    <button key={f.key} style={{ display: 'block', width: '100%', padding: '8px 14px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--text-primary)', textAlign: 'left', transition: 'background 0.1s' }}
-                                                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
-                                                        onMouseLeave={e => e.currentTarget.style.background = 'none'}
-                                                        onClick={() => handleExportSettings(f.key)}
-                                                    ><FileText size={12} style={{ marginRight: 6, flexShrink: 0 }} />{f.label}</button>
-                                                ))}
+
+                                        {/* 图标选择器弹窗 */}
+                                        {isPickerOpen && (
+                                            <div
+                                                style={{
+                                                    position: 'absolute', top: 56, left: 16, zIndex: 100,
+                                                    background: 'var(--bg-card, #fff)',
+                                                    border: '1px solid var(--border-light)',
+                                                    borderRadius: 14,
+                                                    boxShadow: '0 16px 48px rgba(0,0,0,0.18)',
+                                                    padding: 12, width: 240,
+                                                }}
+                                                onClick={e => e.stopPropagation()}
+                                            >
+                                                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 10, padding: '0 2px' }}>选择图标</div>
+                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4 }}>
+                                                    {ICON_GRID.map(name => {
+                                                        const IcoComp = ICON_MAP[name];
+                                                        if (!IcoComp) return null;
+                                                        const isActive = cat.customIcon === name || (!cat.customIcon && ICON_MAP[name] === defaultIcon);
+                                                        return (
+                                                            <button
+                                                                key={name}
+                                                                style={{
+                                                                    width: 34, height: 34, border: 'none', borderRadius: 8,
+                                                                    background: isActive ? bg : 'transparent',
+                                                                    color: isActive ? color : 'var(--text-secondary)',
+                                                                    cursor: 'pointer',
+                                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                    transition: 'all 0.12s ease',
+                                                                    outline: isActive ? `2px solid ${color}` : 'none',
+                                                                    outlineOffset: -2,
+                                                                }}
+                                                                onClick={(e) => { e.stopPropagation(); handleChangeCatIcon(cat.category, name); }}
+                                                                onMouseEnter={e => { if (!isActive) { e.currentTarget.style.background = 'var(--bg-hover, #f3f4f6)'; e.currentTarget.style.color = color; }}}
+                                                                onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)'; }}}
+                                                                title={name}
+                                                            >
+                                                                <IcoComp size={16} />
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
                                             </div>
                                         )}
-                                    </div>
-                                    <label
-                                        style={{ padding: '5px 10px', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', background: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--accent)', transition: 'all 0.15s', display: 'inline-block' }}
-                                        title={t('settings.importSettingsTitle')}
-                                    >
-                                        <Download size={12} style={{ marginRight: 4 }} />{t('settings.importSettings')}
-                                        <input type="file" accept=".json,.txt,.md,.markdown,.docx,.pdf,.pmpx" style={{ display: 'none' }} onChange={handleImportSettings} />
-                                    </label>
-                                    <button
-                                        style={{ padding: '5px 10px', border: '1px solid rgba(229,62,62,0.3)', borderRadius: 'var(--radius-sm)', background: 'none', cursor: 'pointer', fontSize: 12, color: '#e53e3e', transition: 'all 0.15s' }}
-                                        onClick={handleClearAllItems}
-                                        title={t('settings.clearAllTitle')}
-                                    ><Trash2 size={12} style={{ marginRight: 4 }} />{t('settings.clearAll')}</button>
-                                </>)}
-                            </div>
-                        </div>
+                                        </div>
+                                    );
+                                })}
 
-                        {/* 统计栏 */}
-                        <div className="settings-stats">
-                            {stats.map(s => (
-                                <div
-                                    key={s.category}
-                                    className="stat-badge"
-                                    style={{ background: s.bg, color: s.color, borderColor: s.color + '33', cursor: 'pointer' }}
-                                    title={t('settings.statsTitle') + ': ' + s.label}
-                                    onClick={() => setExpandedCategory(s.category)}
+                                {/* 新建分类 */}
+                                <button
+                                    style={{
+                                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                                        padding: '20px 22px', textAlign: 'center', width: '100%',
+                                        border: '2px dashed var(--border-light)', borderRadius: 18,
+                                        background: 'transparent',
+                                        cursor: 'pointer', transition: 'all 0.25s ease',
+                                        minHeight: 170, gap: 10,
+                                    }}
+                                    onClick={async () => {
+                                        const workId = getActiveWorkId();
+                                        if (!workId) return;
+                                        const newNode = await addSettingsNode({
+                                            name: '新分类',
+                                            type: 'folder',
+                                            category: 'custom',
+                                            parentId: workId,
+                                            icon: 'Gem',
+                                        });
+                                        if (newNode) {
+                                            setNodes(prev => [...prev, newNode]);
+                                            incrementSettingsVersion();
+                                        }
+                                    }}
+                                    onMouseEnter={e => {
+                                        e.currentTarget.style.borderColor = 'var(--accent)';
+                                        e.currentTarget.style.background = 'var(--accent-light, rgba(99,102,241,0.04))';
+                                        e.currentTarget.style.transform = 'translateY(-2px)';
+                                    }}
+                                    onMouseLeave={e => {
+                                        e.currentTarget.style.borderColor = 'var(--border-light)';
+                                        e.currentTarget.style.background = 'transparent';
+                                        e.currentTarget.style.transform = 'none';
+                                    }}
                                 >
-                                    <CatIcon category={s.category} size={13} />
-                                    <span className="stat-count">{s.count}</span>
-                                    <span>{s.label}</span>
-                                </div>
-                            ))}
-                        </div>
-
-                        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-                            {/* 左侧：搜索 + 树形导航 */}
-                            <div style={{
-                                width: 260, minWidth: 260, borderRight: '1px solid var(--border-light)',
-                                display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)',
-                            }}>
-                                {/* 搜索框 */}
-                                <div className="settings-search">
-                                    <input
-                                        className="settings-search-input"
-                                        type="text"
-                                        placeholder={t('settings.searchPlaceholder')}
-                                        value={searchQuery}
-                                        onChange={e => setSearchQuery(e.target.value)}
-                                    />
-                                </div>
-
-                                {/* 树 */}
-                                <div style={{ flex: 1, overflow: 'auto' }}>
-                                    <SettingsTree
-                                        nodes={visibleNodes}
-                                        selectedId={selectedNodeId}
-                                        onSelect={setSelectedNodeId}
-                                        onAdd={handleAddNode}
-                                        onDelete={handleDeleteNode}
-                                        onRename={handleRenameNode}
-                                        onToggleEnabled={handleToggleEnabled}
-                                        searchQuery={searchQuery}
-                                        expandedCategory={expandedCategory}
-                                        onExpandComplete={() => setExpandedCategory(null)}
-                                    />
-                                </div>
-                            </div>
-
-                            {/* 右侧：编辑器 */}
-                            <div style={{ flex: 1, overflow: 'auto' }}>
-                                {showBookInfo ? (
-                                    <div style={{ padding: '20px 24px' }}>
-                                        <BookInfoForm data={selectedNode.content || {}} onChange={data => handleUpdateNode(selectedNode.id, { content: data })} />
-                                    </div>
-                                ) : (
-                                    <SettingsItemEditor
-                                        selectedNode={selectedNode}
-                                        allNodes={visibleNodes}
-                                        onUpdate={handleUpdateNode}
-                                        onSelect={setSelectedNodeId}
-                                        onAdd={handleAddNode}
-                                    />
-                                )}
+                                    <span style={{
+                                        width: 44, height: 44, borderRadius: 13,
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        color: 'var(--text-muted)', background: 'var(--bg-secondary)',
+                                        border: '1px solid var(--border-light)',
+                                    }}>
+                                        <Plus size={22} />
+                                    </span>
+                                    <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-muted)' }}>新建分类</span>
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -888,11 +1090,38 @@ function PreferencesForm() {
         boxShadow: active ? '0 2px 8px var(--accent-glow)' : 'var(--shadow-sm)',
     });
 
+    const [writingModeState, setWritingModeLocalState] = useState(getWritingMode());
+    const { setWritingMode: setGlobalWritingMode } = useAppStore();
+
     return (
-        <div style={{ maxWidth: 640 }}>
+        <div style={{ maxWidth: 860, margin: '0 auto' }}>
             <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 24 }}>
                 {t('preferences.intro')}
             </p>
+
+            {/* 写作模式选择器 */}
+            <div style={{ marginBottom: 28 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 12 }}>写作模式</label>
+                <div style={{ display: 'flex', gap: 10 }}>
+                    {Object.values(WRITING_MODES).map(m => (
+                        <button
+                            key={m.key}
+                            className={`writing-mode-card ${writingModeState === m.key ? 'active' : ''}`}
+                            style={{
+                                border: writingModeState === m.key ? `2px solid ${m.color}` : '1px solid var(--border-light)',
+                                background: writingModeState === m.key ? `${m.color}10` : 'var(--bg-primary)',
+                            }}
+                            onClick={() => { setWritingModeLocalState(m.key); setWritingMode(m.key); setGlobalWritingMode(m.key); }}
+                        >
+                            <div style={{ fontSize: 18, marginBottom: 4 }}>
+                                {m.icon === 'smartphone' ? <Smartphone size={18} /> : m.icon === 'book-open' ? <BookOpen size={18} /> : m.icon === 'clapperboard' ? <Clapperboard size={18} /> : null}
+                            </div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: writingModeState === m.key ? m.color : 'var(--text-primary)', marginBottom: 2 }}>{m.label}</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.4 }}>{m.desc}</div>
+                        </button>
+                    ))}
+                </div>
+            </div>
 
             <div style={{ marginBottom: 28 }}>
                 <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 12 }}>{t('preferences.langLabel')}</label>
@@ -1053,6 +1282,9 @@ function ApiConfigForm({ data, onChange }) {
     const [providerSearch, setProviderSearch] = useState('');
     const [showModelModal, setShowModelModal] = useState(false);
     const [modelSearch, setModelSearch] = useState('');
+    const [showEmbedModelModal, setShowEmbedModelModal] = useState(false);
+    const [embedModelSearch, setEmbedModelSearch] = useState('');
+    const [embedProviderSearch, setEmbedProviderSearch] = useState('');
     const { t } = useI18n();
 
     // 根据 provider 和 apiFormat 获取正确的 baseUrl
@@ -1190,6 +1422,39 @@ function ApiConfigForm({ data, onChange }) {
 
     const currentProvider = PROVIDERS.find(p => p.key === data.provider) || PROVIDERS[7];
     const isCustom = ['custom', 'custom-gemini', 'custom-claude'].includes(data.provider);
+
+    // 嵌入模型供应商
+    const EMBED_EXCLUDED = ['deepseek', 'moonshot', 'siliconflow', 'openai-responses', 'openrouter', 'groq', 'mistral', 'cohere', 'together', 'perplexity', 'xai', 'cerebras', 'github', 'stepfun', 'volcengine', 'minimax', 'yi', 'baidu'];
+    const currentEmbedProvider = PROVIDERS.find(p => p.key === data.embedProvider) || PROVIDERS.find(p => p.key === 'zhipu') || PROVIDERS[0];
+    const isEmbedCustom = ['custom', 'custom-gemini', 'custom-claude'].includes(data.embedProvider);
+    const handleEmbedProviderChange = (providerKey) => {
+        const provider = PROVIDERS.find(p => p.key === providerKey);
+        if (!provider) return;
+
+        // 1. 保存当前嵌入供应商配置到 embedProviderConfigs
+        const configs = { ...(data.embedProviderConfigs || {}) };
+        if (data.embedProvider) {
+            configs[data.embedProvider] = {
+                apiKey: data.embedApiKey || '',
+                baseUrl: data.embedBaseUrl || '',
+                model: data.embedModel || '',
+            };
+        }
+
+        // 2. 从 embedProviderConfigs 加载目标供应商已保存的配置
+        const saved = configs[providerKey] || {};
+        const isCustom = ['custom', 'custom-gemini', 'custom-claude'].includes(providerKey);
+
+        onChange({
+            ...data,
+            embedProviderConfigs: configs,
+            embedProvider: providerKey,
+            embedApiKey: saved.apiKey || '',
+            embedBaseUrl: isCustom ? (saved.baseUrl || '') : (saved.baseUrl || provider.baseUrl || ''),
+            embedModel: saved.model || (isCustom ? '' : (providerKey === 'zhipu' ? 'embedding-3' : 'text-embedding-v3-small')),
+        });
+        setFetchedEmbedModels(null);
+    };
 
     // 余额查询
     const handleQueryBalance = async () => {
@@ -1618,56 +1883,170 @@ function ApiConfigForm({ data, onChange }) {
             </div>
 
             {data.useCustomEmbed && (
-                <div style={{ padding: '16px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', marginBottom: 20 }}>
-                    <div style={{ marginBottom: 14 }}>
-                        <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 8 }}>{t('apiConfig.embedProvider')}</label>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
-                            {PROVIDERS.filter(p => !['deepseek', 'moonshot', 'siliconflow', 'openai', 'openai-responses', 'openrouter', 'groq', 'mistral', 'cohere', 'together', 'perplexity', 'xai', 'cerebras', 'github', 'stepfun', 'volcengine', 'minimax', 'yi', 'baidu'].includes(p.key)).map(p => (
-                                <button key={p.key} style={{ padding: '8px 12px', border: data.embedProvider === p.key ? '2px solid var(--accent)' : '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', background: data.embedProvider === p.key ? 'var(--accent-light)' : 'var(--bg-primary)', cursor: 'pointer', fontSize: 12, fontWeight: data.embedProvider === p.key ? 600 : 400, color: data.embedProvider === p.key ? 'var(--accent)' : 'var(--text-primary)', transition: 'all 0.15s' }} onClick={() => onChange({ ...data, embedProvider: p.key, embedBaseUrl: p.key === 'custom' ? '' : (p.baseUrl || data.embedBaseUrl), embedModel: p.key === 'custom' ? '' : (p.key === 'zhipu' ? 'embedding-3' : 'text-embedding-v3-small') })}>{p.label}</button>
-                            ))}
-                        </div>
-                    </div>
-                    <FieldInput label="Embedding API Key" value={data.embedApiKey} onChange={v => update('embedApiKey', v)} placeholder={t('apiConfig.embedApiKeyPlaceholder')} secret />
-                    <FieldInput label={data.embedProvider === 'custom' ? t('apiConfig.embedApiAddress') : t('apiConfig.embedApiAddressAuto')} value={data.embedBaseUrl} onChange={v => update('embedBaseUrl', v)} placeholder="https://api.example.com/v1" />
-                    <div style={{ marginBottom: 14 }}>
-                        <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 5 }}>
-                            {t('apiConfig.embedModel')}
-                            {data.embedApiKey || data.apiKey ? (
-                                <button style={{ marginLeft: 8, fontSize: 11, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }} onClick={handleFetchEmbedModels} disabled={fetchedEmbedModels === 'loading'}>
-                                    {fetchedEmbedModels === 'loading' ? t('apiConfig.fetching') : t('apiConfig.fetchEmbedModels')}
-                                </button>
-                            ) : null}
-                        </label>
-                        <input className="modal-input" style={{ marginBottom: 0 }} value={data.embedModel || ''} onChange={e => update('embedModel', e.target.value)} placeholder="例如：text-embedding-v3-small" />
-                        {Array.isArray(fetchedEmbedModels) && fetchedEmbedModels.length > 0 && (
-                            <>
-                                <div style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 4px' }}>{t('apiConfig.fetchedCountClick').replace('{count}', fetchedEmbedModels.length)}</div>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 120, overflowY: 'auto', padding: '4px', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)' }}>
-                                    {fetchedEmbedModels.map(m => (
-                                        <button key={m.id} style={{ padding: '4px 10px', border: data.embedModel === m.id ? '2px solid var(--accent)' : '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', background: data.embedModel === m.id ? 'var(--accent-light)' : 'var(--bg-primary)', cursor: 'pointer', fontSize: 11, color: data.embedModel === m.id ? 'var(--accent)' : 'var(--text-primary)', fontFamily: 'monospace', flexShrink: 0 }} onClick={() => update('embedModel', m.id)}>{m.id}</button>
-                                    ))}
+                <div className="provider-split" style={{ marginBottom: 20 }}>
+                    {/* 左侧：嵌入供应商列表 */}
+                    <div className="provider-list">
+                        <input
+                            className="provider-search"
+                            placeholder="搜索供应商..."
+                            value={embedProviderSearch}
+                            onChange={e => setEmbedProviderSearch(e.target.value)}
+                        />
+                        {[
+                            { group: '🇨🇳 国内', keys: ['zhipu', 'bailian', 'hunyuan', 'baichuan', 'siliconflow'] },
+                            { group: '国际', keys: ['openai', 'claude', 'gemini', 'gemini-native'] },
+                            { group: '自定义', keys: ['custom', 'custom-gemini', 'custom-claude'] },
+                        ].map(section => {
+                            const items = section.keys
+                                .map(k => PROVIDERS.find(p => p.key === k))
+                                .filter(Boolean)
+                                .filter(p => !EMBED_EXCLUDED.includes(p.key))
+                                .filter(p => !embedProviderSearch || p.label.toLowerCase().includes(embedProviderSearch.toLowerCase()) || p.key.includes(embedProviderSearch.toLowerCase()));
+                            if (items.length === 0) return null;
+                            return (
+                                <div key={section.group}>
+                                    <div className="provider-group-header">{section.group}</div>
+                                    {items.map(p => {
+                                        const embedCfg = data.embedProviderConfigs?.[p.key];
+                                        const hasKey = !!(embedCfg?.apiKey || (data.embedProvider === p.key && (data.embedApiKey || data.apiKey)));
+                                        return (
+                                            <button
+                                                key={p.key}
+                                                className={`provider-item ${data.embedProvider === p.key ? 'active' : ''}`}
+                                                onClick={() => handleEmbedProviderChange(p.key)}
+                                            >
+                                                <span className="provider-item-name">{p.label}</span>
+                                                {hasKey && <span className="provider-item-check"><CheckCircle2 size={12} /></span>}
+                                            </button>
+                                        );
+                                    })}
                                 </div>
-                            </>
-                        )}
-                        {Array.isArray(fetchedEmbedModels) && fetchedEmbedModels.length === 0 && (
-                            <div style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 4px' }}>未找到嵌入模型，可手动输入模型名（如 embedding-3）</div>
-                        )}
+                            );
+                        })}
                     </div>
 
-                    {/* 重建向量 */}
-                    <div style={{ marginTop: 8 }}>
-                        <button style={{ padding: '8px 16px', border: '1px solid var(--accent)', borderRadius: 'var(--radius-md)', background: 'var(--bg-primary)', cursor: rebuildStatus && !rebuildStatus.finished ? 'wait' : 'pointer', fontSize: 12, color: 'var(--accent)', fontWeight: 500, opacity: rebuildStatus && !rebuildStatus.finished ? 0.7 : 1 }} onClick={handleRebuildEmbeddings} disabled={rebuildStatus && !rebuildStatus.finished && !rebuildStatus.error}>
-                            {rebuildStatus && !rebuildStatus.finished && !rebuildStatus.error ? `向量化中... ${rebuildStatus.done}/${rebuildStatus.total}` : <><RefreshCw size={12} style={{ marginRight: 4 }} />重建所有设定向量</>}
-                        </button>
-                        {rebuildStatus?.finished && (
-                            <span style={{ marginLeft: 8, fontSize: 11, color: rebuildStatus.failed > 0 ? 'var(--warning)' : 'var(--success)' }}>
-                                ✓ 完成！{rebuildStatus.done - rebuildStatus.failed}/{rebuildStatus.total} 成功{rebuildStatus.failed > 0 ? `，${rebuildStatus.failed} 失败` : ''}
-                            </span>
+                    {/* 右侧：嵌入供应商配置 */}
+                    <div className="provider-detail">
+                        <div className="provider-detail-header">
+                            <span style={{ fontSize: 15, fontWeight: 600 }}>{currentEmbedProvider.label}</span>
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{currentEmbedProvider.key}</span>
+                        </div>
+
+                        <FieldInput label="Embedding API Key" value={data.embedApiKey} onChange={v => update('embedApiKey', v)} placeholder={t('apiConfig.embedApiKeyPlaceholder')} secret />
+                        <FieldInput label={isEmbedCustom ? t('apiConfig.embedApiAddress') : t('apiConfig.embedApiAddressAuto')} value={data.embedBaseUrl} onChange={v => update('embedBaseUrl', v)} placeholder="https://api.example.com/v1" />
+
+                        {/* 模型选择 */}
+                        <div style={{ marginBottom: 14 }}>
+                            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 5 }}>
+                                {t('apiConfig.embedModel')}
+                            </label>
+                            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                <input className="modal-input" style={{ marginBottom: 0, flex: 1 }} value={data.embedModel || ''} onChange={e => update('embedModel', e.target.value)} placeholder="例如：text-embedding-v3-small" />
+                                {(data.embedApiKey || data.apiKey) ? (
+                                    <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, whiteSpace: 'nowrap', flexShrink: 0 }} onClick={() => { if (Array.isArray(fetchedEmbedModels) && fetchedEmbedModels.length > 0) { setShowEmbedModelModal(true); setEmbedModelSearch(''); } else { handleFetchEmbedModels(); } }} disabled={fetchedEmbedModels === 'loading'}>
+                                        {fetchedEmbedModels === 'loading' ? '获取中…' : Array.isArray(fetchedEmbedModels) && fetchedEmbedModels.length > 0 ? `模型列表 (${fetchedEmbedModels.length})` : '获取模型列表'}
+                                    </button>
+                                ) : null}
+                            </div>
+                            {/* 快切列表管理 */}
+                            {data.embedModel && (() => {
+                                const savedModels = data.embedProviderConfigs?.[data.embedProvider]?.models || [];
+                                const isInList = savedModels.includes(data.embedModel);
+                                return (
+                                    <button style={{ marginTop: 6, padding: '4px 12px', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', background: isInList ? 'color-mix(in srgb, var(--accent) 15%, transparent)' : 'var(--bg-primary)', cursor: 'pointer', fontSize: 11, color: isInList ? 'var(--accent)' : 'var(--text-secondary)' }} onClick={() => {
+                                        const configs = { ...(data.embedProviderConfigs || {}) };
+                                        if (!configs[data.embedProvider]) configs[data.embedProvider] = {};
+                                        const models = [...(configs[data.embedProvider].models || [])];
+                                        if (isInList) {
+                                            configs[data.embedProvider] = { ...configs[data.embedProvider], models: models.filter(x => x !== data.embedModel) };
+                                        } else {
+                                            models.push(data.embedModel);
+                                            configs[data.embedProvider] = { ...configs[data.embedProvider], models };
+                                        }
+                                        onChange({ ...data, embedProviderConfigs: configs });
+                                    }}>{isInList ? '☑ 已在快切列表' : '☐ 加入快切列表'}</button>
+                                );
+                            })()}
+                            {Array.isArray(fetchedEmbedModels) && fetchedEmbedModels.length === 0 && (
+                                <div style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 4px' }}>未找到嵌入模型，可手动输入模型名（如 embedding-3）</div>
+                            )}
+                        </div>
+
+                        {/* ===== 嵌入模型弹窗（与主模型一致，带勾选框） ===== */}
+                        {showEmbedModelModal && Array.isArray(fetchedEmbedModels) && (
+                            <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }} onClick={e => { if (e.target === e.currentTarget) setShowEmbedModelModal(false); }}>
+                                <div style={{ background: 'var(--bg-primary)', borderRadius: 'var(--radius-lg, 14px)', boxShadow: '0 16px 48px rgba(0,0,0,0.25)', width: 480, maxWidth: '90vw', maxHeight: '70vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', animation: 'modelPickerFadeInDown 0.2s ease' }}>
+                                    <div style={{ padding: '16px 20px 12px', borderBottom: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <div>
+                                            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>可用嵌入模型列表</div>
+                                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{currentEmbedProvider.label} · 共 {fetchedEmbedModels.length} 个模型，勾选加入快切列表</div>
+                                        </div>
+                                        <button style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--text-muted)', padding: '4px 8px', lineHeight: 1 }} onClick={() => setShowEmbedModelModal(false)}><X size={16} /></button>
+                                    </div>
+                                    <div style={{ padding: '10px 20px 8px' }}>
+                                        <input
+                                            style={{ width: '100%', padding: '7px 12px', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm, 6px)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: 12, outline: 'none' }}
+                                            placeholder="搜索模型名称…"
+                                            value={embedModelSearch}
+                                            onChange={e => setEmbedModelSearch(e.target.value)}
+                                            autoFocus
+                                        />
+                                    </div>
+                                    <div style={{ flex: 1, overflowY: 'auto', padding: '4px 12px 12px' }}>
+                                        {fetchedEmbedModels
+                                            .filter(m => !embedModelSearch || m.id.toLowerCase().includes(embedModelSearch.toLowerCase()))
+                                            .map(m => {
+                                                const savedModels = data.embedProviderConfigs?.[data.embedProvider]?.models || [];
+                                                const isInList = savedModels.includes(m.id);
+                                                const isActive = data.embedModel === m.id;
+                                                return (
+                                                    <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 'var(--radius-sm, 6px)', cursor: 'pointer', transition: 'background 0.1s', background: isActive ? 'color-mix(in srgb, var(--accent) 8%, transparent)' : 'transparent' }}
+                                                        onMouseEnter={e => e.currentTarget.style.background = isActive ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'var(--bg-secondary)'}
+                                                        onMouseLeave={e => e.currentTarget.style.background = isActive ? 'color-mix(in srgb, var(--accent) 8%, transparent)' : 'transparent'}
+                                                    >
+                                                        {/* 勾选框 */}
+                                                        <button style={{ width: 22, height: 22, border: isInList ? '2px solid var(--accent)' : '2px solid var(--border-light)', borderRadius: 4, background: isInList ? 'var(--accent)' : 'transparent', color: '#fff', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, transition: 'all 0.15s' }} onClick={() => {
+                                                            const configs = { ...(data.embedProviderConfigs || {}) };
+                                                            if (!configs[data.embedProvider]) configs[data.embedProvider] = {};
+                                                            const models = [...(configs[data.embedProvider].models || [])];
+                                                            if (isInList) {
+                                                                configs[data.embedProvider] = { ...configs[data.embedProvider], models: models.filter(x => x !== m.id) };
+                                                            } else {
+                                                                models.push(m.id);
+                                                                configs[data.embedProvider] = { ...configs[data.embedProvider], models };
+                                                            }
+                                                            onChange({ ...data, embedProviderConfigs: configs });
+                                                        }}>{isInList ? '✓' : ''}</button>
+                                                        {/* 模型名 */}
+                                                        <span style={{ flex: 1, fontFamily: 'monospace', fontSize: 12, color: isActive ? 'var(--accent)' : 'var(--text-primary)', fontWeight: isActive ? 600 : 400, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }} onClick={() => { update('embedModel', m.id); }} title={`使用 ${m.id}`}>{m.id}</span>
+                                                        {isActive && <span style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 600, flexShrink: 0 }}>当前</span>}
+                                                    </div>
+                                                );
+                                            })}
+                                    </div>
+                                    <div style={{ padding: '10px 20px', borderTop: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>已勾选 {(data.embedProviderConfigs?.[data.embedProvider]?.models || []).length} 个模型</span>
+                                        <button style={{ padding: '6px 20px', borderRadius: 'var(--radius-sm, 6px)', border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }} onClick={() => setShowEmbedModelModal(false)}>完成</button>
+                                    </div>
+                                </div>
+                            </div>
                         )}
-                        {rebuildStatus?.error && (
-                            <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--error)' }}>重建失败</span>
-                        )}
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>首次开启或更换嵌入模型后，需要重建向量才能使用 RAG 智能检索</div>
+
+                        {/* 重建向量 */}
+                        <div style={{ marginTop: 8 }}>
+                            <button style={{ padding: '8px 16px', border: '1px solid var(--accent)', borderRadius: 'var(--radius-md)', background: 'var(--bg-primary)', cursor: rebuildStatus && !rebuildStatus.finished ? 'wait' : 'pointer', fontSize: 12, color: 'var(--accent)', fontWeight: 500, opacity: rebuildStatus && !rebuildStatus.finished ? 0.7 : 1 }} onClick={handleRebuildEmbeddings} disabled={rebuildStatus && !rebuildStatus.finished && !rebuildStatus.error}>
+                                {rebuildStatus && !rebuildStatus.finished && !rebuildStatus.error ? `向量化中... ${rebuildStatus.done}/${rebuildStatus.total}` : <><RefreshCw size={12} style={{ marginRight: 4 }} />重建所有设定向量</>}
+                            </button>
+                            {rebuildStatus?.finished && (
+                                <span style={{ marginLeft: 8, fontSize: 11, color: rebuildStatus.failed > 0 ? 'var(--warning)' : 'var(--success)' }}>
+                                    ✓ 完成！{rebuildStatus.done - rebuildStatus.failed}/{rebuildStatus.total} 成功{rebuildStatus.failed > 0 ? `，${rebuildStatus.failed} 失败` : ''}
+                                </span>
+                            )}
+                            {rebuildStatus?.error && (
+                                <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--error)' }}>重建失败</span>
+                            )}
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>首次开启或更换嵌入模型后，需要重建向量才能使用 RAG 智能检索</div>
+                        </div>
                     </div>
                 </div>
             )}
