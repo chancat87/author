@@ -76,6 +76,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
         writingMode,
         setShowSettings,
         setShowSnapshots,
+        setShowBookInfo,
         showToast,
         setOpenCategoryModal,
         settingsVersion,
@@ -568,6 +569,9 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                     <div className="sidebar-nav-top">
                         {/* 章节 */}
                         <IconButton icon={<BookOpen size={18} />} label={t('sidebar.chapterList') || '章节大纲'} text={sidebarOpen ? (t('sidebar.navChapter') || '章节') : undefined} tooltipSide="right" className={`nav-item ${activeNavTab === 'chapters' ? 'active' : ''}`} onClick={() => { if (activeNavTab === 'chapters' && sidebarOpen) { setSidebarOpen(false); } else { setActiveNavTab('chapters'); setSidebarOpen(true); } }} />
+                        
+                        {/* 作品信息 */}
+                        <IconButton icon={<Book size={18} />} label={'作品信息'} text={sidebarOpen ? '作品' : undefined} tooltipSide="right" className="nav-item" onClick={() => setShowBookInfo(true)} />
                         
                         <div className="nav-category-divider" />
                         

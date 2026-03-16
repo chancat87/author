@@ -17,7 +17,7 @@ import { useEffect, useRef, useCallback, memo } from 'react';
  *   rows         — 控制最小高度（1 row ≈ 28px）
  *   autoFocus    — 是否自动聚焦
  */
-function MiniMarkdownEditor({ value, onChange, placeholder, rows = 3, autoFocus = false }) {
+function MiniMarkdownEditor({ value, onChange, placeholder, rows = 3, autoFocus = false, flexGrow = false }) {
     const onChangeRef = useRef(onChange);
     onChangeRef.current = onChange;
     const isInternalUpdate = useRef(false);
@@ -79,7 +79,7 @@ function MiniMarkdownEditor({ value, onChange, placeholder, rows = 3, autoFocus 
     if (!editor) return null;
 
     return (
-        <div className="mini-md-editor">
+        <div className={`mini-md-editor${flexGrow ? ' mini-md-editor--grow' : ''}`}>
             <MiniToolbar editor={editor} />
             <EditorContent editor={editor} />
         </div>

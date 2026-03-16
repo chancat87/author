@@ -725,11 +725,11 @@ export default function SettingsPanel() {
                                     onClick={() => { setNewWorkName(''); setShowNewWorkInput(true); }}>{t('settings.newWork')}</button>
                             )}
                             {works.length > 1 && (
-                                <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 11, padding: '4px 6px', opacity: 0.7, transition: 'opacity 0.15s' }}
-                                    onClick={() => handleDeleteWork(activeWorkId)} title={t('common.delete')}
-                                    onMouseEnter={e => e.currentTarget.style.opacity = '1'}
-                                    onMouseLeave={e => e.currentTarget.style.opacity = '0.7'}
-                                ><Trash2 size={13} /></button>
+                                <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 11, padding: '4px 6px', opacity: 0.7, transition: 'opacity 0.15s' }}
+                                    onClick={() => handleDeleteWork(activeWorkId)} title={t('common.delete') + '作品'}
+                                    onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = '#ef4444'; }}
+                                    onMouseLeave={e => { e.currentTarget.style.opacity = '0.7'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+                                ><X size={14} /></button>
                             )}
                             {/* 右侧导入导出清空 */}
                             <div style={{ marginLeft: 'auto', display: 'flex', gap: 2, alignItems: 'center', position: 'relative' }}>
@@ -804,7 +804,7 @@ export default function SettingsPanel() {
                                         <div key={cat.category} style={{ position: 'relative' }}>
                                         <button style={{
                                             position: 'relative', display: 'flex', flexDirection: 'column',
-                                            padding: '20px 22px 16px', textAlign: 'left', width: '100%',
+                                            padding: '20px 22px 16px', textAlign: 'left', width: '100%', height: '100%',
                                             border: '1px solid var(--border-light)', borderRadius: 18,
                                             background: 'var(--bg-primary)',
                                             cursor: 'pointer', transition: 'all 0.25s ease', overflow: 'hidden',
@@ -948,10 +948,12 @@ export default function SettingsPanel() {
                                     onClick={async () => {
                                         const workId = getActiveWorkId();
                                         if (!workId) return;
+                                        // 每个自定义分类需要唯一的 category ID，否则会被 stats 去重合并为一张卡片
+                                        const uniqueCat = 'custom-' + Date.now().toString(36) + Math.random().toString(36).substr(2, 4);
                                         const newNode = await addSettingsNode({
                                             name: '新分类',
                                             type: 'folder',
-                                            category: 'custom',
+                                            category: uniqueCat,
                                             parentId: workId,
                                             icon: 'Gem',
                                         });

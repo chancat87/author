@@ -103,7 +103,7 @@ function TreeNode({ node, nodes, selectedId, onSelect, onAdd, onDelete, onRename
     const { t } = useI18n();
     const [isRenaming, setIsRenaming] = useState(false);
     const [renameValue, setRenameValue] = useState('');
-    const children = nodes.filter(n => n.parentId === node.id);
+    const children = nodes.filter(n => n.parentId === node.id && !(n.category === 'bookInfo' && n.type === 'special'));
     const isFolder = node.type === 'folder' || node.type === 'special' || node.type === 'work';
     const isWork = node.type === 'work';
     const isRoot = node.parentId === null;

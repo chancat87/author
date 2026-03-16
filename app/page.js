@@ -35,6 +35,7 @@ const AiSidebar = dynamic(() => import('./components/AiSidebar'), { ssr: false }
 const SnapshotManager = dynamic(() => import('./components/SnapshotManager'), { ssr: false });
 const WelcomeModal = dynamic(() => import('./components/WelcomeModal'), { ssr: false });
 const UpdateBanner = dynamic(() => import('./components/UpdateBanner'), { ssr: false });
+const BookInfoPanel = dynamic(() => import('./components/BookInfoPanel'), { ssr: false });
 
 export default function Home() {
   const {
@@ -202,6 +203,11 @@ export default function Home() {
 
       const savedTheme = localStorage.getItem('author-theme') || 'light';
       setTheme(savedTheme);
+      // 恢复视觉主题（经典纸张 / 现代通透）
+      const savedVisual = localStorage.getItem('author-visual');
+      if (savedVisual) {
+        document.documentElement.setAttribute('data-visual', savedVisual);
+      }
       setWritingMode(getWritingMode());
 
       // 加载会话数据
@@ -554,6 +560,7 @@ export default function Home() {
       {/* ===== 设定库弹窗 ===== */}
       <SettingsPanel />
       <CategorySettingsModal />
+      <BookInfoPanel />
       <SnapshotManager />
 
       {/* ===== 帮助文档 ===== */}

@@ -43,8 +43,9 @@ export function getIconByName(name) {
 }
 
 /** 导出：获取分类图标组件（支持自定义图标名） */
+const DEFAULT_FOLDER_ICONS = ['FolderOpen', 'Folder', 'FolderClosed', 'folder-open', 'folder', 'folder-closed'];
 export function getCategoryIcon(category, customIconName) {
-    if (customIconName) {
+    if (customIconName && !DEFAULT_FOLDER_ICONS.includes(customIconName)) {
         const custom = ICON_MAP[customIconName];
         if (custom) return custom;
     }

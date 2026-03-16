@@ -6919,6 +6919,35 @@ h5.chat-md-heading {
   overflow: hidden;
 }
 
+/* flex-grow mode: editors expand to fill remaining space in bento grid */
+.mini-md-editor--grow {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mini-md-editor--grow > .mini-md-toolbar {
+  flex-shrink: 0;
+}
+
+.mini-md-editor--grow > div:not(.mini-md-toolbar) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mini-md-editor--grow .tiptap,
+.mini-md-editor--grow .ProseMirror {
+  flex-grow: 1;
+  height: 0;
+  overflow-y: auto;
+  min-height: 0;
+}
+
 .mini-md-editor:focus-within {
   border-color: var(--accent);
 }
@@ -6927,8 +6956,8 @@ h5.chat-md-heading {
 .mini-md-toolbar {
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 4px 6px;
+  gap: 1px;
+  padding: 3px 4px;
   border-bottom: 1px solid var(--border-light);
   background: var(--bg-secondary);
   flex-wrap: wrap;
@@ -6939,14 +6968,14 @@ h5.chat-md-heading {
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   font-family: var(--font-ui);
-  padding: 3px 6px;
+  padding: 2px 4px;
   border-radius: 4px;
   transition: all 0.12s;
   line-height: 1;
-  min-width: 24px;
+  min-width: 20px;
   text-align: center;
 }
 
@@ -6976,6 +7005,7 @@ h5.chat-md-heading {
   color: var(--text-primary);
   line-height: 1.6;
   outline: none;
+  overflow-y: auto;
 }
 
 .mini-md-content p {

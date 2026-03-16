@@ -4,11 +4,12 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
     X, Maximize2, Minimize2, Plus, Search, FolderOpen, ChevronRight, ChevronDown,
-    Trash2, EyeOff, FileText, FolderPlus, BookOpen, Upload, Download,
+    Trash2, EyeOff, Eye, FileText, FolderPlus, BookOpen, Upload, Download,
     User, MapPin, Globe, Gem, ClipboardList, Ruler, Settings as SettingsIcon,
     Heart, Star, Shield, Zap, Feather, Compass, Flag, Tag, Layers,
     Bookmark, Crown, Flame, Lightbulb, Music, Palette, Sword, Target,
     Moon, Sun, Cloud, TreePine, Mountain, Waves, Building, Car,
+    Pencil, GripVertical,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import {
@@ -45,7 +46,7 @@ const ICON_GRID = [
 ];
 
 function getIconComponent(iconName) {
-    return ICON_MAP[iconName] || FolderOpen;
+    return ICON_MAP[iconName] || null;
 }
 
 // ==================== 分类配置 ====================
@@ -64,23 +65,224 @@ function getCatMeta(category) {
     return CAT_META[category] || CAT_META.custom;
 }
 
+// ==================== 剧情曲线图 ====================
+const DEFAULT_PLOT_POINTS = [
+    { label: '序幕', tension: 0.2 },
+    { label: '铺垫', tension: 0.35 },
+    { label: '冲突', tension: 0.6 },
+    { label: '高潮', tension: 0.95 },
+    { label: '结局', tension: 0.4 },
+];
+
+function PlotCurveChart({ nodes, rootFolder, onSave }) {
+    const initData = rootFolder?.content?.plotCurve || DEFAULT_PLOT_POINTS;
+    const [points, setPoints] = useState(initData);
+    const [dragging, setDragging] = useState(null); // index
+    const [editIdx, setEditIdx] = useState(null);
+    const [editLabel, setEditLabel] = useState('');
+    const [collapsed, setCollapsed] = useState(false);
+    const svgRef = useRef(null);
+    const W = 600, H = 200, PX = 50, PY = 28;
+    const chartW = W - PX * 2, chartH = H - PY * 2;
+
+    useEffect(() => {
+        const d = rootFolder?.content?.plotCurve;
+        if (d && Array.isArray(d)) setPoints(d);
+    }, [rootFolder?.content?.plotCurve]);
+
+    const coords = useMemo(() => points.map((p, i) => ({
+        x: PX + (i / Math.max(points.length - 1, 1)) * chartW,
+        y: PY + (1 - p.tension) * chartH,
+    })), [points, chartW, chartH]);
+
+    const smoothPath = useMemo(() => coords.reduce((acc, p, i, arr) => {
+        if (i === 0) return `M ${p.x} ${p.y}`;
+        const prev = arr[i - 1];
+        const cpx = (prev.x + p.x) / 2;
+        return `${acc} C ${cpx} ${prev.y}, ${cpx} ${p.y}, ${p.x} ${p.y}`;
+    }, ''), [coords]);
+
+    const areaPath = useMemo(() => {
+        if (coords.length < 2) return '';
+        return `${smoothPath} L ${coords[coords.length - 1].x} ${H - PY} L ${coords[0].x} ${H - PY} Z`;
+    }, [smoothPath, coords]);
+
+    const handlePointerDown = (idx, e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setDragging(idx);
+        const svg = svgRef.current;
+        const onMove = (ev) => {
+            if (!svg) return;
+            const rect = svg.getBoundingClientRect();
+            const svgY = (ev.clientY - rect.top) / rect.height * H;
+            const tension = Math.max(0, Math.min(1, 1 - (svgY - PY) / chartH));
+            setPoints(prev => prev.map((p, i) => i === idx ? { ...p, tension: Math.round(tension * 100) / 100 } : p));
+        };
+        const onUp = () => {
+            setDragging(null);
+            document.removeEventListener('pointermove', onMove);
+            document.removeEventListener('pointerup', onUp);
+            // save
+            setPoints(prev => { onSave?.(prev); return prev; });
+        };
+        document.addEventListener('pointermove', onMove);
+        document.addEventListener('pointerup', onUp);
+    };
+
+    const addPoint = () => {
+        const next = [...points, { label: `节点${points.length + 1}`, tension: 0.5 }];
+        setPoints(next);
+        onSave?.(next);
+    };
+
+    const removePoint = (idx) => {
+        if (points.length <= 2) return;
+        const next = points.filter((_, i) => i !== idx);
+        setPoints(next);
+        onSave?.(next);
+    };
+
+    const startEdit = (idx) => {
+        setEditIdx(idx);
+        setEditLabel(points[idx].label);
+    };
+
+    const finishEdit = () => {
+        if (editIdx === null) return;
+        const next = points.map((p, i) => i === editIdx ? { ...p, label: editLabel.trim() || p.label } : p);
+        setPoints(next);
+        onSave?.(next);
+        setEditIdx(null);
+    };
+
+    // 张力等级标签
+    const tensionLabels = ['平缓', '低', '中', '高', '极高'];
+
+    return (
+        <div style={{
+            background: 'var(--bg-primary)', borderRadius: 14,
+            border: '1px solid var(--border-light)', margin: '0 0 16px',
+            overflow: 'hidden', transition: 'all 0.25s',
+        }}>
+            <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '12px 18px', cursor: 'pointer', userSelect: 'none',
+            }} onClick={() => setCollapsed(!collapsed)}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <ClipboardList size={14} style={{ color: '#ef4444' }} />
+                    剧情节奏曲线
+                    <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-muted)' }}>— 拖拽节点调整张力</span>
+                </span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)', transform: collapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
+            </div>
+            {!collapsed && (
+                <div style={{ padding: '0 18px 16px' }}>
+                    <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 200, cursor: dragging !== null ? 'grabbing' : 'default' }}>
+                        <defs>
+                            <linearGradient id="plot-tension-grad" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#ef4444" stopOpacity="0.18" />
+                                <stop offset="100%" stopColor="#ef4444" stopOpacity="0.02" />
+                            </linearGradient>
+                        </defs>
+                        {/* Grid */}
+                        {[0, 0.25, 0.5, 0.75, 1].map((r, i) => {
+                            const y = PY + r * chartH;
+                            return (
+                                <g key={i}>
+                                    <line x1={PX} y1={y} x2={W - PX} y2={y} stroke="var(--border-light)" strokeWidth="1" strokeDasharray="4 3" opacity="0.6" />
+                                    <text x={PX - 8} y={y + 4} textAnchor="end" fill="var(--text-muted)" fontSize="8.5" fontWeight="500">
+                                        {tensionLabels[4 - i] || ''}
+                                    </text>
+                                </g>
+                            );
+                        })}
+                        {/* Area fill */}
+                        {coords.length >= 2 && <path d={areaPath} fill="url(#plot-tension-grad)" />}
+                        {/* Curve line */}
+                        {coords.length >= 2 && <path d={smoothPath} fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round" />}
+                        {/* Points */}
+                        {coords.map((c, i) => (
+                            <g key={i}>
+                                {/* Vertical guide line on drag */}
+                                {dragging === i && <line x1={c.x} y1={PY} x2={c.x} y2={H - PY} stroke="#ef4444" strokeWidth="1" strokeDasharray="3 3" opacity="0.4" />}
+                                {/* Draggable dot */}
+                                <circle
+                                    cx={c.x} cy={c.y} r={dragging === i ? 7 : 5}
+                                    fill={dragging === i ? '#ef4444' : 'var(--bg-primary)'}
+                                    stroke="#ef4444" strokeWidth="2.5"
+                                    style={{ cursor: 'grab', transition: dragging === i ? 'none' : 'r 0.15s' }}
+                                    onPointerDown={(e) => handlePointerDown(i, e)}
+                                />
+                                {/* Tension value */}
+                                <text x={c.x} y={c.y - 12} textAnchor="middle" fill="#ef4444" fontSize="9.5" fontWeight="700" opacity={dragging === i ? 1 : 0.7}>
+                                    {Math.round(points[i].tension * 100)}%
+                                </text>
+                                {/* Label */}
+                                {editIdx === i ? null : (
+                                    <text
+                                        x={c.x} y={H - 5} textAnchor="middle" fill="var(--text-primary)" fontSize="10" fontWeight="600"
+                                        style={{ cursor: 'pointer' }}
+                                        onDoubleClick={() => startEdit(i)}
+                                    >
+                                        {points[i].label}
+                                    </text>
+                                )}
+                                {/* Delete button on hover (small × above dot) */}
+                                {points.length > 2 && (
+                                    <text
+                                        x={c.x + 10} y={c.y - 10} textAnchor="middle" fill="var(--text-muted)" fontSize="10"
+                                        style={{ cursor: 'pointer', opacity: 0.3 }}
+                                        onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.fill = '#ef4444'; }}
+                                        onMouseLeave={e => { e.currentTarget.style.opacity = '0.3'; e.currentTarget.style.fill = 'var(--text-muted)'; }}
+                                        onClick={() => removePoint(i)}
+                                    >×</text>
+                                )}
+                            </g>
+                        ))}
+                    </svg>
+                    {/* Inline label editor */}
+                    {editIdx !== null && (
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4 }}>
+                            <input
+                                value={editLabel} onChange={e => setEditLabel(e.target.value)}
+                                onBlur={finishEdit} onKeyDown={e => { if (e.key === 'Enter') finishEdit(); if (e.key === 'Escape') setEditIdx(null); }}
+                                autoFocus
+                                style={{ flex: 1, padding: '4px 8px', border: '1.5px solid #ef4444', borderRadius: 8, fontSize: 12, outline: 'none', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
+                                placeholder="节点名称"
+                            />
+                        </div>
+                    )}
+                    {/* Add point button */}
+                    <button
+                        onClick={addPoint}
+                        style={{ marginTop: 8, padding: '4px 12px', border: '1px dashed var(--border-light)', borderRadius: 8, background: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--text-muted)', transition: 'all 0.15s' }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.color = '#ef4444'; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-light)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+                    >+ 添加节点</button>
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ==================== 样式 ====================
 const S = {
     overlay: {
         position: 'fixed', inset: 0, zIndex: 10000,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'rgba(0,0,0,0.45)',
-        backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+        background: 'rgba(0,0,0,0.6)',
+        backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
     },
     container: {
         background: 'var(--bg-card, #fff)',
-        borderRadius: 18,
-        boxShadow: '0 32px 100px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.05)',
-        width: '90%', maxWidth: 980,
-        height: '78vh', maxHeight: '86vh',
+        borderRadius: 20,
+        boxShadow: '0 40px 120px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.06)',
+        width: '92%', maxWidth: 1100,
+        height: '82vh', maxHeight: '90vh',
         display: 'flex', flexDirection: 'column',
         overflow: 'hidden',
-        animation: 'settingsSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
+        animation: 'settingsSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
     },
     containerFull: {
         position: 'fixed', inset: 0,
@@ -91,67 +293,73 @@ const S = {
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
         boxShadow: 'none',
     },
+    // 头部：大幅增高，带装饰性渐变和发光背景
     header: {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '16px 22px',
+        padding: '0 28px',
+        height: 72, minHeight: 72,
         borderBottom: '1px solid var(--border-light, #e5e7eb)',
-        flexShrink: 0,
+        flexShrink: 0, position: 'relative', overflow: 'hidden',
     },
-    headerLeft: { display: 'flex', alignItems: 'center', gap: 12 },
+    headerLeft: { display: 'flex', alignItems: 'center', gap: 16, zIndex: 1 },
     headerIcon: {
-        width: 36, height: 36, borderRadius: 11,
+        width: 46, height: 46, borderRadius: 14,
         display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
     },
     headerTitle: {
-        fontSize: 17, fontWeight: 700,
+        fontSize: 22, fontWeight: 800,
         color: 'var(--text-primary, #1f2937)',
-        margin: 0, letterSpacing: '-0.01em',
+        margin: 0, letterSpacing: '0.02em',
     },
-    headerCount: { fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 12 },
+    headerCount: {
+        fontSize: 11, fontWeight: 600, padding: '4px 14px', borderRadius: 20,
+    },
     headerBtn: {
-        width: 32, height: 32, border: 'none', borderRadius: 9,
+        width: 36, height: 36, border: 'none', borderRadius: 10,
         background: 'transparent', color: 'var(--text-muted, #9ca3af)',
         cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        transition: 'all 0.15s',
+        transition: 'all 0.2s ease', zIndex: 1,
     },
     body: { flex: 1, display: 'flex', overflow: 'hidden' },
+    // 侧边栏：带分类色渐变背景
     sidebar: {
-        width: 260, minWidth: 260,
+        width: 290, minWidth: 290,
         borderRight: '1px solid var(--border-light, #e5e7eb)',
         display: 'flex', flexDirection: 'column',
-        background: 'var(--bg-secondary, #f9fafb)',
     },
-    searchWrap: { padding: '12px 14px', borderBottom: '1px solid var(--border-light, #e5e7eb)' },
+    searchWrap: { padding: '14px 14px 10px', flexShrink: 0 },
     searchBox: {
         display: 'flex', alignItems: 'center', gap: 8,
-        padding: '8px 12px',
+        padding: '10px 14px',
         background: 'var(--bg-card, #fff)',
         border: '1px solid var(--border-light, #e5e7eb)',
-        borderRadius: 10, transition: 'all 0.2s ease',
+        borderRadius: 12, transition: 'all 0.25s ease',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
     },
     searchInput: {
         flex: 1, border: 'none', outline: 'none',
         background: 'transparent', color: 'var(--text-primary, #1f2937)', fontSize: 13,
     },
-    treeList: { flex: 1, overflowY: 'auto', padding: '6px 8px' },
+    treeList: { flex: 1, overflowY: 'auto', padding: '4px 8px' },
     treeFolder: {
-        display: 'flex', alignItems: 'center', gap: 6,
-        padding: '7px 8px', borderRadius: 9,
-        cursor: 'pointer', fontSize: 13, fontWeight: 500,
+        display: 'flex', alignItems: 'center', gap: 7,
+        padding: '9px 12px', borderRadius: 10, position: 'relative',
+        cursor: 'pointer', fontSize: 13, fontWeight: 600,
         color: 'var(--text-primary, #1f2937)',
-        transition: 'all 0.12s ease', userSelect: 'none',
+        transition: 'all 0.18s ease', userSelect: 'none',
+        marginTop: 4,
     },
     treeItem: {
         display: 'flex', alignItems: 'center', gap: 8,
-        padding: '6px 8px', borderRadius: 9,
+        padding: '8px 12px', borderRadius: 10, position: 'relative',
         cursor: 'pointer', fontSize: 13,
         color: 'var(--text-primary, #1f2937)',
-        transition: 'all 0.12s ease', userSelect: 'none',
+        transition: 'all 0.18s ease', userSelect: 'none',
     },
-    treeDot: { width: 7, height: 7, borderRadius: '50%', flexShrink: 0 },
-    treeName: { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+    treeDot: { width: 8, height: 8, borderRadius: '50%', flexShrink: 0, transition: 'all 0.2s' },
+    treeName: { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', transition: 'opacity 0.15s' },
     treeCount: {
-        fontSize: 10, fontWeight: 600, padding: '1px 7px', borderRadius: 9,
+        fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 10,
         background: 'var(--bg-hover, #f3f4f6)', color: 'var(--text-muted, #9ca3af)', flexShrink: 0,
     },
     treeAction: {
@@ -161,61 +369,70 @@ const S = {
         display: 'flex', alignItems: 'center', transition: 'all 0.15s', flexShrink: 0,
     },
     renameInput: {
-        flex: 1, minWidth: 0, padding: '2px 8px',
-        border: '2px solid var(--accent, #3b82f6)', borderRadius: 6,
+        flex: 1, minWidth: 0, padding: '4px 10px',
+        border: '2px solid var(--accent, #3b82f6)', borderRadius: 8,
         background: 'var(--bg-card, #fff)', color: 'var(--text-primary, #1f2937)',
         fontSize: 13, outline: 'none',
     },
     emptyState: {
         display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center',
-        gap: 14, height: '100%', padding: '40px 20px',
+        gap: 16, height: '100%', padding: '40px 24px',
     },
     emptyIcon: {
-        width: 48, height: 48, borderRadius: 14,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.7,
+        width: 56, height: 56, borderRadius: 16,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.8,
     },
     addBtn: {
-        display: 'flex', alignItems: 'center', gap: 5,
-        padding: '8px 18px', border: '1.5px dashed', borderRadius: 10,
+        display: 'flex', alignItems: 'center', gap: 6,
+        padding: '8px 18px', border: '1.5px dashed', borderRadius: 12,
         background: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 500,
-        transition: 'all 0.18s ease',
+        transition: 'all 0.2s ease',
     },
+    // 底部工具栏
     footer: {
-        padding: '10px 14px',
+        padding: '10px 12px',
         borderTop: '1px solid var(--border-light, #e5e7eb)',
         display: 'flex', gap: 8, alignItems: 'center',
         position: 'relative',
     },
     footerBtn: {
         display: 'flex', alignItems: 'center', gap: 5,
-        padding: '6px 14px',
-        border: '1px solid var(--border-light, #e5e7eb)', borderRadius: 9,
+        padding: '7px 16px',
+        border: '1px solid var(--border-light, #e5e7eb)', borderRadius: 10,
         background: 'var(--bg-card, #fff)', cursor: 'pointer', fontSize: 12, fontWeight: 500,
-        color: 'var(--text-secondary, #6b7280)', transition: 'all 0.15s ease',
-        boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+        color: 'var(--text-secondary, #6b7280)', transition: 'all 0.2s ease',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+    },
+    // 主要新建按钮（彩色）
+    footerPrimaryBtn: {
+        display: 'flex', alignItems: 'center', gap: 5,
+        padding: '7px 18px', border: 'none', borderRadius: 10,
+        cursor: 'pointer', fontSize: 12, fontWeight: 600,
+        color: '#fff', transition: 'all 0.2s ease',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
     },
     editor: { flex: 1, overflowY: 'auto', background: 'var(--bg-primary, #fff)' },
     // 新建菜单
     addMenu: {
-        position: 'absolute', bottom: '100%', left: 14, marginBottom: 6,
+        position: 'absolute', bottom: '100%', left: 12, marginBottom: 6,
         background: 'var(--bg-card, #fff)',
         border: '1px solid var(--border-light, #e5e7eb)',
-        borderRadius: 12,
-        boxShadow: '0 12px 40px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.04)',
-        overflow: 'hidden', minWidth: 180, zIndex: 10,
-        animation: 'popover-in 0.15s cubic-bezier(0.16, 1, 0.3, 1)',
+        borderRadius: 14,
+        boxShadow: '0 16px 48px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.04)',
+        overflow: 'hidden', minWidth: 190, zIndex: 10,
+        animation: 'popover-in 0.18s cubic-bezier(0.16, 1, 0.3, 1)',
     },
     addMenuItem: {
         display: 'flex', alignItems: 'center', gap: 10,
-        padding: '10px 16px', width: '100%',
+        padding: '11px 18px', width: '100%',
         border: 'none', background: 'transparent',
         cursor: 'pointer', fontSize: 13, fontWeight: 500,
         color: 'var(--text-primary, #1f2937)',
-        transition: 'all 0.12s ease', textAlign: 'left',
+        transition: 'all 0.15s ease', textAlign: 'left',
     },
     addMenuIcon: {
-        width: 30, height: 30, borderRadius: 8,
+        width: 32, height: 32, borderRadius: 9,
         display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
     },
     // 图标选择器
@@ -223,18 +440,24 @@ const S = {
         position: 'absolute', zIndex: 100,
         background: 'var(--bg-card, #fff)',
         border: '1px solid var(--border-light, #e5e7eb)',
-        borderRadius: 14,
-        boxShadow: '0 16px 48px rgba(0,0,0,0.15)',
-        padding: 12, width: 240,
+        borderRadius: 16,
+        boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
+        padding: 14, width: 250,
     },
     iconGrid: {
         display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4,
     },
     iconCell: {
-        width: 34, height: 34, border: 'none', borderRadius: 8,
+        width: 36, height: 36, border: 'none', borderRadius: 9,
         background: 'transparent', cursor: 'pointer',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        transition: 'all 0.12s ease',
+        transition: 'all 0.15s ease',
+    },
+    // 选中指示条
+    activeIndicator: {
+        position: 'absolute', left: 2, top: '15%', bottom: '15%',
+        width: 3.5, borderRadius: 4,
+        transition: 'all 0.2s ease',
     },
 };
 
@@ -337,7 +560,7 @@ function AddMenu({ onAddFolder, onAddItem, onClose, catColor, catBg }) {
 }
 
 // ==================== 左侧条目列表 ====================
-function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFolder, onAddItem, onRename, onChangeIcon, searchQuery }) {
+function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFolder, onAddItem, onRename, onChangeIcon, onDelete, onToggleEnabled, onReorder, searchQuery }) {
     const meta = getCatMeta(category);
     const [collapsed, setCollapsed] = useState({});
     const [renamingId, setRenamingId] = useState(null);
@@ -346,6 +569,11 @@ function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFold
     const [iconPickerFor, setIconPickerFor] = useState(null);
     const [iconPickerRect, setIconPickerRect] = useState(null);
     const renameInputRef = useRef(null);
+
+    // ---- 拖拽状态 ----
+    const [dragId, setDragId] = useState(null);
+    const [dropTargetId, setDropTargetId] = useState(null);
+    const [dropPosition, setDropPosition] = useState(null); // 'before' | 'after' | 'inside'
 
     const getChildren = useCallback((parentId) => {
         return nodes.filter(n => n.parentId === parentId).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -356,7 +584,8 @@ function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFold
         return node.name?.toLowerCase().includes(searchQuery.toLowerCase());
     }, [searchQuery]);
 
-    const startRename = (node) => {
+    const startRename = (e, node) => {
+        e.stopPropagation();
         setRenamingId(node.id);
         setRenameValue(node.name);
         setTimeout(() => renameInputRef.current?.focus(), 50);
@@ -370,7 +599,6 @@ function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFold
     const handleIconClick = (e, nodeId) => {
         e.stopPropagation();
         const rect = e.currentTarget.getBoundingClientRect();
-        // Convert to position relative to treeList container
         const listEl = e.currentTarget.closest('[data-tree-list]');
         const listRect = listEl?.getBoundingClientRect() || { top: 0, left: 0 };
         setIconPickerFor(nodeId);
@@ -392,6 +620,109 @@ function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFold
         return count;
     }, [nodes]);
 
+    // ---- 拖拽处理 ----
+    const handleDragStart = (e, node) => {
+        setDragId(node.id);
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', node.id);
+        // 让拖拽预览半透明
+        if (e.currentTarget) {
+            e.currentTarget.style.opacity = '0.5';
+        }
+    };
+
+    const handleDragEnd = (e) => {
+        if (e.currentTarget) e.currentTarget.style.opacity = '1';
+        setDragId(null);
+        setDropTargetId(null);
+        setDropPosition(null);
+    };
+
+    const handleDragOver = (e, node) => {
+        e.preventDefault();
+        if (!dragId || dragId === node.id) return;
+        e.dataTransfer.dropEffect = 'move';
+        const rect = e.currentTarget.getBoundingClientRect();
+        const y = e.clientY - rect.top;
+        const h = rect.height;
+        // 文件夹：上1/4=before, 中间=inside, 下1/4=after
+        // 条目：上半=before, 下半=after
+        if (node.type === 'folder') {
+            if (y < h * 0.25) setDropPosition('before');
+            else if (y > h * 0.75) setDropPosition('after');
+            else setDropPosition('inside');
+        } else {
+            setDropPosition(y < h / 2 ? 'before' : 'after');
+        }
+        setDropTargetId(node.id);
+    };
+
+    const handleDrop = (e, targetNode) => {
+        e.preventDefault();
+        if (!dragId || dragId === targetNode.id || !onReorder) return;
+        onReorder(dragId, targetNode.id, dropPosition);
+        setDragId(null);
+        setDropTargetId(null);
+        setDropPosition(null);
+    };
+
+    // 生成拖拽指示线样式
+    const getDropIndicatorStyle = (nodeId) => {
+        if (dropTargetId !== nodeId || !dropPosition) return {};
+        if (dropPosition === 'before') {
+            return { boxShadow: `0 -2px 0 0 ${meta.color}` };
+        }
+        if (dropPosition === 'after') {
+            return { boxShadow: `0 2px 0 0 ${meta.color}` };
+        }
+        if (dropPosition === 'inside') {
+            return { outline: `2px dashed ${meta.color}40`, outlineOffset: -2 };
+        }
+        return {};
+    };
+
+    // ---- 悬停操作按钮 ----
+    const actionBtnStyle = {
+        border: 'none', background: 'none', cursor: 'pointer', padding: 3,
+        borderRadius: 5, display: 'flex', alignItems: 'center',
+        transition: 'all 0.12s', flexShrink: 0, lineHeight: 1,
+    };
+
+    const renderActions = (node, isHovered, addItemFn) => {
+        if (renamingId === node.id || !isHovered) return null;
+        const isHidden = node.enabled === false;
+        return (
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0, marginLeft: 'auto' }} onClick={e => e.stopPropagation()}>
+                <button style={{ ...actionBtnStyle, color: 'var(--text-muted)' }}
+                    onClick={e => startRename(e, node)} title="重命名"
+                    onMouseEnter={e => { e.currentTarget.style.color = meta.color; e.currentTarget.style.background = `${meta.color}12`; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'none'; }}
+                ><Pencil size={12} /></button>
+                {node.type === 'item' && onToggleEnabled && (
+                    <button style={{ ...actionBtnStyle, color: isHidden ? '#f59e0b' : 'var(--text-muted)' }}
+                        onClick={e => { e.stopPropagation(); onToggleEnabled(node.id); }} title={isHidden ? '显示' : '隐藏'}
+                        onMouseEnter={e => { e.currentTarget.style.color = isHidden ? '#22c55e' : '#f59e0b'; e.currentTarget.style.background = isHidden ? 'rgba(34,197,94,0.1)' : 'rgba(245,158,11,0.1)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.color = isHidden ? '#f59e0b' : 'var(--text-muted)'; e.currentTarget.style.background = 'none'; }}
+                    >{isHidden ? <Eye size={12} /> : <EyeOff size={12} />}</button>
+                )}
+                {onDelete && (
+                    <button style={{ ...actionBtnStyle, color: 'var(--text-muted)' }}
+                        onClick={e => { e.stopPropagation(); onDelete(node.id); }} title="删除"
+                        onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = 'rgba(239,68,68,0.08)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'none'; }}
+                    ><Trash2 size={12} /></button>
+                )}
+                {addItemFn && (
+                    <button style={{ ...actionBtnStyle, color: 'var(--text-muted)' }}
+                        onClick={e => { e.stopPropagation(); addItemFn(); }} title="新建条目"
+                        onMouseEnter={e => { e.currentTarget.style.color = meta.color; e.currentTarget.style.background = `${meta.color}12`; }}
+                        onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'none'; }}
+                    ><Plus size={12} /></button>
+                )}
+            </div>
+        );
+    };
+
     const renderNode = (node, depth = 0) => {
         if (!matchesSearch(node) && node.type === 'item') return null;
         const isFolder = node.type === 'folder';
@@ -400,6 +731,7 @@ function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFold
         const isCollapsed = collapsed[node.id];
         const children = getChildren(node.id);
         const indent = depth * 18;
+        const isDragging = dragId === node.id;
 
         if (isFolder) {
             if (searchQuery) {
@@ -410,21 +742,36 @@ function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFold
                 if (!hasDescendantMatch(node.id)) return null;
             }
 
-            const FolderIcon = node.icon ? getIconComponent(node.icon) : FolderOpen;
+            const FolderIcon = (node.icon && getIconComponent(node.icon)) || FolderOpen;
             const totalItems = countItems(node.id);
 
             return (
                 <div key={node.id}>
                     <div
+                        draggable={!renamingId}
+                        onDragStart={e => handleDragStart(e, node)}
+                        onDragEnd={handleDragEnd}
+                        onDragOver={e => handleDragOver(e, node)}
+                        onDragLeave={() => { if (dropTargetId === node.id) { setDropTargetId(null); setDropPosition(null); } }}
+                        onDrop={e => handleDrop(e, node)}
                         style={{
                             ...S.treeFolder,
                             paddingLeft: 8 + indent,
-                            background: isSelected ? `${meta.color}12` : isHovered ? 'var(--bg-hover, #f3f4f6)' : 'transparent',
+                            background: isSelected ? `${meta.color}20` : isHovered ? 'var(--bg-hover, #f3f4f6)' : 'transparent',
+                            color: isSelected ? meta.color : 'var(--text-primary, #1f2937)',
+                            opacity: isDragging ? 0.5 : 1,
+                            ...getDropIndicatorStyle(node.id),
                         }}
-                        onClick={() => { setCollapsed(p => ({ ...p, [node.id]: !p[node.id] })); onSelect(node.id); }}
+                        onClick={() => { setCollapsed(p => ({ ...p, [node.id]: !p[node.id] })); onSelect(isSelected ? null : node.id); }}
                         onMouseEnter={() => setHoveredId(node.id)}
                         onMouseLeave={() => setHoveredId(null)}
                     >
+                        {/* 选中指示条 */}
+                        {isSelected && <span style={{ ...S.activeIndicator, background: meta.color }} />}
+                        {/* 拖拽手柄 */}
+                        <span style={{ display: 'flex', color: 'var(--text-muted)', flexShrink: 0, opacity: isHovered ? 0.5 : 0, cursor: 'grab', marginRight: -2 }}>
+                            <GripVertical size={12} />
+                        </span>
                         <span style={{ display: 'flex', color: 'var(--text-muted)', flexShrink: 0 }}>
                             {isCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
                         </span>
@@ -441,13 +788,9 @@ function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFold
                                 onBlur={finishRename}
                                 onKeyDown={e => { if (e.key === 'Enter') finishRename(); if (e.key === 'Escape') setRenamingId(null); }}
                                 onClick={e => e.stopPropagation()} />
-                        ) : <span style={S.treeName} onDoubleClick={(e) => { e.stopPropagation(); startRename(node); }}>{node.name}</span>}
-                        <span style={S.treeCount}>{totalItems}</span>
-                        <button
-                            style={{ ...S.treeAction, opacity: isHovered ? 1 : 0 }}
-                            onClick={e => { e.stopPropagation(); onAddItem(node.id); }}
-                            title="新建条目"
-                        ><Plus size={12} /></button>
+                        ) : <span style={{ ...S.treeName, opacity: node.enabled === false ? 0.45 : 1 }}>{node.name}</span>}
+                        {!isHovered && <span style={S.treeCount}>{totalItems}</span>}
+                        {renderActions(node, isHovered, () => onAddItem(node.id))}
                     </div>
                     {!isCollapsed && children.map(child => renderNode(child, depth + 1))}
                 </div>
@@ -455,30 +798,46 @@ function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFold
         }
 
         // item
+        const isHidden = node.enabled === false;
         return (
             <div
                 key={node.id}
+                draggable={!renamingId}
+                onDragStart={e => handleDragStart(e, node)}
+                onDragEnd={handleDragEnd}
+                onDragOver={e => handleDragOver(e, node)}
+                onDragLeave={() => { if (dropTargetId === node.id) { setDropTargetId(null); setDropPosition(null); } }}
+                onDrop={e => handleDrop(e, node)}
                 style={{
                     ...S.treeItem,
                     paddingLeft: 12 + indent,
-                    background: isSelected ? `${meta.color}16` : isHovered ? 'var(--bg-hover, #f3f4f6)' : 'transparent',
+                    background: isSelected ? `${meta.color}22` : isHovered ? 'var(--bg-hover, #f3f4f6)' : 'transparent',
                     fontWeight: isSelected ? 600 : 400,
+                    color: isSelected ? meta.color : 'var(--text-primary)',
+                    opacity: isDragging ? 0.5 : 1,
+                    ...getDropIndicatorStyle(node.id),
                 }}
-                onClick={() => onSelect(node.id)}
-                onDoubleClick={() => startRename(node)}
+                onClick={() => onSelect(isSelected ? null : node.id)}
                 onMouseEnter={() => setHoveredId(node.id)}
                 onMouseLeave={() => setHoveredId(null)}
                 title={node.name}
             >
-                <span style={{ ...S.treeDot, background: isSelected ? meta.color : `${meta.color}60` }} />
+                {/* 选中指示条 */}
+                {isSelected && <span style={{ ...S.activeIndicator, background: meta.color }} />}
+                {/* 拖拽手柄 */}
+                <span style={{ display: 'flex', color: 'var(--text-muted)', flexShrink: 0, opacity: isHovered ? 0.5 : 0, cursor: 'grab', marginRight: -4 }}>
+                    <GripVertical size={12} />
+                </span>
+                <span style={{ ...S.treeDot, background: isSelected ? meta.color : isHidden ? `${meta.color}30` : `${meta.color}60` }} />
                 {renamingId === node.id ? (
                     <input ref={renameInputRef} style={S.renameInput} value={renameValue}
                         onChange={e => setRenameValue(e.target.value)}
                         onBlur={finishRename}
                         onKeyDown={e => { if (e.key === 'Enter') finishRename(); if (e.key === 'Escape') setRenamingId(null); }}
                         onClick={e => e.stopPropagation()} />
-                ) : <span style={S.treeName}>{node.name}</span>}
-                {node.enabled === false && <EyeOff size={11} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />}
+                ) : <span style={{ ...S.treeName, opacity: isHidden ? 0.45 : 1, textDecoration: isHidden ? 'line-through' : 'none' }}>{node.name}</span>}
+                {isHidden && !isHovered && <EyeOff size={11} style={{ color: 'var(--text-muted)', flexShrink: 0, opacity: 0.5 }} />}
+                {renderActions(node, isHovered)}
             </div>
         );
     };
@@ -784,8 +1143,10 @@ export default function CategorySettingsModal() {
         return nodes.find(n => n.parentId === workId && n.category === category) || null;
     }, [nodes, category]);
 
-    // 使用 rootFolder 的自定义图标（如果有的话）
-    const CatIcon = (rootFolder?.icon && getIconComponent(rootFolder.icon)) || meta.icon;
+    // 使用 rootFolder 的自定义图标（如果有的话），忽略默认的文件夹图标
+    const defaultFolderIcons = ['FolderOpen', 'Folder', 'FolderClosed', 'folder-open', 'folder', 'folder-closed'];
+    const hasCustomIcon = rootFolder?.icon && !defaultFolderIcons.includes(rootFolder.icon);
+    const CatIcon = (hasCustomIcon && getIconComponent(rootFolder.icon)) || meta.icon;
 
     const categoryNodes = useMemo(() => {
         if (!rootFolder) return [];
@@ -884,18 +1245,23 @@ export default function CategorySettingsModal() {
         <div style={S.overlay} onMouseDown={e => { e.currentTarget._md = e.target; }} onClick={e => { if (e.currentTarget._md === e.currentTarget) onClose(); }}>
             <div style={isFullscreen ? S.containerFull : S.container} onClick={e => e.stopPropagation()}>
                 {/* ===== 头部 ===== */}
-                <div style={{ ...S.header, background: `linear-gradient(135deg, ${meta.bg} 0%, var(--bg-card, #fff) 100%)` }}>
+                <div style={{ ...S.header, background: `linear-gradient(135deg, ${meta.bg} 0%, ${meta.bg}80 50%, var(--bg-card, #fff) 100%)` }}>
+                    {/* 装饰性发光圆 */}
+                    <div style={{ position: 'absolute', top: -40, right: -40, width: 200, height: 200, borderRadius: '50%', background: `${meta.color}08`, pointerEvents: 'none' }} />
+                    <div style={{ position: 'absolute', top: -20, left: '30%', width: 120, height: 120, borderRadius: '50%', background: `${meta.color}06`, pointerEvents: 'none' }} />
                     <div style={S.headerLeft}>
-                        <span style={{ ...S.headerIcon, color: meta.color, background: meta.bg, boxShadow: `0 4px 12px ${meta.color}20` }}>
-                            <CatIcon size={18} />
+                        <span style={{ ...S.headerIcon, color: meta.color, background: `linear-gradient(135deg, ${meta.bg}, ${meta.color}20)`, boxShadow: `0 8px 24px ${meta.color}30` }}>
+                            <CatIcon size={22} />
                         </span>
-                        <h2 style={S.headerTitle}>{meta.label}</h2>
-                        <span style={{ ...S.headerCount, color: meta.color, background: `${meta.color}14` }}>{itemCount} 个条目</span>
+                        <div>
+                            <h2 style={S.headerTitle}>{meta.label}</h2>
+                            <span style={{ fontSize: 12, color: 'var(--text-muted)', letterSpacing: '0.05em' }}>{itemCount} 个设定条目</span>
+                        </div>
                     </div>
-                    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                    <div style={{ display: 'flex', gap: 4, alignItems: 'center', zIndex: 1 }}>
                         <button style={S.headerBtn} onClick={() => setIsFullscreen(!isFullscreen)}
                             title={isFullscreen ? '缩小' : '最大化'}
-                            onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)'; }}
+                            onMouseEnter={e => { e.currentTarget.style.background = `${meta.color}12`; e.currentTarget.style.color = meta.color; }}
                             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)'; }}
                         >
                             {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
@@ -912,7 +1278,7 @@ export default function CategorySettingsModal() {
                 {/* ===== 作品切换器 ===== */}
                 <div style={{
                     display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '8px 22px',
+                    padding: '8px 28px',
                     borderBottom: '1px solid var(--border-light, #e5e7eb)',
                     background: 'var(--bg-secondary, #f9fafb)',
                     flexShrink: 0,
@@ -1010,14 +1376,14 @@ export default function CategorySettingsModal() {
                 {/* ===== 内容区 ===== */}
                 <div style={S.body}>
                     {/* 左侧 */}
-                    <div style={S.sidebar}>
+                    <div style={{ ...S.sidebar, background: `linear-gradient(180deg, ${meta.bg}40 0%, var(--bg-secondary, #f9fafb) 120px)` }}>
                         <div style={S.searchWrap}>
                             <div style={{
                                 ...S.searchBox,
                                 borderColor: searchFocused ? meta.color : 'var(--border-light, #e5e7eb)',
-                                boxShadow: searchFocused ? `0 0 0 3px ${meta.color}18` : 'none',
+                                boxShadow: searchFocused ? `0 0 0 3px ${meta.color}18, 0 2px 6px rgba(0,0,0,0.06)` : '0 1px 3px rgba(0,0,0,0.04)',
                             }}>
-                                <Search size={14} style={{ color: searchFocused ? meta.color : 'var(--text-muted)', flexShrink: 0 }} />
+                                <Search size={14} style={{ color: searchFocused ? meta.color : 'var(--text-muted)', flexShrink: 0, transition: 'color 0.2s' }} />
                                 <input ref={searchInputRef} style={S.searchInput}
                                     placeholder="搜索条目…" value={searchQuery}
                                     onChange={e => setSearchQuery(e.target.value)}
@@ -1032,15 +1398,60 @@ export default function CategorySettingsModal() {
                             selectedId={selectedNodeId} onSelect={setSelectedNodeId}
                             onAddFolder={handleAddFolder} onAddItem={handleAddItem}
                             onRename={handleRenameNode} onChangeIcon={handleChangeIcon}
+                            onDelete={handleDeleteNode}
+                            onToggleEnabled={async (id) => {
+                                const node = nodes.find(n => n.id === id);
+                                if (!node) return;
+                                const newEnabled = node.enabled === false ? true : false;
+                                await updateSettingsNode(id, { enabled: newEnabled });
+                                setNodes(prev => prev.map(n => n.id === id ? { ...n, enabled: newEnabled } : n));
+                            }}
+                            onReorder={async (draggedId, targetId, position) => {
+                                const dragged = nodes.find(n => n.id === draggedId);
+                                const target = nodes.find(n => n.id === targetId);
+                                if (!dragged || !target) return;
+                                let newParentId, newOrder;
+                                if (position === 'inside' && target.type === 'folder') {
+                                    // 放入文件夹内部
+                                    newParentId = target.id;
+                                    const siblings = nodes.filter(n => n.parentId === target.id);
+                                    newOrder = siblings.length;
+                                } else {
+                                    // before/after：放到同级
+                                    newParentId = target.parentId;
+                                    const siblings = nodes.filter(n => n.parentId === target.parentId && n.id !== draggedId)
+                                        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+                                    const targetIdx = siblings.findIndex(n => n.id === targetId);
+                                    const insertIdx = position === 'before' ? targetIdx : targetIdx + 1;
+                                    // 重新编号
+                                    const reordered = [...siblings];
+                                    reordered.splice(insertIdx, 0, { ...dragged, parentId: newParentId });
+                                    const updatedNodes = nodes.map(n => {
+                                        if (n.id === draggedId) return { ...n, parentId: newParentId, order: insertIdx, updatedAt: new Date().toISOString() };
+                                        const idx = reordered.findIndex(r => r.id === n.id);
+                                        if (idx !== -1 && n.order !== idx) return { ...n, order: idx };
+                                        return n;
+                                    });
+                                    setNodes(updatedNodes);
+                                    await saveSettingsNodes(updatedNodes);
+                                    return;
+                                }
+                                const updatedNodes = nodes.map(n => {
+                                    if (n.id === draggedId) return { ...n, parentId: newParentId, order: newOrder, updatedAt: new Date().toISOString() };
+                                    return n;
+                                });
+                                setNodes(updatedNodes);
+                                await saveSettingsNodes(updatedNodes);
+                            }}
                             searchQuery={searchQuery}
                         />
 
                         {/* 底部工具栏 */}
                         <div style={S.footer}>
-                            <button style={S.footerBtn}
+                            <button style={{ ...S.footerPrimaryBtn, background: meta.color, boxShadow: `0 4px 12px ${meta.color}40` }}
                                 onClick={() => setShowAddMenu(!showAddMenu)}
-                                onMouseEnter={e => { e.currentTarget.style.borderColor = meta.color; e.currentTarget.style.color = meta.color; e.currentTarget.style.background = meta.bg; }}
-                                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-light)'; e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.background = 'var(--bg-card, #fff)'; }}
+                                onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(1.1)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                                onMouseLeave={e => { e.currentTarget.style.filter = 'none'; e.currentTarget.style.transform = 'none'; }}
                             >
                                 <Plus size={14} /> 新建
                                 <ChevronDown size={11} style={{ marginLeft: 2 }} />
@@ -1068,6 +1479,13 @@ export default function CategorySettingsModal() {
 
                     {/* 右侧编辑器 */}
                     <div style={S.editor}>
+                        {/* 剧情曲线图 — 仅 plot 分类展示 */}
+                        {category === 'plot' && <PlotCurveChart nodes={nodes} rootFolder={rootFolder} onSave={async (curveData) => {
+                            if (!rootFolder) return;
+                            const updated = { ...rootFolder.content, plotCurve: curveData };
+                            await updateSettingsNode(rootFolder.id, { content: updated });
+                            setNodes(prev => prev.map(n => n.id === rootFolder.id ? { ...n, content: updated } : n));
+                        }} />}
                         <SettingsItemEditor
                             selectedNode={selectedNode}
                             allNodes={nodes}

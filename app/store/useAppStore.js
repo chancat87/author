@@ -54,6 +54,9 @@ export const useAppStore = create((set, get) => ({
     showSettings: false, // false | 'settings' | 'apiConfig' | 'preferences'
     setShowSettings: (show, tab) => set({ showSettings: (show === true ? (tab || 'settings') : show) || false }),
 
+    showBookInfo: false,
+    setShowBookInfo: (show) => set({ showBookInfo: !!show }),
+
     // 分类独立弹窗
     openCategoryModal: null, // null | 'character' | 'location' | 'world' | 'object' | 'plot' | 'rules' | ...
     setOpenCategoryModal: (cat, jumpNodeId) => set({ openCategoryModal: cat || null, jumpToNodeId: jumpNodeId || null }),

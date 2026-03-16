@@ -9,6 +9,8 @@ const themeInitScript = `
   try {
     var t = localStorage.getItem('author-theme') || 'light';
     document.documentElement.setAttribute('data-theme', t);
+    var v = localStorage.getItem('author-visual');
+    if (v) document.documentElement.setAttribute('data-visual', v);
   } catch(e) {}
 })();
 `;
