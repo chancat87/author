@@ -55,7 +55,7 @@ I watched the versatility of these models being gutted. I don't want us to live 
 - **Local-first** — all data stored in browser IndexedDB, never uploaded to servers
 - **Snapshot system** — manual/auto versioning with one-click rollback
 - **Project import/export** — full project JSON backup
-- **Markdown export** — single chapter or entire book
+- **Multi-format export** — one-click export current chapter or batch export (TXT / Markdown / DOCX / EPUB / PDF)
 
 ### 🌐 Internationalization
 - 🇨🇳 简体中文 / 🇺🇸 English / 🇷🇺 Русский

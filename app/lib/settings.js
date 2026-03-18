@@ -352,13 +352,34 @@ function generateNodeId() {
 
 // 每个作品下自动创建的子分类模板
 const WORK_SUB_CATEGORIES = [
-    { suffix: 'bookinfo', name: '作品信息', category: 'bookInfo', type: 'special' },
-    { suffix: 'characters', name: '人物设定', category: 'character', type: 'folder' },
-    { suffix: 'locations', name: '空间/地点', category: 'location', type: 'folder' },
-    { suffix: 'world', name: '世界观/设定', category: 'world', type: 'folder' },
-    { suffix: 'objects', name: '物品/道具', category: 'object', type: 'folder' },
-    { suffix: 'plot', name: '大纲', category: 'plot', type: 'folder' },
-    { suffix: 'rules', name: '写作规则', category: 'rules', type: 'folder' },
+    { suffix: 'characters', name: '人物设定', category: 'character', type: 'folder', subFolders: [
+        { name: '主要角色', icon: 'Star' },
+        { name: '次要角色', icon: 'User' },
+        { name: '阵营/势力', icon: 'Shield' },
+    ]},
+    { suffix: 'locations', name: '空间/地点', category: 'location', type: 'folder', subFolders: [
+        { name: '主要场景', icon: 'Building' },
+        { name: '自然环境', icon: 'Mountain' },
+    ]},
+    { suffix: 'world', name: '世界观/设定', category: 'world', type: 'folder', subFolders: [
+        { name: '历史/纪元', icon: 'BookOpen' },
+        { name: '社会/政治', icon: 'Crown' },
+        { name: '文化/习俗', icon: 'Compass' },
+        { name: '力量体系', icon: 'Zap' },
+    ]},
+    { suffix: 'objects', name: '物品/道具', category: 'object', type: 'folder', subFolders: [
+        { name: '武器/装备', icon: 'Sword' },
+        { name: '特殊道具', icon: 'Gem' },
+    ]},
+    { suffix: 'plot', name: '大纲', category: 'plot', type: 'folder', subFolders: [
+        { name: '主线', icon: 'Flame' },
+        { name: '支线', icon: 'Feather' },
+        { name: '伏笔', icon: 'Lightbulb' },
+    ]},
+    { suffix: 'rules', name: '写作规则', category: 'rules', type: 'folder', subFolders: [
+        { name: '文风规范', icon: 'Palette' },
+        { name: '禁忌/注意', icon: 'Flag' },
+    ]},
 ];
 
 // 全局根分类（不属于任何作品）— 已废弃，所有规则均归属各作品
@@ -366,7 +387,7 @@ const GLOBAL_ROOT_CATEGORIES = [];
 
 // 旧版 ROOT_CATEGORIES 的 id（用于迁移检测）
 const LEGACY_ROOT_IDS = [
-    'root-bookinfo', 'root-characters', 'root-locations',
+    'root-characters', 'root-locations',
     'root-world', 'root-objects', 'root-plot', 'root-rules',
 ];
 
@@ -391,19 +412,25 @@ export function createWorkNode(name, workId) {
         createdAt: now,
         updatedAt: now,
     };
-    const subNodes = WORK_SUB_CATEGORIES.map((cat, i) => ({
-        id: `${id}-${cat.suffix}`,
-        name: cat.name,
-        type: cat.type,
-        category: cat.category,
-        parentId: id,
-        order: i,
-        icon: cat.icon || '',
-        content: {},
-        collapsed: false,
-        createdAt: now,
-        updatedAt: now,
-    }));
+    const subNodes = [];
+    WORK_SUB_CATEGORIES.forEach((cat, i) => {
+        const catId = `${id}-${cat.suffix}`;
+        subNodes.push({
+            id: catId, name: cat.name, type: cat.type, category: cat.category,
+            parentId: id, order: i, icon: cat.icon || '', content: {},
+            collapsed: false, createdAt: now, updatedAt: now,
+        });
+        if (cat.subFolders) {
+            cat.subFolders.forEach((sub, j) => {
+                subNodes.push({
+                    id: `${catId}-sub${j}`, name: sub.name, type: 'folder',
+                    category: cat.category, parentId: catId, order: j,
+                    icon: sub.icon || 'FolderOpen', content: {},
+                    collapsed: false, createdAt: now, updatedAt: now,
+                });
+            });
+        }
+    });
     return { workNode, subNodes };
 }
 
@@ -492,19 +519,28 @@ export async function renameWork(workId, newName) {
 // 获取默认节点树（只含子分类，不含 work 节点本身）
 function getDefaultWorkNodes(workId) {
     const wid = workId || 'work-default';
-    return WORK_SUB_CATEGORIES.map((cat, i) => ({
-        id: `${wid}-${cat.suffix}`,
-        name: cat.name,
-        type: cat.type,
-        category: cat.category,
-        parentId: wid,
-        order: i,
-        icon: cat.icon,
-        content: {},
-        collapsed: false,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-    }));
+    const now = new Date().toISOString();
+    const nodes = [];
+    WORK_SUB_CATEGORIES.forEach((cat, i) => {
+        const catId = `${wid}-${cat.suffix}`;
+        nodes.push({
+            id: catId, name: cat.name, type: cat.type, category: cat.category,
+            parentId: wid, order: i, icon: cat.icon, content: {},
+            collapsed: false, createdAt: now, updatedAt: now,
+        });
+        // 预设子分类
+        if (cat.subFolders) {
+            cat.subFolders.forEach((sub, j) => {
+                nodes.push({
+                    id: `${catId}-sub${j}`, name: sub.name, type: 'folder',
+                    category: cat.category, parentId: catId, order: j,
+                    icon: sub.icon || 'FolderOpen', content: {},
+                    collapsed: false, createdAt: now, updatedAt: now,
+                });
+            });
+        }
+    });
+    return nodes;
 }
 
 // ==================== 全局 → 按作品迁移（一次性） ====================
@@ -596,10 +632,50 @@ export async function getSettingsNodes(workId) {
             await persistSet(getNodesKey(wid), defaults);
             return defaults;
         }
+        // 为已有分类补充预设子文件夹
+        const patched = ensurePresetSubFolders(nodes, wid);
+        if (patched) {
+            await persistSet(getNodesKey(wid), nodes);
+        }
         return nodes;
     } catch {
         return getDefaultWorkNodes(wid);
     }
+}
+
+/**
+ * 为已有作品的各分类根文件夹补充预设子文件夹（仅在该分类没有任何子文件夹时添加）
+ * @returns {boolean} 是否有修改
+ */
+function ensurePresetSubFolders(nodes, workId) {
+    // 每个作品只补充一次，用户删除后不再重置（v2: 按名字逐个检查）
+    const flagKey = `author-subfolder-init-v2-${workId}`;
+    try { if (localStorage.getItem(flagKey)) return false; } catch {}
+    let changed = false;
+    const now = new Date().toISOString();
+    for (const cat of WORK_SUB_CATEGORIES) {
+        if (!cat.subFolders || cat.subFolders.length === 0) continue;
+        const rootFolder = nodes.find(n =>
+            n.parentId === workId && n.category === cat.category && (n.type === 'folder' || n.type === 'special')
+        );
+        if (!rootFolder) continue;
+        const existingChildFolders = nodes.filter(n => n.parentId === rootFolder.id && n.type === 'folder');
+        const existingNames = new Set(existingChildFolders.map(f => f.name));
+        const maxOrder = existingChildFolders.reduce((m, f) => Math.max(m, f.order || 0), -1);
+        cat.subFolders.forEach((sub, j) => {
+            if (existingNames.has(sub.name)) return; // 已有同名 → 跳过
+            nodes.push({
+                id: generateNodeId(), name: sub.name, type: 'folder',
+                category: cat.category, parentId: rootFolder.id, order: maxOrder + 1 + j,
+                icon: sub.icon || 'FolderOpen', content: {},
+                collapsed: false, createdAt: now, updatedAt: now,
+            });
+            changed = true;
+        });
+    }
+    // 标记已完成，不再重复
+    try { localStorage.setItem(flagKey, '1'); } catch {}
+    return changed;
 }
 
 /**

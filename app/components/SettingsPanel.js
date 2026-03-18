@@ -736,6 +736,11 @@ export default function SettingsPanel() {
                                     onMouseLeave={e => { e.currentTarget.style.opacity = '0.7'; e.currentTarget.style.color = 'var(--text-muted)'; }}
                                 ><X size={14} /></button>
                             )}
+                            <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 11, padding: '4px 6px', opacity: 0.7, transition: 'all 0.15s' }}
+                                onClick={() => { onClose(); setTimeout(() => useAppStore.getState().setShowBookInfo(true), 80); }} title="作品管理"
+                                onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = 'var(--accent)'; }}
+                                onMouseLeave={e => { e.currentTarget.style.opacity = '0.7'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+                            ><BookOpen size={14} /></button>
                             {/* 右侧导入导出清空 */}
                             <div style={{ marginLeft: 'auto', display: 'flex', gap: 2, alignItems: 'center', position: 'relative' }}>
                                 <div style={{ position: 'relative', display: 'inline-block' }}>
@@ -792,6 +797,15 @@ export default function SettingsPanel() {
                             </div>
 
                             {/* 分类卡片网格 */}
+                            <style>{`
+                                .settings-cat-card:hover {
+                                    transform: translateY(-4px);
+                                    box-shadow: 0 12px 32px color-mix(in srgb, var(--cat-color) 10%, transparent), 0 0 0 1px color-mix(in srgb, var(--cat-color) 20%, transparent);
+                                    border-color: color-mix(in srgb, var(--cat-color) 30%, transparent) !important;
+                                }
+                                .settings-cat-card [data-delete-btn] { opacity: 0; transition: all 0.15s; }
+                                .settings-cat-card:hover [data-delete-btn] { opacity: 1 !important; }
+                            `}</style>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16, maxWidth: 880, margin: '0 auto' }}>
                                 {stats.map(cat => {
                                     const defaultIcon = CAT_ICONS[cat.category] || FileText;
@@ -805,27 +819,87 @@ export default function SettingsPanel() {
                                         .slice(0, 3)
                                         .map(n => n.name);
                                     const isPickerOpen = iconPickerCat === cat.category;
+
+                                    // 删除分类处理
+                                    const handleDeleteCategory = (e) => {
+                                        e.stopPropagation();
+                                        const isCustom = cat.isCustom;
+                                        const catLabel = cat.label || cat.category;
+
+                                        if (shouldSkipDeleteConfirm()) {
+                                            doDeleteCategory(cat);
+                                            return;
+                                        }
+
+                                        const message = isCustom
+                                            ? `确认删除分类「${catLabel}」及其下所有 ${cat.count} 条设定？此操作不可撤销。`
+                                            : `确认清空「${catLabel}」下的所有 ${cat.count} 条设定？分类本身会保留，此操作不可撤销。`;
+
+                                        setDeleteConfirm({
+                                            message,
+                                            onConfirm: async () => {
+                                                setDeleteConfirm(null);
+                                                await doDeleteCategory(cat);
+                                            },
+                                            onCancel: () => setDeleteConfirm(null),
+                                        });
+                                    };
+
+                                    // 强制浏览器重新计算 hover 状态
+                                    const forceHoverRecalc = () => {
+                                        requestAnimationFrame(() => {
+                                            document.body.style.pointerEvents = 'none';
+                                            requestAnimationFrame(() => {
+                                                document.body.style.pointerEvents = '';
+                                            });
+                                        });
+                                    };
+
+                                    const doDeleteCategory = async (catInfo) => {
+                                        if (catInfo.isCustom && catInfo.rootFolderId) {
+                                            await deleteSettingsNode(catInfo.rootFolderId);
+                                        } else {
+                                            const folderId = catInfo.rootFolderId;
+                                            if (folderId) {
+                                                const toDelete = new Set();
+                                                const collectItems = (pid) => {
+                                                    nodes.filter(n => n.parentId === pid).forEach(child => {
+                                                        if (child.type === 'item') toDelete.add(child.id);
+                                                        else collectItems(child.id);
+                                                    });
+                                                };
+                                                collectItems(folderId);
+                                                if (toDelete.size > 0) {
+                                                    const updatedNodes = nodes.filter(n => !toDelete.has(n.id));
+                                                    await saveSettingsNodes(updatedNodes);
+                                                    setNodes(updatedNodes);
+                                                    setSelectedNodeId(null);
+                                                    incrementSettingsVersion();
+                                                    forceHoverRecalc();
+                                                    return;
+                                                }
+                                            }
+                                        }
+                                        setNodes(await getSettingsNodes());
+                                        setSelectedNodeId(null);
+                                        incrementSettingsVersion();
+                                        forceHoverRecalc();
+                                    };
+
                                     return (
                                         <div key={cat.category} style={{ position: 'relative' }}>
-                                        <button style={{
+                                        <button
+                                            className="settings-cat-card"
+                                            style={{
                                             position: 'relative', display: 'flex', flexDirection: 'column',
                                             padding: '20px 22px 16px', textAlign: 'left', width: '100%', height: '100%',
                                             border: '1px solid var(--border-light)', borderRadius: 18,
                                             background: 'var(--bg-primary)',
                                             cursor: 'pointer', transition: 'all 0.25s ease', overflow: 'hidden',
                                             minHeight: 170,
+                                            '--cat-color': color,
                                         }}
                                             onClick={() => { onClose(); setTimeout(() => useAppStore.getState().setOpenCategoryModal(cat.realCategory || cat.category), 80); }}
-                                            onMouseEnter={e => {
-                                                e.currentTarget.style.transform = 'translateY(-4px)';
-                                                e.currentTarget.style.boxShadow = `0 12px 32px ${color}18, 0 0 0 1px ${color}30`;
-                                                e.currentTarget.style.borderColor = `${color}50`;
-                                            }}
-                                            onMouseLeave={e => {
-                                                e.currentTarget.style.transform = 'none';
-                                                e.currentTarget.style.boxShadow = 'none';
-                                                e.currentTarget.style.borderColor = 'var(--border-light)';
-                                            }}
                                         >
                                             {/* 顶部：图标 + 计数 */}
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, width: '100%' }}>
@@ -856,6 +930,23 @@ export default function SettingsPanel() {
                                                     <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 2, fontWeight: 700, marginTop: 2 }}>
                                                         ITEMS
                                                     </div>
+                                                    {/* 删除按钮 */}
+                                                    <span
+                                                        data-delete-btn
+                                                        title={cat.isCustom ? '删除此分类' : '清空此分类'}
+                                                        onClick={handleDeleteCategory}
+                                                        style={{
+                                                            width: 28, height: 28, borderRadius: 8,
+                                                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                                            color: 'var(--text-muted)', background: 'transparent',
+                                                            cursor: 'pointer', transition: 'all 0.15s',
+                                                            opacity: 0, marginTop: 4, marginLeft: 'auto',
+                                                        }}
+                                                        onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; }}
+                                                        onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'transparent'; }}
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </span>
                                                 </div>
                                             </div>
 

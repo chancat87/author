@@ -379,7 +379,8 @@
     "navThemeLight": "Light",
     "navSnapshots": "Snapshots",
     "navMore": "More",
-    "navImport": "Import"
+    "navImport": "Import",
+    "navGithub": "GitHub"
   },
   "page": {
     "noChapterHint": "Select or create a chapter to start writing",
@@ -435,12 +436,10 @@
     "step2Content": "This is your main writing area. Supports Markdown syntax and auto-rendering, providing a paginated paper-like experience. Press Ctrl+J at the cursor to invoke inline AI assistance!",
     "step3Title": "Your Personal AI Editor",
     "step3Content": "Click here to open the AI sidebar, where you can discuss plot with AI or have it help refine your settings and provide writing suggestions.",
-    "step4Title": "Settings & API Config",
-    "step4Content": "This is the brain of your workspace. Make sure to configure your AI model API Key here, otherwise the AI assistant won't work. You can also change language, theme, and build your world settings.\n\n⚠️ Privacy Notice: When using AI features, your API Key and text content are relayed through the deployer's server. If you're using someone else's instance, destroy your API key at your provider's site after trying it out. For serious use, fork and deploy your own instance.",
-    "step5Title": "Always Here to Help",
-    "step5Content": "If you skipped the tour or want to review it again, click the 📖 Help button. In the top-right corner of the help panel, you can restart the tour anytime.",
-    "step6Title": "Open Source Project",
-    "step6Content": "Author is an open-source project! Click this GitHub icon to visit our repository. Star ⭐, file issues, and contribute!",
+    "step4Title": "Settings & More",
+    "step4Content": "This is the hub of your workspace. Click this button to access API Configuration (set your AI model Key), Preferences (language/theme), Help & Tutorial, and Community links.\n\nMake sure to configure your AI model API Key under 'API Config', otherwise the AI assistant won't work. You can also restart the tour anytime from the Help panel.\n\n⚠️ Privacy Notice: When using AI features, your API Key and text content are relayed through the deployer's server. If you're using someone else's instance, destroy your API key at your provider's site after trying it out. For serious use, fork and deploy your own instance.",
+    "step5Title": "Open Source Community",
+    "step5Content": "Author is an open-source project! Click here to visit our GitHub repository. Star ⭐, file issues, and contribute code. Join our community to discuss creative writing!",
     "introTitle": "Welcome to Author",
     "introSubtitle": "Your AI-assisted novel writing platform.",
     "introHint": "For a better writing experience, would you like a 1-minute tour of the core features?",

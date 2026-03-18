@@ -39,19 +39,13 @@ export default function TourOverlay({ onOpenHelp }) {
             targetId: 'tour-settings',
             title: t('tour.step4Title'),
             content: t('tour.step4Content'),
-            placement: 'top'
-        },
-        {
-            targetId: 'tour-help',
-            title: t('tour.step5Title'),
-            content: t('tour.step5Content'),
-            placement: 'top'
+            placement: 'right'
         },
         {
             targetId: 'tour-github',
-            title: t('tour.step6Title'),
-            content: t('tour.step6Content'),
-            placement: 'top'
+            title: t('tour.step5Title'),
+            content: t('tour.step5Content'),
+            placement: 'right'
         }
     ], [t]);
 
@@ -70,6 +64,37 @@ export default function TourOverlay({ onOpenHelp }) {
     const updateRect = useCallback((index) => {
         const step = TOUR_STEPS[index];
         if (!step) return;
+
+        // If targeting tour-github, open the More menu first so the portal renders
+        if (step.targetId === 'tour-github') {
+            const moreBtn = document.getElementById('tour-settings');
+            // Check if the dropdown is already open by looking for tour-github
+            if (!document.getElementById('tour-github') && moreBtn) {
+                moreBtn.click(); // Open the More dropdown
+            }
+            // Wait for portal to render, then find the element
+            setTimeout(() => {
+                const el = document.getElementById('tour-github');
+                if (el) {
+                    const rect = el.getBoundingClientRect();
+                    setTargetRect({ x: rect.x, y: rect.y, width: rect.width, height: rect.height });
+                } else {
+                    const cx = window.innerWidth / 2;
+                    const cy = window.innerHeight / 2;
+                    setTargetRect({ x: cx - 1, y: cy - 1, width: 2, height: 2 });
+                }
+            }, 200);
+            return;
+        }
+
+        // Close More menu if leaving tour-github step
+        const prevStep = TOUR_STEPS[currentStepIndex];
+        if (prevStep?.targetId === 'tour-github') {
+            const moreBtn = document.getElementById('tour-settings');
+            if (moreBtn && document.getElementById('tour-github')) {
+                moreBtn.click(); // Close the More dropdown
+            }
+        }
 
         let el = document.getElementById(step.targetId);
         if (!el && step.targetId === 'tour-editor') {
@@ -102,15 +127,21 @@ export default function TourOverlay({ onOpenHelp }) {
     }, [TOUR_STEPS]);
 
     const finishTour = () => {
+        // Close the More dropdown if it was opened for the GitHub step
+        const githubEl = document.getElementById('tour-github');
+        if (githubEl) {
+            const moreBtn = document.getElementById('tour-settings');
+            if (moreBtn) moreBtn.click();
+        }
         localStorage.setItem(ONBOARDING_KEY, 'true');
         setStatus('hidden');
     };
 
     const skipToHelp = () => {
         setStatus('tour');
-        const helpStepIndex = TOUR_STEPS.length - 2;
-        setCurrentStepIndex(helpStepIndex);
-        updateRect(helpStepIndex);
+        const skipTarget = TOUR_STEPS.length - 2;
+        setCurrentStepIndex(skipTarget);
+        updateRect(skipTarget);
     };
 
     const beginTour = useCallback(() => {
@@ -206,13 +237,18 @@ export default function TourOverlay({ onOpenHelp }) {
         }
     }
 
-    const tooltipHeightGuess = 200;
+    const tooltipHeightGuess = 460;
 
     if (tooltipStyle.top && typeof tooltipStyle.top === 'number') {
-        if (tooltipStyle.top < tooltipHeightGuess / 2) {
-            tooltipStyle.top = tooltipHeightGuess / 2;
-        } else if (tooltipStyle.top > windowSize.h - tooltipHeightGuess / 2) {
-            tooltipStyle.top = windowSize.h - tooltipHeightGuess / 2;
+        // Ensure tooltip doesn't go above viewport
+        if (tooltipStyle.top < tooltipHeightGuess / 2 + 20) {
+            tooltipStyle.top = 20;
+            tooltipStyle.transform = tooltipStyle.transform?.replace('translateY(-50%)', '') || undefined;
+        }
+        // Ensure tooltip doesn't go below viewport
+        if (tooltipStyle.top > windowSize.h - tooltipHeightGuess / 2) {
+            tooltipStyle.top = Math.max(20, windowSize.h - tooltipHeightGuess - 20);
+            tooltipStyle.transform = tooltipStyle.transform?.replace('translateY(-50%)', '') || undefined;
         }
     }
 
@@ -272,7 +308,7 @@ export default function TourOverlay({ onOpenHelp }) {
                         {step.content}
                     </div>
                     <div className="tour-tooltip-footer">
-                        {currentStepIndex === TOUR_STEPS.length - 1 ? (
+                        {currentStepIndex >= TOUR_STEPS.length - 2 ? (
                             <div />
                         ) : (
                             <button className="tour-skip-text" onClick={skipToHelp}>{t('tour.btnEndTour')}</button>

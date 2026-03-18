@@ -379,7 +379,8 @@
         "navThemeLight": "亮色",
         "navSnapshots": "快照",
         "navMore": "更多",
-        "navImport": "导入"
+        "navImport": "导入",
+        "navGithub": "GitHub"
     },
     "page": {
         "noChapterHint": "请选择或创建一个章节开始写作",
@@ -435,12 +436,10 @@
         "step2Content": "这是你的写作主场。支持 Markdown 语法与自动渲染，提供分页的类纸张体验。在光标处按下 Ctrl+J 即可唤起内联 AI 协助续写！",
         "step3Title": "你的专属 AI 编辑",
         "step3Content": "点击这里打开 AI 侧栏，可以与 AI 讨论剧情，也可以让它帮你修改设定集、提供写作建议。",
-        "step4Title": "设定集与 API 配置",
-        "step4Content": "这是工作台的大脑中枢。请务必在此配置你的大模型 API Key，否则 AI 助理无法工作。另外，你还可以在这里随时更改语言、主题、并建立属于你的世界观设定。\n\n⚠️ 隐私提醒：使用 AI 功能时，你的 API Key 和发送给 AI 的文字内容会经过部署者的服务器。如果你正在使用他人部署的实例，体验完毕后请务必到 API 提供商网站销毁 Key。正式使用请自行部署。",
-        "step5Title": "随时准备为您服务",
-        "step5Content": "如果您跳过了引导，或希望重新回顾，都可以点击这个 📖 帮助按钮。在帮助面板的右上角，您可以随时重新开启向导。",
-        "step6Title": "开源项目",
-        "step6Content": "Author 是一个开源项目！点击这个 GitHub 图标可以访问我们的项目仓库，欢迎 Star ⭐、提 Issue、贡献代码。",
+        "step4Title": "设定与更多",
+        "step4Content": "这是工作台的功能中枢。点击此按钮可以打开 API 配置（设置大模型 Key）、偏好设置（语言/主题）、帮助与教程、以及社区链接。\n\n务必在「API 配置」中填写你的大模型 API Key，否则 AI 助理无法工作。你还可以在「帮助」面板右上角随时重新开启向导。\n\n⚠️ 隐私提醒：使用 AI 功能时，你的 API Key 和发送给 AI 的文字内容会经过部署者的服务器。如果你正在使用他人部署的实例，体验完毕后请务必到 API 提供商网站销毁 Key。正式使用请自行部署。",
+        "step5Title": "开源社区",
+        "step5Content": "Author 是一个开源项目！点击这里可以访问 GitHub 仓库，欢迎 Star ⭐、提 Issue、贡献代码。也欢迎加入 QQ 交流群一起讨论创作！",
         "introTitle": "欢迎来到 Author",
         "introSubtitle": "你的 AI 辅助小说创作平台。",
         "introHint": "为了更好的创作体验，需要花 1 分钟为您介绍核心功能吗？",

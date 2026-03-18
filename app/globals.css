@@ -197,6 +197,11 @@ body {
   color: var(--text-primary);
 }
 
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 /* 自定义滚动条 */
 ::-webkit-scrollbar {
   width: 6px;
@@ -276,7 +281,7 @@ body {
   position: absolute;
   top: var(--toolbar-h, 90px);
   left: 0;
-  bottom: 0;
+  bottom: var(--status-bar-h, 31px);
   width: var(--sidebar-w, 280px);
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border-light);
@@ -1852,6 +1857,8 @@ body.resizing .main-content {
   font-size: 12px;
   color: var(--text-muted);
   position: relative;
+  z-index: 36;
+  flex-shrink: 0;
 }
 
 .status-bar-left,
@@ -2967,7 +2974,7 @@ body.resizing .main-content {
   min-height: 80px;
   max-height: 160px;
   padding: 12px 14px;
-  border: 1px solid var(--border-light);
+  border: none;
   border-radius: 10px;
   background: var(--bg-secondary);
   color: var(--text-primary);
@@ -3468,7 +3475,7 @@ body.resizing .main-content {
 /* 输入区域 */
 .chat-input-area {
   padding: 10px 10px 10px;
-  border-top: 1px solid var(--border-light);
+  border-top: none;
   background: var(--bg-secondary);
   box-sizing: border-box;
   width: 100%;
@@ -4186,7 +4193,7 @@ body.resizing .main-content {
   position: absolute;
   right: 0;
   top: var(--toolbar-h, 42px);
-  bottom: 0;
+  bottom: var(--status-bar-h, 31px);
   width: var(--ai-sidebar-w, 380px);
   background: var(--bg-primary);
   border-left: 1px solid var(--border-light);
@@ -5395,7 +5402,7 @@ h5.chat-md-heading {
 
 .chat-input-area {
   padding: 16px;
-  border-top: 1px solid var(--border-glass);
+  border-top: none;
   display: flex;
   gap: 12px;
   align-items: flex-end;
@@ -5880,6 +5887,9 @@ h5.chat-md-heading {
   border-radius: 16px;
   padding: 24px;
   width: 340px;
+  max-height: calc(100vh - 40px);
+  display: flex;
+  flex-direction: column;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
   z-index: 10001;
   pointer-events: auto;
@@ -5926,6 +5936,9 @@ h5.chat-md-heading {
   color: var(--text-secondary);
   line-height: 1.6;
   margin-bottom: 24px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 
 .tour-tooltip-footer {

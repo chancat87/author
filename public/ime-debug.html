@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>IME Debug</title></head>
+<body style="padding:40px;font-family:sans-serif">
+<h2>IME 诊断页</h2>
+<p>打开 localhost:3000，然后打开 F12 控制台，粘贴以下代码后按回车：</p>
+<pre style="background:#1e1e1e;color:#d4d4d4;padding:16px;border-radius:8px;overflow-x:auto;font-size:13px">
+// 拦截所有 keydown 的 preventDefault 调用
+(function() {
+  var origPD = Event.prototype.preventDefault;
+  Event.prototype.preventDefault = function() {
+    if (this.type === 'keydown') {
+      console.warn('[IME DEBUG] preventDefault on keydown:', 
+        'key=' + this.key, 
+        'code=' + this.code, 
+        'isComposing=' + this.isComposing,
+        'keyCode=' + this.keyCode,
+        new Error().stack.split('\n').slice(1,4).join('\n'));
+    }
+    return origPD.call(this);
+  };
+  
+  // 也拦截 stopPropagation
+  var origSP = Event.prototype.stopPropagation;
+  Event.prototype.stopPropagation = function() {
+    if (this.type === 'keydown' && (this.isComposing || this.keyCode === 229)) {
+      console.error('[IME DEBUG] stopPropagation on COMPOSING keydown!', 
+        'key=' + this.key, 
+        new Error().stack.split('\n').slice(1,4).join('\n'));
+    }
+    return origSP.call(this);
+  };
+  
+  // 监听所有 keydown 查看是否有被吃掉的事件
+  document.addEventListener('keydown', function(e) {
+    if (e.isComposing || e.keyCode === 229) {
+      console.log('[IME DEBUG] Composing keydown reached document:', 'key=' + e.key, 'defaultPrevented=' + e.defaultPrevented);
+    }
+  }, true); // capture phase
+  
+  console.log('[IME DEBUG] 诊断已激活，现在试试输入中文');
+})();
+</pre>
+<p>然后在 localhost:3000 的任意输入框试试输入中文，查看控制台输出。</p>
+<p>把控制台输出截图给我。</p>
+</body>
+</html>

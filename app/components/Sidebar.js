@@ -56,7 +56,7 @@ function MoreMenuPortal({ anchorRef, t, setShowSettings, setShowMoreMenu, onOpen
                 <button className="dropdown-item" style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => { onOpenHelp?.(); setShowMoreMenu(false); }}>
                     <HelpCircle size={14} style={{ flexShrink: 0 }} /> <span>{t('sidebar.menuHelp') || '帮助'}</span>
                 </button>
-                <button className="dropdown-item" style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => { setShowGitPopup(true); setShowMoreMenu(false); }}>
+                <button id="tour-github" className="dropdown-item" style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => { setShowGitPopup(true); setShowMoreMenu(false); }}>
                     <Github size={14} style={{ flexShrink: 0 }} /> <span>{t('sidebar.menuCommunity') || '社区'}</span>
                 </button>
             </div>
@@ -86,7 +86,8 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
     const [renameTitle, setRenameTitle] = useState('');
     const [contextMenu, setContextMenu] = useState(null);
     const [showExportModal, setShowExportModal] = useState(false);
-    const [showCurrentExportMenu, setShowCurrentExportMenu] = useState(false);
+    const [showNavExportMenu, setShowNavExportMenu] = useState(false);
+    const navExportRef = useRef(null);
     const [importModal, setImportModal] = useState(null);
     const [conflictModal, setConflictModal] = useState(null);
     const [showGitPopup, setShowGitPopup] = useState(false);
@@ -99,6 +100,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
     const [navDragCat, setNavDragCat] = useState(null); // 拖拽中的分类
     const [navDragOverCat, setNavDragOverCat] = useState(null); // 拖拽悬停目标
     const [catCustomIcons, setCatCustomIcons] = useState({}); // category → customIconName
+    const [catCustomLabels, setCatCustomLabels] = useState({}); // category → folder name
     const [outlineCollapsed, setOutlineCollapsed] = useState(false); // 手动折叠大纲
     const [headings, setHeadings] = useState([]); // 文档大纲标题列表
     const [headingStats, setHeadingStats] = useState([]); // 每个标题下的字数+token
@@ -117,12 +119,17 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
             if (!workId) return;
             const nodes = await getSettingsNodes(workId);
             const iconMap = {};
+            const labelMap = {};
             nodes.forEach(n => {
                 if (n.type === 'folder' && n.parentId === workId && n.icon) {
                     iconMap[n.category] = n.icon;
                 }
+                if (n.type === 'folder' && n.parentId === workId && n.name) {
+                    labelMap[n.category] = n.name;
+                }
             });
             setCatCustomIcons(iconMap);
+            setCatCustomLabels(labelMap);
         })();
     }, [settingsVersion, activeWorkId]);
 
@@ -599,10 +606,10 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                         {pinnedCategories.length > 0 && <div className="nav-settings-divider" style={{ width: 20, height: 1, background: 'var(--border-light, #e5e7eb)', margin: '3px auto' }} />}
                         
                         {/* 导航栏分类快捷入口（可拖拽排序） */}
-                        {pinnedCategories.map(cat => {
+                        {pinnedCategories.filter(cat => cat !== 'bookInfo').map(cat => {
                             const CatIcon = getCategoryIcon(cat, catCustomIcons[cat]);
                             const colors = getCategoryColor(cat);
-                            const catLabel = getCategoryLabel(cat, t);
+                            const catLabel = catCustomLabels[cat] || getCategoryLabel(cat, t);
                             const isDragging = navDragCat === cat;
                             const isDragOver = navDragOverCat === cat;
                             return (
@@ -667,9 +674,39 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                         <IconButton icon={<FolderOpen size={18} />} label={t('sidebar.menuLoad') || '读档'} text={sidebarOpen ? (t('sidebar.menuLoad') || '读档') : undefined} tooltipSide="right" onClick={() => document.getElementById('project-import-input')?.click()} className="nav-item" />
                         <IconButton icon={<Save size={18} />} label={t('sidebar.menuSave') || '存档'} text={sidebarOpen ? (t('sidebar.menuSave') || '存档') : undefined} tooltipSide="right" onClick={() => { exportProject(); showToast(t('sidebar.exportedProject') || '已导出', 'success'); }} className="nav-item" />
                         <IconButton icon={<FileDown size={18} />} label={t('sidebar.menuImportWork') || '导入'} text={sidebarOpen ? (t('sidebar.navImport') || '导入') : undefined} tooltipSide="right" onClick={() => document.getElementById('work-import-input')?.click()} className="nav-item" />
+                        <div ref={navExportRef} style={{ position: 'relative', width: '100%', display: 'flex', justifyContent: 'center' }}>
+                            <IconButton icon={<FileOutput size={18} />} label={showNavExportMenu ? '' : '导出'} text={sidebarOpen ? '导出' : undefined} tooltipSide="right" onClick={() => setShowNavExportMenu(!showNavExportMenu)} className="nav-item" />
+                            {showNavExportMenu && createPortal(
+                                <>
+                                    <div style={{ position: 'fixed', inset: 0, zIndex: 9990 }} onClick={() => setShowNavExportMenu(false)} />
+                                    <div style={{
+                                        position: 'fixed',
+                                        left: navExportRef.current ? navExportRef.current.getBoundingClientRect().right + 8 : 0,
+                                        top: navExportRef.current ? Math.min(navExportRef.current.getBoundingClientRect().top, window.innerHeight - 280) : 0,
+                                        minWidth: 170, zIndex: 9991,
+                                        background: 'var(--bg-card)', border: '1px solid var(--border-light)',
+                                        borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)', padding: 4,
+                                    }}>
+                                        <div style={{ padding: '4px 10px', fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>导出本章</div>
+                                        {activeChapterId && chapters.find(c => c.id === activeChapterId) ? [
+                                            { label: 'TXT', icon: <FileText size={14} />, fn: () => exportWorkAsTxt([chapters.find(c => c.id === activeChapterId)], chapters.find(c => c.id === activeChapterId).title) },
+                                            { label: 'Markdown', icon: <FileType size={14} />, fn: () => exportWorkAsMarkdown([chapters.find(c => c.id === activeChapterId)], chapters.find(c => c.id === activeChapterId).title) },
+                                            { label: 'DOCX', icon: <BookMarked size={14} />, fn: async () => await exportWorkAsDocx([chapters.find(c => c.id === activeChapterId)], chapters.find(c => c.id === activeChapterId).title) },
+                                            { label: 'EPUB', icon: <BookOpen size={14} />, fn: async () => await exportWorkAsEpub([chapters.find(c => c.id === activeChapterId)], chapters.find(c => c.id === activeChapterId).title) },
+                                            { label: 'PDF', icon: <Printer size={14} />, fn: () => exportWorkAsPdf([chapters.find(c => c.id === activeChapterId)], chapters.find(c => c.id === activeChapterId).title) },
+                                        ].map(item => (
+                                            <button key={item.label} className="dropdown-item" style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={async () => { await item.fn(); setShowNavExportMenu(false); showToast(t('sidebar.exportedChapter'), 'success'); }}>{item.icon} {item.label}</button>
+                                        )) : <div style={{ padding: '6px 10px', fontSize: 12, color: 'var(--text-muted)' }}>请先选择章节</div>}
+                                        <div style={{ height: 1, background: 'var(--border-light)', margin: '4px 0' }} />
+                                        <button className="dropdown-item" style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => { setShowNavExportMenu(false); setShowExportModal(true); }}><Library size={14} /> 导出更多</button>
+                                    </div>
+                                </>,
+                                document.body
+                            )}
+                        </div>
                         
                         {/* 更多操作下拉（仅保留帮助和社区） */}
-                        <div ref={moreMenuAnchorRef}>
+                        <div ref={moreMenuAnchorRef} style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
                             <IconButton id="tour-settings" icon={<Settings size={18} />} label={showMoreMenu ? '' : (t('sidebar.moreActions') || '更多操作')} text={sidebarOpen ? (t('sidebar.navMore') || '更多') : undefined} tooltipSide="right" onClick={() => setShowMoreMenu(!showMoreMenu)} className="nav-item" />
                             {showMoreMenu && (
                                 <MoreMenuPortal anchorRef={moreMenuAnchorRef} t={t} setShowSettings={setShowSettings} setShowMoreMenu={setShowMoreMenu} onOpenHelp={onOpenHelp} setShowGitPopup={setShowGitPopup} />
@@ -865,43 +902,13 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                         );
                     })}
                 </div>
-                    {/* 章节底部工具（保留字数统计和单章导出） */}
+                    {/* 章节底部工具（保留字数统计） */}
                     <div className="sidebar-footer" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px', padding: '12px' }}>
-                        {(() => {
-                            const modeConfig = WRITING_MODES[writingMode];
-                            return modeConfig ? (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', borderRadius: 'var(--radius-sm)', background: `${modeConfig.color}10`, border: `1px solid ${modeConfig.color}30`, cursor: 'pointer', transition: 'all 0.15s ease' }} onClick={() => setShowSettings('settings')} title={t('sidebar.clickToSwitchMode')}>
-                                    <span style={{ fontSize: '14px' }}>
-                                        {modeConfig.icon === 'smartphone' ? <Smartphone size={14} /> : modeConfig.icon === 'book-open' ? <BookOpen size={14} /> : modeConfig.icon === 'clapperboard' ? <Clapperboard size={14} /> : null}
-                                    </span>
-                                    <span style={{ fontSize: '12px', fontWeight: '600', color: modeConfig.color }}>{t('sidebar.modeLabel').replace('{mode}', modeConfig.label)}</span>
-                                </div>
-                            ) : null;
-                        })()}
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-muted)' }}>
                             <span>{t('sidebar.totalWords')}</span>
                             <span style={{ color: 'var(--accent)', fontWeight: '600' }}>{totalWords.toLocaleString()}</span>
                         </div>
-                        <div style={{ display: 'flex', gap: '4px' }}>
-                            <div style={{ position: 'relative', display: 'flex', flex: 1 }}>
-                                <button className="btn btn-secondary btn-sm" style={{ flex: 1, justifyContent: 'center', fontSize: '11px' }} onClick={() => setShowCurrentExportMenu(!showCurrentExportMenu)}>{t('sidebar.exportCurrent')}</button>
-                                {showCurrentExportMenu && (<>
-                                    <div style={{ position: 'fixed', inset: 0, zIndex: 99 }} onClick={() => setShowCurrentExportMenu(false)} />
-                                    <div style={{ position: 'absolute', left: 0, bottom: '100%', marginBottom: 6, minWidth: 150, zIndex: 100, background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)', padding: 4 }}>
-                                        {activeChapterId && chapters.find(c => c.id === activeChapterId) ? [
-                                            { label: 'TXT', icon: <FileText size={14} />, fn: () => exportWorkAsTxt([chapters.find(c => c.id === activeChapterId)], chapters.find(c => c.id === activeChapterId).title) },
-                                            { label: 'Markdown', icon: <FileType size={14} />, fn: () => exportWorkAsMarkdown([chapters.find(c => c.id === activeChapterId)], chapters.find(c => c.id === activeChapterId).title) },
-                                            { label: 'DOCX', icon: <BookMarked size={14} />, fn: async () => await exportWorkAsDocx([chapters.find(c => c.id === activeChapterId)], chapters.find(c => c.id === activeChapterId).title) },
-                                            { label: 'EPUB', icon: <BookOpen size={14} />, fn: async () => await exportWorkAsEpub([chapters.find(c => c.id === activeChapterId)], chapters.find(c => c.id === activeChapterId).title) },
-                                            { label: 'PDF', icon: <Printer size={14} />, fn: () => exportWorkAsPdf([chapters.find(c => c.id === activeChapterId)], chapters.find(c => c.id === activeChapterId).title) },
-                                        ].map(item => (
-                                            <button key={item.label} className="dropdown-item" onClick={async () => { await item.fn(); setShowCurrentExportMenu(false); showToast(t('sidebar.exportedChapter'), 'success'); }}>{item.icon} {item.label}</button>
-                                        )) : <div style={{ padding: '8px 12px', fontSize: 13, color: 'var(--text-muted)' }}>{t('sidebar.noActiveChapter') || '请先选择章节'}</div>}
-                                    </div>
-                                </>)}
-                            </div>
-                            <button className="btn btn-secondary btn-sm" style={{ flex: 1, justifyContent: 'center', fontSize: '11px' }} onClick={() => setShowExportModal(true)}>{t('sidebar.exportMore') || '导出更多'}</button>
-                        </div>
+
                     </div>
                     </>
                     ) : (

@@ -569,6 +569,28 @@ function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFold
     const [iconPickerFor, setIconPickerFor] = useState(null);
     const [iconPickerRect, setIconPickerRect] = useState(null);
     const renameInputRef = useRef(null);
+    const mousePosRef = useRef({ x: 0, y: 0 });
+
+    // 删除后 nodes 变化时，重新检测鼠标下的元素并更新 hoveredId
+    useEffect(() => {
+        // setTimeout 确保确认弹窗完全关闭、DOM 完全重绘
+        const timer = setTimeout(() => {
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+                const x = window._lastMouseX;
+                const y = window._lastMouseY;
+                if (x == null || y == null) return;
+                const el = document.elementFromPoint(x, y);
+                if (!el) { setHoveredId(null); return; }
+                const row = el.closest('[data-node-id]');
+                if (row) {
+                    setHoveredId(row.getAttribute('data-node-id'));
+                } else {
+                    setHoveredId(null);
+                }
+            }));
+        }, 100);
+        return () => clearTimeout(timer);
+    }, [nodes]);
 
     // ---- 拖拽状态 ----
     const [dragId, setDragId] = useState(null);
@@ -714,10 +736,10 @@ function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFold
     };
 
     const renderActions = (node, isHovered, addItemFn) => {
-        if (renamingId === node.id || !isHovered) return null;
+        if (renamingId === node.id) return null;
         const isHidden = node.enabled === false;
         return (
-            <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0, marginLeft: 'auto' }} onClick={e => e.stopPropagation()}>
+            <div className="cstree-actions" style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0, marginLeft: 'auto', ...(isHovered ? { opacity: 1, pointerEvents: 'auto' } : {}) }} onClick={e => e.stopPropagation()}>
                 <button style={{ ...actionBtnStyle, color: 'var(--text-muted)' }}
                     onClick={e => startRename(e, node)} title="重命名"
                     onMouseEnter={e => { e.currentTarget.style.color = meta.color; e.currentTarget.style.background = `${meta.color}12`; }}
@@ -787,14 +809,17 @@ function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFold
                             opacity: isDragging ? 0.5 : 1,
                             ...getDropIndicatorStyle(node.id),
                         }}
+                        className="cstree-row"
+                        data-node-id={node.id}
                         onClick={() => { setCollapsed(p => ({ ...p, [node.id]: !p[node.id] })); onSelect(isSelected ? null : node.id); }}
                         onMouseEnter={() => setHoveredId(node.id)}
+                        onMouseMove={() => setHoveredId(node.id)}
                         onMouseLeave={() => setHoveredId(null)}
                     >
                         {/* 选中指示条 */}
                         {isSelected && <span style={{ ...S.activeIndicator, background: meta.color }} />}
                         {/* 拖拽手柄 */}
-                        <span style={{ display: 'flex', color: 'var(--text-muted)', flexShrink: 0, opacity: isHovered ? 0.5 : 0, cursor: 'grab', marginRight: -2 }}>
+                        <span className="cstree-drag" style={{ display: 'flex', color: 'var(--text-muted)', flexShrink: 0, cursor: 'grab', marginRight: -2, ...(isHovered ? { opacity: 0.5 } : {}) }}>
                             <GripVertical size={12} />
                         </span>
                         <span style={{ display: 'flex', color: 'var(--text-muted)', flexShrink: 0 }}>
@@ -814,7 +839,7 @@ function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFold
                                 onKeyDown={e => { if (e.key === 'Enter') finishRename(); if (e.key === 'Escape') setRenamingId(null); }}
                                 onClick={e => e.stopPropagation()} />
                         ) : <span style={{ ...S.treeName, opacity: node.enabled === false ? 0.45 : 1 }}>{node.name}</span>}
-                        {!isHovered && <span style={S.treeCount}>{totalItems}</span>}
+                        <span className="cstree-count" style={{ ...S.treeCount, ...(isHovered ? { display: 'none' } : {}) }}>{totalItems}</span>
                         {renderActions(node, isHovered, () => onAddItem(node.id))}
                     </div>
                     {!isCollapsed && children.map(child => renderNode(child, depth + 1))}
@@ -842,15 +867,18 @@ function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFold
                     opacity: isDragging ? 0.5 : 1,
                     ...getDropIndicatorStyle(node.id),
                 }}
+                className="cstree-row"
+                data-node-id={node.id}
                 onClick={() => onSelect(isSelected ? null : node.id)}
                 onMouseEnter={() => setHoveredId(node.id)}
+                onMouseMove={() => setHoveredId(node.id)}
                 onMouseLeave={() => setHoveredId(null)}
                 title={node.name}
             >
                 {/* 选中指示条 */}
                 {isSelected && <span style={{ ...S.activeIndicator, background: meta.color }} />}
                 {/* 拖拽手柄 */}
-                <span style={{ display: 'flex', color: 'var(--text-muted)', flexShrink: 0, opacity: isHovered ? 0.5 : 0, cursor: 'grab', marginRight: -4 }}>
+                <span className="cstree-drag" style={{ display: 'flex', color: 'var(--text-muted)', flexShrink: 0, cursor: 'grab', marginRight: -4, ...(isHovered ? { opacity: 0.5 } : {}) }}>
                     <GripVertical size={12} />
                 </span>
                 <span style={{ ...S.treeDot, background: isSelected ? meta.color : isHidden ? `${meta.color}30` : `${meta.color}60` }} />
@@ -861,7 +889,7 @@ function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFold
                         onKeyDown={e => { if (e.key === 'Enter') finishRename(); if (e.key === 'Escape') setRenamingId(null); }}
                         onClick={e => e.stopPropagation()} />
                 ) : <span style={{ ...S.treeName, opacity: isHidden ? 0.45 : 1, textDecoration: isHidden ? 'line-through' : 'none' }}>{node.name}</span>}
-                {isHidden && !isHovered && <EyeOff size={11} style={{ color: 'var(--text-muted)', flexShrink: 0, opacity: 0.5 }} />}
+                {isHidden && <span className="cstree-count" style={isHovered ? { display: 'none' } : undefined}><EyeOff size={11} style={{ color: 'var(--text-muted)', flexShrink: 0, opacity: 0.5 }} /></span>}
                 {renderActions(node, isHovered)}
             </div>
         );
@@ -901,7 +929,18 @@ function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFold
     }
 
     return (
-        <div style={{ ...S.treeList, position: 'relative' }} data-tree-list>
+        <div style={{ ...S.treeList, position: 'relative' }} data-tree-list
+            onMouseMove={e => { mousePosRef.current = { x: e.clientX, y: e.clientY }; }}
+        >
+            <style>{`
+                .cstree-row:not(:hover) > .cstree-actions { opacity: 0; pointer-events: none; }
+                .cstree-row:hover > .cstree-actions { opacity: 1; pointer-events: auto; }
+                .cstree-row:not(:hover) > .cstree-drag { opacity: 0; }
+                .cstree-row:hover > .cstree-drag { opacity: 0.5; }
+                .cstree-row:hover > .cstree-count { display: none; }
+                .cstree-row:not(:hover) > .cstree-count { display: inline-flex; }
+                .cstree-row:hover { background: var(--bg-hover, #f3f4f6); }
+            `}</style>
             {rootChildren.map(child => renderNode(child, 0))}
             {iconPickerFor && (
                 <IconPicker
@@ -1168,15 +1207,20 @@ export default function CategorySettingsModal() {
         }
     }, [category, loadNodes, jumpToNodeId, setJumpToNodeId]);
 
+    // 全局追踪鼠标位置，用于删除后重新检测悬停
+    useEffect(() => {
+        const handler = (e) => { window._lastMouseX = e.clientX; window._lastMouseY = e.clientY; };
+        document.addEventListener('mousemove', handler, { passive: true });
+        return () => document.removeEventListener('mousemove', handler);
+    }, []);
+
     const rootFolder = useMemo(() => {
         const workId = getActiveWorkId();
         return nodes.find(n => n.parentId === workId && n.category === category) || null;
     }, [nodes, category]);
 
-    // 使用 rootFolder 的自定义图标（如果有的话），忽略默认的文件夹图标
-    const defaultFolderIcons = ['FolderOpen', 'Folder', 'FolderClosed', 'folder-open', 'folder', 'folder-closed'];
-    const hasCustomIcon = rootFolder?.icon && !defaultFolderIcons.includes(rootFolder.icon);
-    const CatIcon = (hasCustomIcon && getIconComponent(rootFolder.icon)) || meta.icon;
+    // 使用 rootFolder 的图标，与缩略图弹窗和完整面板保持一致
+    const CatIcon = (rootFolder?.icon && getIconComponent(rootFolder.icon)) || meta.icon;
 
     const categoryNodes = useMemo(() => {
         if (!rootFolder) return [];
@@ -1243,6 +1287,13 @@ export default function CategorySettingsModal() {
                 const updated = await getSettingsNodes();
                 setNodes(updated);
                 if (selectedNodeId === id) setSelectedNodeId(null);
+                // 强制浏览器重新计算 hover 状态
+                requestAnimationFrame(() => {
+                    document.body.style.pointerEvents = 'none';
+                    requestAnimationFrame(() => {
+                        document.body.style.pointerEvents = '';
+                    });
+                });
             },
             onCancel: () => setDeleteConfirm(null),
         });
@@ -1285,23 +1336,22 @@ export default function CategorySettingsModal() {
                         </span>
                         <div>
                             <h2 style={S.headerTitle}>{meta.label}</h2>
-                            <span style={{ fontSize: 12, color: 'var(--text-muted)', letterSpacing: '0.05em' }}>{itemCount} 个设定条目</span>
                         </div>
-                        <div style={{ display: 'flex', gap: 6, marginLeft: 8 }}>
+                        <div style={{ display: 'flex', gap: 10, marginLeft: 12 }}>
                             <button
-                                style={{ border: 'none', background: 'rgba(255,255,255,0.65)', backdropFilter: 'blur(6px)', padding: '4px 10px', borderRadius: 8, fontSize: 11, color: 'var(--text-muted)', cursor: 'pointer', transition: 'all 0.15s', fontWeight: 500, whiteSpace: 'nowrap' }}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: 'none', background: 'rgba(255,255,255,0.65)', backdropFilter: 'blur(6px)', padding: '6px 14px', borderRadius: 9, fontSize: 12.5, color: 'var(--text-muted)', cursor: 'pointer', transition: 'all 0.15s', fontWeight: 500, whiteSpace: 'nowrap' }}
                                 onClick={() => { onClose(); setTimeout(() => useAppStore.getState().setShowSettings('settings'), 80); }}
                                 onMouseEnter={e => { e.currentTarget.style.color = meta.color; e.currentTarget.style.background = `${meta.color}15`; }}
                                 onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'rgba(255,255,255,0.65)'; }}
                                 title="返回完整设定集面板"
-                            ><Layers size={12} style={{ marginRight: 3, verticalAlign: -1 }} />设定集面板</button>
+                            ><Layers size={14} />设定集面板</button>
                             <button
-                                style={{ border: 'none', background: 'rgba(255,255,255,0.65)', backdropFilter: 'blur(6px)', padding: '4px 10px', borderRadius: 8, fontSize: 11, color: 'var(--text-muted)', cursor: 'pointer', transition: 'all 0.15s', fontWeight: 500, whiteSpace: 'nowrap' }}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: 'none', background: 'rgba(255,255,255,0.65)', backdropFilter: 'blur(6px)', padding: '6px 14px', borderRadius: 9, fontSize: 12.5, color: 'var(--text-muted)', cursor: 'pointer', transition: 'all 0.15s', fontWeight: 500, whiteSpace: 'nowrap' }}
                                 onClick={() => { onClose(); setTimeout(() => useAppStore.getState().setShowBookInfo(true), 80); }}
                                 onMouseEnter={e => { e.currentTarget.style.color = meta.color; e.currentTarget.style.background = `${meta.color}15`; }}
                                 onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'rgba(255,255,255,0.65)'; }}
                                 title="返回作品信息管理"
-                            ><BookOpen size={12} style={{ marginRight: 3, verticalAlign: -1 }} />作品信息</button>
+                            ><BookOpen size={14} />作品信息</button>
                         </div>
                     </div>
                     <div style={{ display: 'flex', gap: 4, alignItems: 'center', zIndex: 1 }}>
@@ -1376,8 +1426,8 @@ export default function CategorySettingsModal() {
                     )}
                     {/* 右侧操作按钮 */}
                     <div style={{ marginLeft: 'auto', display: 'flex', gap: 2, alignItems: 'center', position: 'relative' }}>
-                        <div style={{ position: 'relative' }}>
-                            <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted, #9ca3af)', padding: '4px 6px', borderRadius: 6, transition: 'all 0.15s' }}
+                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                            <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted, #9ca3af)', padding: '4px 6px', borderRadius: 6, transition: 'all 0.15s', display: 'flex', alignItems: 'center' }}
                                 onClick={() => setShowExportMenu(!showExportMenu)} title={'导出' + meta.label}
                                 onMouseEnter={e => { e.currentTarget.style.color = meta.color; e.currentTarget.style.background = `${meta.color}10`; }}
                                 onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted, #9ca3af)'; e.currentTarget.style.background = 'none'; }}
@@ -1394,7 +1444,7 @@ export default function CategorySettingsModal() {
                                 </div>
                             )}
                         </div>
-                        <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted, #9ca3af)', padding: '4px 6px', borderRadius: 6, transition: 'all 0.15s' }}
+                        <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted, #9ca3af)', padding: '4px 6px', borderRadius: 6, transition: 'all 0.15s', display: 'flex', alignItems: 'center' }}
                             onClick={() => importInputRef.current?.click()} title={'导入' + meta.label}
                             onMouseEnter={e => { e.currentTarget.style.color = meta.color; e.currentTarget.style.background = `${meta.color}10`; }}
                             onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted, #9ca3af)'; e.currentTarget.style.background = 'none'; }}
@@ -1418,6 +1468,78 @@ export default function CategorySettingsModal() {
                         )}
                     </div>
                 </div>
+
+                {/* ===== 子分类标签栏 ===== */}
+                {(() => {
+                    const subFolders = rootFolder ? nodes.filter(n => n.parentId === rootFolder.id && n.type === 'folder').sort((a, b) => (a.order || 0) - (b.order || 0)) : [];
+                    if (subFolders.length === 0) return null;
+                    return (
+                        <div
+                            className="cstab-bar"
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: 6,
+                                padding: '6px 28px',
+                                borderBottom: '1px solid var(--border-light, #e5e7eb)',
+                                background: 'var(--bg-primary, #fff)',
+                                flexShrink: 0,
+                                overflowX: 'auto', overflowY: 'hidden',
+                                scrollbarWidth: 'none',
+                                WebkitOverflowScrolling: 'touch',
+                            }}
+                            onWheel={e => { if (e.deltaY !== 0) { e.currentTarget.scrollLeft += e.deltaY; e.preventDefault(); } }}
+                            ref={el => { if (el) el.style.setProperty('--scrollbar-display', 'none'); }}
+                        >
+                            <style>{`.cstab-bar::-webkit-scrollbar { display: none; }`}</style>
+                            <button
+                                style={{
+                                    padding: '4px 12px', border: 'none', borderRadius: 7,
+                                    fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
+                                    transition: 'all 0.15s', whiteSpace: 'nowrap', flexShrink: 0,
+                                    background: !selectedNodeId || selectedNodeId === rootFolder?.id ? `${meta.color}15` : 'transparent',
+                                    color: !selectedNodeId || selectedNodeId === rootFolder?.id ? meta.color : 'var(--text-muted, #9ca3af)',
+                                }}
+                                onClick={() => setSelectedNodeId(null)}
+                                onMouseEnter={e => { if (selectedNodeId) { e.currentTarget.style.background = 'var(--bg-hover, #f3f4f6)'; } }}
+                                onMouseLeave={e => { if (selectedNodeId) { e.currentTarget.style.background = 'transparent'; } }}
+                            >全部</button>
+                            {subFolders.map(folder => {
+                                const isActive = selectedNodeId === folder.id;
+                                const FolderIcon = getIconComponent(folder.icon);
+                                return (
+                                    <button
+                                        key={folder.id}
+                                        style={{
+                                            display: 'inline-flex', alignItems: 'center', gap: 4,
+                                            padding: '4px 12px', border: 'none', borderRadius: 7,
+                                            fontSize: 11.5, fontWeight: 500, cursor: 'pointer',
+                                            transition: 'all 0.15s', whiteSpace: 'nowrap', flexShrink: 0,
+                                            background: isActive ? `${meta.color}15` : 'transparent',
+                                            color: isActive ? meta.color : 'var(--text-muted, #9ca3af)',
+                                        }}
+                                        onClick={() => {
+                                            setSelectedNodeId(folder.id);
+                                            // 展开该文件夹（取消 collapsed）
+                                            if (folder.collapsed) {
+                                                const updatedNodes = nodes.map(n => n.id === folder.id ? { ...n, collapsed: false } : n);
+                                                setNodes(updatedNodes);
+                                            }
+                                            // 滚动到该文件夹
+                                            setTimeout(() => {
+                                                const el = document.querySelector(`[data-node-id="${folder.id}"]`);
+                                                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                                            }, 50);
+                                        }}
+                                        onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'var(--bg-hover, #f3f4f6)'; }}
+                                        onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+                                    >
+                                        {FolderIcon && <FolderIcon size={12} />}
+                                        {folder.name}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    );
+                })()}
 
                 {/* ===== 内容区 ===== */}
                 <div style={S.body}>
@@ -1502,6 +1624,7 @@ export default function CategorySettingsModal() {
                                 <Plus size={14} /> 新建
                                 <ChevronDown size={11} style={{ marginLeft: 2 }} />
                             </button>
+                            <span style={{ fontSize: 11.5, color: 'var(--text-muted, #9ca3af)', fontWeight: 500, letterSpacing: '0.03em', marginLeft: 4 }}>{itemCount} 个条目</span>
                             {selectedNodeId && (
                                 <button style={{ ...S.footerBtn, marginLeft: 'auto' }}
                                     onClick={() => handleDeleteNode(selectedNodeId)} title="删除选中"

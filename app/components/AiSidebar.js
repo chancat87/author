@@ -1049,7 +1049,7 @@ export default function AiSidebar({ onInsertText }) {
                                             value={renameTitle}
                                             onChange={e => setRenameTitle(e.target.value)}
                                             onKeyDown={e => {
-                                                if (e.key === 'Enter') {
+                                                if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
                                                     onRenameSession?.(s.id, renameTitle.trim() || s.title);
                                                     setRenamingSessionId(null);
                                                 } else if (e.key === 'Escape') {
@@ -1416,7 +1416,7 @@ export default function AiSidebar({ onInsertText }) {
 
                         {/* 模型切换器 + 输入框 */}
                         <div className="chat-input-area">
-                            <div style={{ display: 'flex', gap: 6, flex: 1 }}>
+                            <div style={{ display: 'flex', gap: 6, flex: 1, alignItems: 'center' }}>
                                 <textarea
                                     ref={inputRef}
                                     className="chat-input"
@@ -1424,7 +1424,7 @@ export default function AiSidebar({ onInsertText }) {
                                     value={inputText}
                                     onChange={e => setInputText(e.target.value)}
                                     onKeyDown={e => {
-                                        if (e.key === 'Enter' && !e.shiftKey) {
+                                        if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                                             e.preventDefault();
                                             handleSend();
                                         }

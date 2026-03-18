@@ -1,13 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { useI18n } from '../lib/useI18n';
-import { getSettingsNodes, updateSettingsNode, getActiveWorkId, getAllWorks } from '../lib/settings';
+import { getSettingsNodes, updateSettingsNode, deleteSettingsNode, saveSettingsNodes, getActiveWorkId, getAllWorks, getChatApiConfig, addWork, removeWork, addSettingsNode } from '../lib/settings';
+import { createPortal } from 'react-dom';
 import {
     X, Maximize2, Minimize2, BookOpen, Users, MapPin, Globe, Gem, ClipboardList, Ruler,
     Layers, Clock, ChevronRight, FileText, Settings as SettingsIcon,
-    Plus, Check, Circle, Trash2, Target
+    Plus, Check, Circle, Trash2, Target, ImageIcon, Upload, Star, Sparkles, RefreshCw, Eye
 } from 'lucide-react';
 
 // 分类图标映射
@@ -29,25 +30,49 @@ const CAT_COLORS = {
 
 // FieldInput 组件
 function FieldInput({ label, value, onChange, placeholder, multiline, rows }) {
+    const editableRef = useRef(null);
+    const isUserInput = useRef(false);
+    // 外部 value 变化时同步 contentEditable DOM（如 AI 采纳）
+    useEffect(() => {
+        if (multiline && editableRef.current && !isUserInput.current) {
+            const current = editableRef.current.innerText;
+            if (current !== (value || '')) {
+                editableRef.current.innerText = value || '';
+            }
+        }
+        isUserInput.current = false;
+    }, [value, multiline]);
+    const baseStyle = {
+        width: '100%', padding: '10px 14px', border: '1.5px solid var(--border-light)',
+        borderRadius: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)',
+        fontSize: 14, outline: 'none', transition: 'border-color 0.2s, box-shadow 0.2s',
+        boxSizing: 'border-box',
+    };
+    const focusStyle = e => { e.target.style.borderColor = 'var(--accent)'; e.target.style.boxShadow = '0 0 0 3px var(--accent-light, rgba(99,102,241,0.12))'; };
+    const blurStyle = e => { e.target.style.borderColor = 'var(--border-light)'; e.target.style.boxShadow = 'none'; };
     return (
         <div style={{ marginBottom: 16 }}>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                 {label}
             </label>
             {multiline ? (
-                <textarea
-                    value={value || ''}
-                    onChange={e => onChange(e.target.value)}
-                    placeholder={placeholder}
-                    rows={rows || 3}
+                <div
+                    ref={editableRef}
+                    contentEditable
+                    suppressContentEditableWarning
+                    onInput={e => { isUserInput.current = true; onChange(e.currentTarget.innerText); }}
+                    onFocus={focusStyle}
+                    onBlur={blurStyle}
+                    data-placeholder={placeholder}
                     style={{
-                        width: '100%', padding: '10px 14px', border: '1.5px solid var(--border-light)',
-                        borderRadius: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)',
-                        fontSize: 14, lineHeight: 1.6, resize: 'vertical', outline: 'none',
-                        transition: 'border-color 0.2s, box-shadow 0.2s', fontFamily: 'inherit',
+                        ...baseStyle,
+                        minHeight: (rows || 3) * 24 + 20,
+                        lineHeight: 1.6,
+                        fontFamily: 'inherit',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                        overflowY: 'auto',
                     }}
-                    onFocus={e => { e.target.style.borderColor = 'var(--accent)'; e.target.style.boxShadow = '0 0 0 3px var(--accent-light, rgba(99,102,241,0.12))'; }}
-                    onBlur={e => { e.target.style.borderColor = 'var(--border-light)'; e.target.style.boxShadow = 'none'; }}
                 />
             ) : (
                 <input
@@ -55,13 +80,8 @@ function FieldInput({ label, value, onChange, placeholder, multiline, rows }) {
                     value={value || ''}
                     onChange={e => onChange(e.target.value)}
                     placeholder={placeholder}
-                    style={{
-                        width: '100%', padding: '10px 14px', border: '1.5px solid var(--border-light)',
-                        borderRadius: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)',
-                        fontSize: 14, outline: 'none', transition: 'border-color 0.2s, box-shadow 0.2s',
-                    }}
-                    onFocus={e => { e.target.style.borderColor = 'var(--accent)'; e.target.style.boxShadow = '0 0 0 3px var(--accent-light, rgba(99,102,241,0.12))'; }}
-                    onBlur={e => { e.target.style.borderColor = 'var(--border-light)'; e.target.style.boxShadow = 'none'; }}
+                    style={baseStyle}
+                    onFocus={focusStyle} onBlur={blurStyle}
                 />
             )}
         </div>
@@ -201,17 +221,28 @@ function fmtStatValue(v) {
     return v.toLocaleString();
 }
 
-function StatCard({ label, value, icon: Icon, color, bg, onClick }) {
+function StatCard({ label, value, icon: Icon, color, bg, onClick, onDelete }) {
     const displayValue = fmtStatValue(value);
     return (
         <div style={{
             padding: '14px 16px', borderRadius: 14,
             border: '1px solid var(--border-light)', background: 'var(--bg-primary)',
             transition: 'all 0.2s', cursor: onClick ? 'pointer' : 'default',
+            position: 'relative',
         }}
             onClick={onClick}
-            onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-            onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none'; }}
+            onMouseEnter={e => {
+                e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)';
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                const del = e.currentTarget.querySelector('[data-del]');
+                if (del) del.style.opacity = '1';
+            }}
+            onMouseLeave={e => {
+                e.currentTarget.style.boxShadow = 'none';
+                e.currentTarget.style.transform = 'none';
+                const del = e.currentTarget.querySelector('[data-del]');
+                if (del) del.style.opacity = '0';
+            }}
         >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                 <div style={{ width: 32, height: 32, borderRadius: 9, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color }}>
@@ -223,7 +254,155 @@ function StatCard({ label, value, icon: Icon, color, bg, onClick }) {
                 }}>{displayValue}</span>
             </div>
             <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0, fontWeight: 500 }}>{label}</p>
+            {onDelete && (
+                <span
+                    data-del
+                    title="删除"
+                    onClick={e => { e.stopPropagation(); onDelete(); }}
+                    style={{
+                        width: 24, height: 24, borderRadius: 7,
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        color: 'var(--text-muted)', background: 'transparent',
+                        cursor: 'pointer', transition: 'all 0.15s',
+                        opacity: 0,
+                        position: 'absolute', right: 12, bottom: 10,
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'transparent'; }}
+                >
+                    <Trash2 size={14} />
+                </span>
+            )}
         </div>
+    );
+}
+
+// ===== 图片裁剪器 =====
+const COVER_RATIO = 5 / 7; // 封面宽高比
+function ImageCropper({ imageSrc, onConfirm, onCancel }) {
+    const containerRef = useRef(null);
+    const imgRef = useRef(null);
+    const [imgSize, setImgSize] = useState({ w: 0, h: 0, naturalW: 0, naturalH: 0 });
+    const [crop, setCrop] = useState({ x: 0, y: 0, w: 0, h: 0 });
+    const dragRef = useRef(null);
+
+    // 图片加载后初始化裁剪框
+    const onImgLoad = useCallback(() => {
+        const img = imgRef.current;
+        if (!img) return;
+        const displayW = img.clientWidth, displayH = img.clientHeight;
+        setImgSize({ w: displayW, h: displayH, naturalW: img.naturalWidth, naturalH: img.naturalHeight });
+        // 初始裁剪框居中，尽可能大
+        let cropH = displayH * 0.85, cropW = cropH * COVER_RATIO;
+        if (cropW > displayW * 0.85) { cropW = displayW * 0.85; cropH = cropW / COVER_RATIO; }
+        setCrop({ x: (displayW - cropW) / 2, y: (displayH - cropH) / 2, w: cropW, h: cropH });
+    }, []);
+
+    // 拖动 & 缩放逻辑
+    const startDrag = (e, mode) => {
+        e.preventDefault(); e.stopPropagation();
+        const startX = e.clientX, startY = e.clientY;
+        const startCrop = { ...crop };
+        const onMove = (ev) => {
+            const dx = ev.clientX - startX, dy = ev.clientY - startY;
+            setCrop(prev => {
+                let { x, y, w, h } = startCrop;
+                if (mode === 'move') {
+                    x = Math.max(0, Math.min(imgSize.w - w, x + dx));
+                    y = Math.max(0, Math.min(imgSize.h - h, y + dy));
+                } else {
+                    // corner resize — 保持比例
+                    let newW = w, newH = h, newX = x, newY = y;
+                    if (mode.includes('r')) newW = Math.max(40, w + dx);
+                    if (mode.includes('l')) { newW = Math.max(40, w - dx); newX = x + (w - newW); }
+                    if (mode.includes('b')) newH = Math.max(40, h + dy);
+                    if (mode.includes('t')) { newH = Math.max(40, h - dy); newY = y + (h - newH); }
+                    // 锁定比例
+                    if (mode.includes('r') || mode.includes('l')) { newH = newW / COVER_RATIO; }
+                    else { newW = newH * COVER_RATIO; }
+                    // 边界限制
+                    if (newX < 0) { newW += newX; newX = 0; newH = newW / COVER_RATIO; }
+                    if (newY < 0) { newH += newY; newY = 0; newW = newH * COVER_RATIO; }
+                    if (newX + newW > imgSize.w) { newW = imgSize.w - newX; newH = newW / COVER_RATIO; }
+                    if (newY + newH > imgSize.h) { newH = imgSize.h - newY; newW = newH * COVER_RATIO; }
+                    x = newX; y = newY; w = newW; h = newH;
+                }
+                return { x, y, w, h };
+            });
+        };
+        const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    };
+
+    const handleConfirm = () => {
+        const canvas = document.createElement('canvas');
+        const scaleX = imgSize.naturalW / imgSize.w, scaleY = imgSize.naturalH / imgSize.h;
+        canvas.width = 560; canvas.height = 784; // 输出 5:7
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(imgRef.current, crop.x * scaleX, crop.y * scaleY, crop.w * scaleX, crop.h * scaleY, 0, 0, 560, 784);
+        onConfirm(canvas.toDataURL('image/jpeg', 0.92));
+    };
+
+    const handleStyle = (cursor) => ({
+        position: 'absolute', width: 14, height: 14, background: '#fff',
+        border: '2px solid var(--accent, #6366f1)', borderRadius: 3,
+        cursor, zIndex: 3, transform: 'translate(-50%, -50%)',
+    });
+
+    return createPortal(
+        <div style={{ position: 'fixed', inset: 0, zIndex: 99998, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
+            onClick={onCancel}
+        >
+            <div style={{ background: 'var(--bg-primary)', borderRadius: 16, padding: 24, maxWidth: '80vw', maxHeight: '85vh', display: 'flex', flexDirection: 'column', gap: 16, boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}
+                onClick={e => e.stopPropagation()}
+            >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>裁剪封面</h3>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>拖动选框调整区域，拖动角点缩放</span>
+                </div>
+                <div ref={containerRef} style={{ position: 'relative', display: 'inline-block', maxHeight: '65vh', overflow: 'hidden', borderRadius: 8, lineHeight: 0 }}>
+                    <img ref={imgRef} src={imageSrc} onLoad={onImgLoad}
+                        style={{ maxWidth: '70vw', maxHeight: '65vh', display: 'block', userSelect: 'none', pointerEvents: 'none' }}
+                        draggable={false}
+                    />
+                    {imgSize.w > 0 && (
+                        <>
+                            {/* 暗色遮罩 */}
+                            <svg style={{ position: 'absolute', inset: 0, width: imgSize.w, height: imgSize.h, pointerEvents: 'none', zIndex: 1 }}>
+                                <defs><mask id="cropMask">
+                                    <rect x="0" y="0" width={imgSize.w} height={imgSize.h} fill="white" />
+                                    <rect x={crop.x} y={crop.y} width={crop.w} height={crop.h} fill="black" rx="4" />
+                                </mask></defs>
+                                <rect x="0" y="0" width={imgSize.w} height={imgSize.h} fill="rgba(0,0,0,0.55)" mask="url(#cropMask)" />
+                            </svg>
+                            {/* 裁剪框 */}
+                            <div style={{
+                                position: 'absolute', left: crop.x, top: crop.y, width: crop.w, height: crop.h,
+                                border: '2px solid var(--accent, #6366f1)', borderRadius: 4,
+                                cursor: 'move', zIndex: 2, boxShadow: '0 0 0 1px rgba(255,255,255,0.3)',
+                            }} onMouseDown={e => startDrag(e, 'move')}>
+                                {/* 三分线 */}
+                                <div style={{ position: 'absolute', left: '33.3%', top: 0, bottom: 0, borderLeft: '1px dashed rgba(255,255,255,0.3)' }} />
+                                <div style={{ position: 'absolute', left: '66.6%', top: 0, bottom: 0, borderLeft: '1px dashed rgba(255,255,255,0.3)' }} />
+                                <div style={{ position: 'absolute', top: '33.3%', left: 0, right: 0, borderTop: '1px dashed rgba(255,255,255,0.3)' }} />
+                                <div style={{ position: 'absolute', top: '66.6%', left: 0, right: 0, borderTop: '1px dashed rgba(255,255,255,0.3)' }} />
+                            </div>
+                            {/* 角点手柄 */}
+                            <div style={{ ...handleStyle('nw-resize'), left: crop.x, top: crop.y, zIndex: 4 }} onMouseDown={e => startDrag(e, 'lt')} />
+                            <div style={{ ...handleStyle('ne-resize'), left: crop.x + crop.w, top: crop.y, zIndex: 4 }} onMouseDown={e => startDrag(e, 'rt')} />
+                            <div style={{ ...handleStyle('sw-resize'), left: crop.x, top: crop.y + crop.h, zIndex: 4 }} onMouseDown={e => startDrag(e, 'lb')} />
+                            <div style={{ ...handleStyle('se-resize'), left: crop.x + crop.w, top: crop.y + crop.h, zIndex: 4 }} onMouseDown={e => startDrag(e, 'rb')} />
+                        </>
+                    )}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                    <button onClick={onCancel} style={{ padding: '8px 20px', border: '1px solid var(--border-light)', borderRadius: 8, background: 'var(--bg-secondary)', cursor: 'pointer', fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>取消</button>
+                    <button onClick={handleConfirm} style={{ padding: '8px 20px', border: 'none', borderRadius: 8, background: 'var(--accent, #6366f1)', cursor: 'pointer', fontSize: 13, color: '#fff', fontWeight: 600, boxShadow: '0 2px 8px rgba(99,102,241,0.3)' }}>确认裁剪</button>
+                </div>
+            </div>
+        </div>,
+        document.body
     );
 }
 
@@ -238,38 +417,135 @@ export default function BookInfoPanel() {
     const [goals, setGoals] = useState([]);
     const [newGoalText, setNewGoalText] = useState('');
     const [chartPeriod, setChartPeriod] = useState('day');
+    const [deleteConfirm, setDeleteConfirm] = useState(null);
+    const [works, setWorks] = useState([]);
+    const [selectedWorkId, setSelectedWorkId] = useState(null);
+    const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'info'
+    const coverInputRef = useRef(null);
+    const [cropperSrc, setCropperSrc] = useState(null); // 裁剪器图片源
+    const [aiEval, setAiEval] = useState(null); // AI评价结果
+    const [aiEvalLoading, setAiEvalLoading] = useState(false);
 
-    // 加载数据
+    // 检查是否跳过删除确认（与 SettingsPanel 共用同一套 localStorage Key）
+    const shouldSkipDeleteConfirm = () => {
+        try {
+            if (localStorage.getItem('author-delete-never-remind') === 'true') return true;
+            const skipDate = localStorage.getItem('author-delete-skip-today');
+            if (skipDate && skipDate === new Date().toISOString().slice(0, 10)) return true;
+        } catch { /* ignore */ }
+        return false;
+    };
+
+    // 删除分类
+    const handleDeleteCat = (catKey, catLabel, count, isCustomFolder, rootFolderId) => {
+        if (shouldSkipDeleteConfirm()) {
+            doDeleteCat(catKey, isCustomFolder, rootFolderId);
+            return;
+        }
+        const message = isCustomFolder
+            ? `确认删除分类「${catLabel}」及其下所有 ${count} 条设定？此操作不可撤销。`
+            : `确认清空「${catLabel}」下的所有 ${count} 条设定？分类本身会保留，此操作不可撤销。`;
+        setDeleteConfirm({
+            message,
+            onConfirm: async () => { setDeleteConfirm(null); await doDeleteCat(catKey, isCustomFolder, rootFolderId); },
+            onCancel: () => setDeleteConfirm(null),
+        });
+    };
+
+    const doDeleteCat = async (catKey, isCustomFolder, rootFolderId) => {
+        const workId = getActiveWorkId();
+        if (isCustomFolder && rootFolderId) {
+            await deleteSettingsNode(rootFolderId);
+        } else if (rootFolderId) {
+            // 内置分类：仅清空 item 节点
+            const toDelete = new Set();
+            const collectItems = (pid) => {
+                nodes.filter(n => n.parentId === pid).forEach(child => {
+                    if (child.type === 'item') toDelete.add(child.id);
+                    else collectItems(child.id);
+                });
+            };
+            collectItems(rootFolderId);
+            if (toDelete.size > 0) {
+                const updatedNodes = nodes.filter(n => !toDelete.has(n.id));
+                await saveSettingsNodes(updatedNodes, workId);
+                setNodes(updatedNodes);
+                incrementSettingsVersion();
+                return;
+            }
+        }
+        const refreshed = await getSettingsNodes(workId);
+        setNodes(refreshed);
+        incrementSettingsVersion();
+    };
+
+    // 加载作品列表
     useEffect(() => {
         if (!showBookInfo) return;
         (async () => {
-            const workId = getActiveWorkId();
-            if (!workId) return;
-            const allNodes = await getSettingsNodes(workId);
+            const allWorks = await getAllWorks();
+            setWorks(allWorks);
+            const activeId = getActiveWorkId();
+            setSelectedWorkId(activeId || (allWorks[0]?.id ?? null));
+        })();
+    }, [showBookInfo]);
+
+    // 加载选中作品的数据
+    useEffect(() => {
+        if (!showBookInfo || !selectedWorkId) return;
+        (async () => {
+            const allNodes = await getSettingsNodes(selectedWorkId);
             setNodes(allNodes);
             const biNode = allNodes.find(n => n.category === 'bookInfo' && n.type === 'special');
             setBookInfoNode(biNode || null);
             setBookData(biNode?.content || {});
             setGoals(biNode?.content?.goals || []);
-            // 获取作品名
-            const works = await getAllWorks();
-            const work = works.find(w => w.id === workId);
+            const work = works.find(w => w.id === selectedWorkId);
             setWorkName(work?.name || '');
         })();
-    }, [showBookInfo, settingsVersion]);
+    }, [showBookInfo, selectedWorkId, works, settingsVersion]);
+
+    // 选中查看（不切换全局）
+    const handleSelectWork = (workId) => {
+        setSelectedWorkId(workId);
+    };
+
+    // 显式切换全局活跃作品
+    const handleActivateWork = (workId) => {
+        const store = useAppStore.getState();
+        if (store.setActiveWorkId) store.setActiveWorkId(workId);
+    };
+
+    const globalActiveWorkId = useAppStore(s => s.activeWorkId) || getActiveWorkId();
+
+    // 上传封面
+    const handleCoverUpload = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            setCropperSrc(reader.result); // 打开裁剪器
+        };
+        reader.readAsDataURL(file);
+        e.target.value = '';
+    };
 
     // 保存表单数据
+    const saveTimerRef = useRef(null);
+    const latestBookDataRef = useRef(bookData);
+    latestBookDataRef.current = bookData;
     const handleFieldChange = useCallback((field, value) => {
-        setBookData(prev => {
-            const next = { ...prev, [field]: value };
-            // 异步保存
+        // 1. 立即更新本地状态（保证输入流畅）
+        setBookData(prev => ({ ...prev, [field]: value }));
+        // 2. 防抖保存到持久化存储（500ms 无新输入后才执行）
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = setTimeout(() => {
+            const cur = { ...latestBookDataRef.current, [field]: value };
             if (bookInfoNode) {
-                updateSettingsNode(bookInfoNode.id, { content: next }, nodes.map(n => n.id === bookInfoNode.id ? { ...n, content: next } : n));
-                incrementSettingsVersion();
+                updateSettingsNode(bookInfoNode.id, { content: cur }, nodes.map(n => n.id === bookInfoNode.id ? { ...n, content: cur } : n));
             }
-            return next;
-        });
-    }, [bookInfoNode, nodes, incrementSettingsVersion]);
+        }, 500);
+    }, [bookInfoNode, nodes]);
 
     // 统计数据
     const stats = useMemo(() => {
@@ -286,6 +562,8 @@ export default function BookInfoPanel() {
         );
         
         const catCounts = {};
+        // 预填所有内置分类为 0，确保即使没有条目也在概览中显示
+        ['character', 'location', 'world', 'object', 'plot', 'rules'].forEach(cat => { catCounts[cat] = 0; });
         const customFolderLabels = {}; // custom__id → folder name
         customFolders.forEach(f => {
             const key = `custom__${f.id}`;
@@ -373,6 +651,7 @@ export default function BookInfoPanel() {
     };
 
     return (
+        <>
         <div
             style={{
                 position: 'fixed', inset: 0, zIndex: 9998,
@@ -396,25 +675,21 @@ export default function BookInfoPanel() {
                 {/* Header */}
                 <div style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '16px 24px', borderBottom: '1px solid var(--border-light)',
+                    padding: '14px 24px', borderBottom: '1px solid var(--border-light)',
                     background: 'var(--bg-secondary)', flexShrink: 0,
                 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                         <div style={{
-                            width: 40, height: 40, borderRadius: 12,
+                            width: 36, height: 36, borderRadius: 10,
                             background: 'linear-gradient(135deg, var(--accent, #6366f1), #8b5cf6)',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             color: '#fff', boxShadow: '0 4px 12px rgba(99,102,241,0.3)',
                         }}>
-                            <BookOpen size={20} />
+                            <BookOpen size={18} />
                         </div>
                         <div>
-                            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
-                                {bookData.title || workName || t('bookInfo.title') || '作品信息'}
-                            </h2>
-                            <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
-                                {t('bookInfo.intro') || '填写作品基本信息，AI创作时自动作为上下文参考'}
-                            </p>
+                            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>作品管理</h2>
+                            <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)' }}>管理作品信息与创作数据</p>
                         </div>
                     </div>
                     <div style={{ display: 'flex', gap: 4 }}>
@@ -428,33 +703,407 @@ export default function BookInfoPanel() {
                 {/* Content — 左右两栏 */}
                 <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
-                    {/* 左侧：表单 */}
+                    {/* ===== 左侧：作品列表 ===== */}
                     <div style={{
-                        width: 420, minWidth: 360, flexShrink: 0,
-                        padding: '28px 28px', overflowY: 'auto',
+                        width: 220, minWidth: 180, flexShrink: 0,
                         borderRight: '1px solid var(--border-light)',
+                        display: 'flex', flexDirection: 'column',
+                        background: 'var(--bg-primary)',
                     }}>
-                        <div style={{ marginBottom: 20 }}>
-                            <h3 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <FileText size={16} style={{ color: 'var(--accent)' }} />
-                                基本信息
-                            </h3>
-                            <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
-                                这些信息将作为AI创作的核心上下文
-                            </p>
+                        <div style={{ padding: '12px 14px', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid var(--border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            作品列表
+                            <button
+                                onClick={async () => {
+                                    const name = prompt('新作品名称：');
+                                    if (!name || !name.trim()) return;
+                                    const workNode = await addWork(name.trim());
+                                    const allWorks = await getAllWorks();
+                                    setWorks(allWorks);
+                                    handleSelectWork(workNode.id);
+                                }}
+                                style={{ width: 22, height: 22, borderRadius: 6, border: '1px solid var(--border-light)', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', transition: 'all 0.15s' }}
+                                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; e.currentTarget.style.background = 'rgba(99,102,241,0.08)'; }}
+                                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-light)'; e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'transparent'; }}
+                                title="新建作品"
+                            ><Plus size={12} /></button>
                         </div>
-
-                        <FieldInput label={t('bookInfo.title') || '书名'} value={bookData.title} onChange={v => handleFieldChange('title', v)} placeholder={t('bookInfo.titlePlaceholder') || '作品名称'} />
-                        <FieldInput label={t('bookInfo.genre') || '题材'} value={bookData.genre} onChange={v => handleFieldChange('genre', v)} placeholder={t('bookInfo.genrePlaceholder') || '例：都市/玄幻/悬疑'} />
-                        <FieldInput label={t('bookInfo.synopsis') || '故事简介'} value={bookData.synopsis} onChange={v => handleFieldChange('synopsis', v)} placeholder={t('bookInfo.synopsisPlaceholder') || '用几句话概括你的故事核心'} multiline rows={4} />
-                        <FieldInput label={t('bookInfo.style') || '写作风格'} value={bookData.style} onChange={v => handleFieldChange('style', v)} placeholder={t('bookInfo.stylePlaceholder') || '例：轻松幽默/严肃沉重'} />
-                        <FieldInput label={t('bookInfo.tone') || '整体基调'} value={bookData.tone} onChange={v => handleFieldChange('tone', v)} placeholder={t('bookInfo.tonePlaceholder') || '例：热血/温馨/黑暗'} />
-                        <FieldInput label={t('bookInfo.pov') || '叙事视角'} value={bookData.pov} onChange={v => handleFieldChange('pov', v)} placeholder={t('bookInfo.povPlaceholder') || '例：第一人称/第三人称/全知'} />
-                        <FieldInput label={t('bookInfo.targetAudience') || '目标读者'} value={bookData.targetAudience} onChange={v => handleFieldChange('targetAudience', v)} placeholder={t('bookInfo.targetAudiencePlaceholder') || '例：男频18-30/女频青年'} />
+                        <div style={{ flex: 1, overflowY: 'auto', padding: '6px 8px' }}>
+                            {works.map(w => {
+                                const isViewing = w.id === selectedWorkId;
+                                const isGlobalActive = w.id === globalActiveWorkId;
+                                return (
+                                    <div
+                                        key={w.id}
+                                        style={{
+                                            display: 'flex', alignItems: 'center', gap: 10,
+                                            padding: '10px 12px', borderRadius: 10, cursor: 'pointer',
+                                            transition: 'all 0.15s', marginBottom: 2,
+                                            background: isViewing ? 'linear-gradient(135deg, rgba(99,102,241,0.1), rgba(139,92,246,0.08))' : 'transparent',
+                                            border: isViewing ? '1px solid rgba(99,102,241,0.2)' : '1px solid transparent',
+                                        }}
+                                        onClick={() => handleSelectWork(w.id)}
+                                        onMouseEnter={e => { if (!isViewing) e.currentTarget.style.background = 'var(--bg-hover, #f3f4f6)'; }}
+                                        onMouseLeave={e => { if (!isViewing) e.currentTarget.style.background = 'transparent'; }}
+                                    >
+                                        <div style={{
+                                            width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+                                            background: isViewing ? 'var(--accent, #6366f1)' : 'var(--bg-secondary)',
+                                            color: isViewing ? '#fff' : 'var(--text-muted)',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            transition: 'all 0.15s', position: 'relative',
+                                        }}>
+                                            <BookOpen size={14} />
+                                            {isGlobalActive && (
+                                                <div style={{
+                                                    position: 'absolute', bottom: -2, right: -2,
+                                                    width: 10, height: 10, borderRadius: '50%',
+                                                    background: '#10b981', border: '2px solid var(--bg-primary)',
+                                                }} title="当前写作中" />
+                                            )}
+                                        </div>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <p style={{
+                                                margin: 0, fontSize: 13, fontWeight: isViewing ? 600 : 500,
+                                                color: isViewing ? 'var(--accent, #6366f1)' : 'var(--text-primary)',
+                                                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                                            }}>{w.name}</p>
+                                            {isGlobalActive && (
+                                                <span style={{ fontSize: 10, color: '#10b981', fontWeight: 500 }}>写作中</span>
+                                            )}
+                                        </div>
+                                        {!isGlobalActive && (
+                                            <button
+                                                onClick={e => { e.stopPropagation(); handleActivateWork(w.id); }}
+                                                style={{
+                                                    padding: '3px 8px', border: '1px solid var(--border-light)',
+                                                    borderRadius: 6, background: 'var(--bg-primary)', cursor: 'pointer',
+                                                    fontSize: 10, color: 'var(--text-muted)', fontWeight: 500,
+                                                    transition: 'all 0.15s', whiteSpace: 'nowrap', flexShrink: 0,
+                                                }}
+                                                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; }}
+                                                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-light)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+                                            >切换</button>
+                                        )}
+                                        {!isGlobalActive && (
+                                            <button
+                                                onClick={async e => {
+                                                    e.stopPropagation();
+                                                    if (!confirm(`确定要删除作品「${w.name}」吗？\n此操作不可撤销！`)) return;
+                                                    await removeWork(w.id);
+                                                    const allWorks = await getAllWorks();
+                                                    setWorks(allWorks);
+                                                    if (selectedWorkId === w.id && allWorks.length > 0) {
+                                                        handleSelectWork(allWorks[0].id);
+                                                    }
+                                                }}
+                                                style={{
+                                                    width: 22, height: 22, borderRadius: 5, border: 'none',
+                                                    background: 'transparent', cursor: 'pointer',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                    color: 'var(--text-muted)', transition: 'all 0.15s', flexShrink: 0,
+                                                }}
+                                                onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; }}
+                                                onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'transparent'; }}
+                                                title="删除作品"
+                                            ><Trash2 size={12} /></button>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
 
-                    {/* 右侧：仪表盘 */}
-                    <div style={{ flex: 1, padding: '28px 32px', overflowY: 'auto', background: 'var(--bg-secondary)' }}>
+                    {/* ===== 右侧：标签页内容 ===== */}
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                        {/* 标签切换栏 */}
+                        <div style={{
+                            display: 'flex', gap: 0, padding: '0 28px',
+                            borderBottom: '1px solid var(--border-light)',
+                            background: 'var(--bg-primary)', flexShrink: 0,
+                        }}>
+                            {[{ key: 'overview', label: '创作概览', icon: Layers }, { key: 'info', label: '作品信息', icon: FileText }].map(tab => (
+                                <button
+                                    key={tab.key}
+                                    onClick={() => { document.activeElement?.blur(); setTimeout(() => setActiveTab(tab.key), 100); }}
+                                    style={{
+                                        display: 'inline-flex', alignItems: 'center', gap: 6,
+                                        padding: '12px 20px', border: 'none', cursor: 'pointer',
+                                        fontSize: 13, fontWeight: activeTab === tab.key ? 600 : 500,
+                                        color: activeTab === tab.key ? 'var(--accent, #6366f1)' : 'var(--text-muted)',
+                                        background: 'transparent', transition: 'all 0.15s',
+                                        borderBottom: activeTab === tab.key ? '2px solid var(--accent, #6366f1)' : '2px solid transparent',
+                                        marginBottom: -1,
+                                    }}
+                                    onMouseEnter={e => { if (activeTab !== tab.key) e.currentTarget.style.color = 'var(--text-primary)'; }}
+                                    onMouseLeave={e => { if (activeTab !== tab.key) e.currentTarget.style.color = 'var(--text-muted)'; }}
+                                >
+                                    <tab.icon size={14} />
+                                    {tab.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* 标签内容 */}
+                        <div style={{ flex: 1, overflowY: 'auto', background: 'var(--bg-secondary)' }}>
+                            {/* ========== 作品信息tab ========== */}
+                            <div style={activeTab === 'info' ? { display: 'flex', gap: 28, padding: '28px 32px' } : { height: 0, overflow: 'hidden', opacity: 0, pointerEvents: 'none' }}>
+                                {/* 左侧：表单 */}
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                {/* 封面上传 */}
+                                <div style={{ display: 'flex', gap: 24, marginBottom: 28 }}>
+                                    <div
+                                        style={{
+                                            width: 140, height: 196, borderRadius: 14, flexShrink: 0,
+                                            border: bookData.coverImage ? 'none' : '2px dashed var(--border-medium, #d1d5db)',
+                                            background: bookData.coverImage ? 'none' : 'var(--bg-primary)',
+                                            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                                            gap: 8, cursor: 'pointer', transition: 'all 0.2s',
+                                            overflow: 'hidden', position: 'relative',
+                                        }}
+                                        onClick={() => coverInputRef.current?.click()}
+                                        onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                                        onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-medium, #d1d5db)'; e.currentTarget.style.transform = 'none'; }}
+                                    >
+                                        {bookData.coverImage ? (
+                                            <img src={bookData.coverImage} alt="封面" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 14 }} />
+                                        ) : (
+                                            <>
+                                                <ImageIcon size={24} style={{ color: 'var(--text-muted)' }} />
+                                                <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>上传封面</span>
+                                            </>
+                                        )}
+                                        {bookData.coverImage && (
+                                            <div style={{
+                                                position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                opacity: 0, transition: 'opacity 0.2s', borderRadius: 14,
+                                            }}
+                                                onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+                                                onMouseLeave={e => e.currentTarget.style.opacity = '0'}
+                                            >
+                                                <span style={{ color: '#fff', fontSize: 12, fontWeight: 600 }}>更换封面</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <input ref={coverInputRef} type="file" accept="image/*" onChange={handleCoverUpload} style={{ display: 'none' }} />
+                                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                        <h3 style={{ margin: '0 0 4px', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
+                                            {bookData.title || workName || '未命名作品'}
+                                        </h3>
+                                        <p style={{ margin: '0 0 12px', fontSize: 12, color: 'var(--text-muted)' }}>
+                                            这些信息帮助AI理解你的作品定位和风格
+                                        </p>
+                                        {bookData.coverImage && (
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); handleFieldChange('coverImage', ''); }}
+                                                style={{ alignSelf: 'flex-start', padding: '4px 12px', border: '1px solid var(--border-light)', borderRadius: 8, background: 'var(--bg-primary)', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 11, transition: 'all 0.15s' }}
+                                                onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.borderColor = '#ef4444'; }}
+                                                onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border-light)'; }}
+                                            >删除封面</button>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <FieldInput label={t('bookInfo.title') || '作品名称'} value={bookData.title} onChange={v => handleFieldChange('title', v)} placeholder={t('bookInfo.titlePlaceholder') || '例：《修仙世界的日常生活》'} />
+                                <FieldInput label={t('bookInfo.genre') || '题材类型'} value={bookData.genre} onChange={v => handleFieldChange('genre', v)} placeholder={t('bookInfo.genrePlaceholder') || '例：仙侠/都市/悬疑/言情/科幻/奇幻/历史...'} />
+                                <FieldInput label={t('bookInfo.synopsis') || '故事简介'} value={bookData.synopsis} onChange={v => handleFieldChange('synopsis', v)} placeholder={t('bookInfo.synopsisPlaceholder') || '用几句话概括整个故事的核心'} multiline rows={4} />
+                                <FieldInput label={t('bookInfo.style') || '写作风格'} value={bookData.style} onChange={v => handleFieldChange('style', v)} placeholder={t('bookInfo.stylePlaceholder') || '例：轻松幽默、严肃沉重、诗意抒情、硬汉派、轻小说...'} />
+                                <FieldInput label={t('bookInfo.tone') || '整体基调'} value={bookData.tone} onChange={v => handleFieldChange('tone', v)} placeholder={t('bookInfo.tonePlaceholder') || '例：温暖治愈、黑暗压抑、热血燃向、悬疑追谜...'} />
+                                <FieldInput label={t('bookInfo.pov') || '叙事视角'} value={bookData.pov} onChange={v => handleFieldChange('pov', v)} placeholder={t('bookInfo.povPlaceholder') || '例：第一人称（主角视角）、第三人称有限视角、全知视角'} />
+                                <FieldInput label={t('bookInfo.targetAudience') || '目标读者'} value={bookData.targetAudience} onChange={v => handleFieldChange('targetAudience', v)} placeholder={t('bookInfo.targetAudiencePlaceholder') || '例：18-30岁男性网文读者、女性言情读者...'} />
+                                </div>
+
+                                {/* 右侧：读者预览 + AI评价 */}
+                                <div style={{ width: 340, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 20 }}>
+                                    {/* 读者预览卡片 */}
+                                    <div style={{
+                                        background: 'var(--bg-primary)', borderRadius: 16,
+                                        border: '1px solid var(--border-light)',
+                                        overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
+                                    }}>
+                                        <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                            <Eye size={14} style={{ color: 'var(--accent)' }} />
+                                            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>读者预览</span>
+                                        </div>
+                                        <div style={{ padding: 18 }}>
+                                            <div style={{ display: 'flex', gap: 14, marginBottom: 14 }}>
+                                                {bookData.coverImage ? (
+                                                    <img src={bookData.coverImage} alt="" style={{ width: 80, height: 112, objectFit: 'cover', borderRadius: 8, flexShrink: 0, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }} />
+                                                ) : (
+                                                    <div style={{ width: 80, height: 112, borderRadius: 8, flexShrink: 0, background: 'linear-gradient(135deg, #e0e7ff, #c7d2fe)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                        <BookOpen size={24} style={{ color: '#6366f1', opacity: 0.5 }} />
+                                                    </div>
+                                                )}
+                                                <div>
+                                                    <h4 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.3 }}>
+                                                        {bookData.title || '未命名作品'}
+                                                    </h4>
+                                                    {bookData.genre && <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, background: 'rgba(99,102,241,0.1)', color: 'var(--accent)', fontSize: 10, fontWeight: 600, marginBottom: 6 }}>{bookData.genre}</span>}
+                                                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                                                        {bookData.style && <span style={{ fontSize: 10, color: 'var(--text-muted)', background: 'var(--bg-secondary)', padding: '2px 6px', borderRadius: 4 }}>{bookData.style}</span>}
+                                                        {bookData.tone && <span style={{ fontSize: 10, color: 'var(--text-muted)', background: 'var(--bg-secondary)', padding: '2px 6px', borderRadius: 4 }}>{bookData.tone}</span>}
+                                                        {bookData.pov && <span style={{ fontSize: 10, color: 'var(--text-muted)', background: 'var(--bg-secondary)', padding: '2px 6px', borderRadius: 4 }}>{bookData.pov}</span>}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {bookData.synopsis ? (
+                                                <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.7, display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{bookData.synopsis}</p>
+                                            ) : (
+                                                <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>暂无简介，填写后将在此预览</p>
+                                            )}
+                                            {bookData.targetAudience && (
+                                                <p style={{ margin: '10px 0 0', fontSize: 10, color: 'var(--text-muted)' }}>🎯 {bookData.targetAudience}</p>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* AI 评价面板 */}
+                                    <div style={{
+                                        background: 'var(--bg-primary)', borderRadius: 16,
+                                        border: '1px solid var(--border-light)',
+                                        overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
+                                    }}>
+                                        <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                <Sparkles size={14} style={{ color: '#f59e0b' }} />
+                                                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>AI 评价</span>
+                                            </div>
+                                            <button
+                                                onClick={async () => {
+                                                    setAiEvalLoading(true);
+                                                    try {
+                                                        const apiConfig = getChatApiConfig();
+                                                        if (!apiConfig?.apiKey) { setAiEval({ _error: '请先在设置中配置AI API' }); return; }
+                                                        const apiEndpoint = ['gemini-native', 'custom-gemini'].includes(apiConfig?.provider) ? '/api/ai/gemini'
+                                                            : apiConfig?.provider === 'openai-responses' ? '/api/ai/responses'
+                                                                : (['claude', 'custom-claude'].includes(apiConfig?.provider) || apiConfig?.apiFormat === 'anthropic') ? '/api/ai/claude'
+                                                                    : '/api/ai';
+                                                        const fields = [
+                                                            { key: 'title', label: '作品名称', value: bookData.title },
+                                                            { key: 'genre', label: '题材类型', value: bookData.genre },
+                                                            { key: 'synopsis', label: '故事简介', value: bookData.synopsis },
+                                                            { key: 'style', label: '写作风格', value: bookData.style },
+                                                            { key: 'tone', label: '整体基调', value: bookData.tone },
+                                                            { key: 'pov', label: '叙事视角', value: bookData.pov },
+                                                            { key: 'targetAudience', label: '目标读者', value: bookData.targetAudience },
+                                                        ];
+                                                        const filledFields = fields.filter(f => f.value?.trim());
+                                                        if (filledFields.length === 0) { setAiEval({ _error: '请先填写至少一个字段' }); return; }
+                                                        const prompt = '你是一位资深网文编辑，请对以下作品信息进行专业评价。对每个已填写的字段给出1-5星评分、简短评价（一句话）、和具体修改建议。注意评分标准：1星=非常糟糕 2星=待改进 3星=可以 4星=优秀 5星=极佳。\n\n作品信息如下：\n' + filledFields.map(f => f.label + ': ' + f.value).join('\n') + '\n\n请以以下JSON格式回复，不要加任何其他文字：\n{\n' + filledFields.map(f => '  "' + f.key + '": { "score": 评分, "feedback": "一句话评价", "suggestion": "建议的内容，如果当前已经很好则保持原文" }').join(',\n') + '\n}';
+                                                        const res = await fetch(apiEndpoint, {
+                                                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                                            body: JSON.stringify({ systemPrompt: '你是一位专业的网文编辑，只输出JSON。', userPrompt: prompt, apiConfig }),
+                                                        });
+                                                        const contentType = res.headers.get('content-type') || '';
+                                                        let fullText = '';
+                                                        if (contentType.includes('text/event-stream')) {
+                                                            const reader = res.body.getReader();
+                                                            const decoder = new TextDecoder();
+                                                            let buffer = '';
+                                                            while (true) {
+                                                                const { done, value } = await reader.read();
+                                                                if (done) break;
+                                                                buffer += decoder.decode(value, { stream: true });
+                                                                const events = buffer.split('\n\n');
+                                                                buffer = events.pop() || '';
+                                                                for (const event of events) {
+                                                                    const trimmed = event.trim();
+                                                                    if (!trimmed || trimmed === 'data: [DONE]') continue;
+                                                                    if (trimmed.startsWith('data: ')) {
+                                                                        try { const json = JSON.parse(trimmed.slice(6)); if (json.text) fullText += json.text; } catch (_e) {}
+                                                                    }
+                                                                }
+                                                            }
+                                                        } else {
+                                                            const data = await res.json();
+                                                            fullText = data.text || data.error || '';
+                                                        }
+                                                        const jsonMatch = fullText.match(/\{[\s\S]*\}/);
+                                                        if (jsonMatch) {
+                                                            try { setAiEval(JSON.parse(jsonMatch[0])); } catch (_e) { setAiEval({ _error: 'AI返回格式异常，请重试' }); }
+                                                        } else { setAiEval({ _error: 'AI返回格式异常，请重试' }); }
+                                                    } catch (err) {
+                                                        setAiEval({ _error: err.message || '请求失败' });
+                                                    } finally { setAiEvalLoading(false); }
+                                                }}
+                                                disabled={aiEvalLoading}
+                                                style={{
+                                                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                                                    padding: '4px 12px', border: '1px solid var(--border-light)', borderRadius: 8,
+                                                    background: aiEvalLoading ? 'var(--bg-secondary)' : 'var(--bg-primary)',
+                                                    cursor: aiEvalLoading ? 'wait' : 'pointer', fontSize: 11, fontWeight: 500,
+                                                    color: 'var(--text-muted)', transition: 'all 0.15s',
+                                                }}
+                                                onMouseEnter={e => { if (!aiEvalLoading) { e.currentTarget.style.borderColor = '#f59e0b'; e.currentTarget.style.color = '#f59e0b'; } }}
+                                                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-light)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+                                            >
+                                                {aiEvalLoading ? <><RefreshCw size={11} style={{ animation: 'spin 1s linear infinite' }} /> 评价中...</> : <><Sparkles size={11} /> {aiEval ? '重新评价' : '开始评价'}</>}
+                                            </button>
+                                        </div>
+                                        <div style={{ padding: '12px 18px' }}>
+                                            {aiEval?._error && (
+                                                <p style={{ margin: '0 0 12px', fontSize: 12, color: '#ef4444' }}>{aiEval._error}</p>
+                                            )}
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                                                {[{ key: 'title', label: '作品名称' }, { key: 'genre', label: '题材类型' }, { key: 'synopsis', label: '故事简介' }, { key: 'style', label: '写作风格' }, { key: 'tone', label: '整体基调' }, { key: 'pov', label: '叙事视角' }, { key: 'targetAudience', label: '目标读者' }].map(field => {
+                                                    const ev = aiEval?.[field.key];
+                                                    const hasValue = bookData[field.key]?.trim();
+                                                    return (
+                                                        <div key={field.key} style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--bg-secondary)', border: '1px solid var(--border-light)', opacity: hasValue ? 1 : 0.5 }}>
+                                                            {/* 栏目标题 */}
+                                                            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', marginBottom: ev ? 8 : 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                                <span>{field.label}</span>
+                                                                {!hasValue && <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 400 }}>未填写</span>}
+                                                            </div>
+                                                            {ev ? (
+                                                                <>
+                                                                    {/* 1. 评语 */}
+                                                                    <p style={{ margin: '0 0 6px', fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.6 }}>{ev.feedback}</p>
+                                                                    {/* 2. 星级 */}
+                                                                    <div style={{ display: 'flex', gap: 2, marginBottom: 8 }}>
+                                                                        {[1, 2, 3, 4, 5].map(s => (
+                                                                            <Star key={s} size={13} fill={s <= (ev.score || 0) ? '#f59e0b' : 'none'} style={{ color: s <= (ev.score || 0) ? '#f59e0b' : 'var(--border-light)' }} />
+                                                                        ))}
+                                                                        <span style={{ fontSize: 11, color: '#f59e0b', fontWeight: 600, marginLeft: 4 }}>{ev.score}/5</span>
+                                                                    </div>
+                                                                    {/* 3. 修改意见 */}
+                                                                    {ev.suggestion && (
+                                                                        <div style={{ marginBottom: 6 }}>
+                                                                            <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>修改意见</span>
+                                                                            <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{ev.suggestion !== bookData[field.key] ? ev.suggestion : '当前内容已很好，无需修改'}</p>
+                                                                        </div>
+                                                                    )}
+                                                                    {/* 4. 修改结果（可采纳） */}
+                                                                    {ev.suggestion && ev.suggestion !== bookData[field.key] && (
+                                                                        <div style={{ padding: '8px 10px', borderRadius: 8, background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.15)' }}>
+                                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                                                                                <span style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 600 }}>修改结果</span>
+                                                                                <button
+                                                                                    onClick={() => handleFieldChange(field.key, ev.suggestion)}
+                                                                                    style={{ padding: '3px 10px', border: 'none', borderRadius: 5, background: 'var(--accent, #6366f1)', color: '#fff', fontSize: 10, fontWeight: 600, cursor: 'pointer' }}
+                                                                                    onMouseEnter={e => e.currentTarget.style.filter = 'brightness(1.15)'}
+                                                                                    onMouseLeave={e => e.currentTarget.style.filter = 'none'}
+                                                                                >采纳</button>
+                                                                            </div>
+                                                                            <p style={{ margin: 0, fontSize: 12, color: 'var(--accent)', lineHeight: 1.6, fontWeight: 500 }}>{ev.suggestion}</p>
+                                                                        </div>
+                                                                    )}
+                                                                </>
+                                                            ) : !aiEval && !aiEvalLoading ? (
+                                                                <span style={{ fontSize: 10, color: 'var(--text-muted)', fontStyle: 'italic' }}>等待评价</span>
+                                                            ) : aiEvalLoading ? (
+                                                                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>评估中...</span>
+                                                            ) : null}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {/* ========== 创作概览tab ========== */}
+                            <div style={activeTab === 'overview' ? { padding: '28px 32px' } : { height: 0, overflow: 'hidden', opacity: 0, pointerEvents: 'none' }}>
 
                         {/* 统计卡片 */}
                         <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -481,8 +1130,15 @@ export default function BookInfoPanel() {
                                         useAppStore.getState().setOpenCategoryModal(realCat);
                                     }, 80);
                                 };
+                                // 获取该分类的根文件夹 ID
+                                const workId = getActiveWorkId();
+                                const rootFolder = isCustomFolder
+                                    ? nodes.find(n => n.id === cat.replace('custom__', ''))
+                                    : nodes.find(n => (n.type === 'folder') && n.category === cat && n.parentId === workId);
                                 return (
-                                    <StatCard key={cat} label={label} value={count} icon={Icon} color={c.color} bg={c.bg} onClick={handleClick} />
+                                    <StatCard key={cat} label={label} value={count} icon={Icon} color={c.color} bg={c.bg} onClick={handleClick}
+                                        onDelete={() => handleDeleteCat(cat, label, count, isCustomFolder, rootFolder?.id)}
+                                    />
                                 );
                             })}
                             {/* 新建分类 */}
@@ -493,7 +1149,24 @@ export default function BookInfoPanel() {
                                     transition: 'all 0.2s', cursor: 'pointer',
                                     display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: 4,
                                 }}
-                                onClick={() => { setShowBookInfo(false); setTimeout(() => useAppStore.getState().setShowSettings('settings'), 80); }}
+                                onClick={async () => {
+                                    const name = prompt('新分类名称：');
+                                    if (!name || !name.trim()) return;
+                                    const workId = getActiveWorkId();
+                                    if (!workId) return;
+                                    const uniqueCat = 'custom-' + Date.now().toString(36) + Math.random().toString(36).substr(2, 4);
+                                    const newNode = await addSettingsNode({
+                                        name: name.trim(),
+                                        type: 'folder',
+                                        category: uniqueCat,
+                                        parentId: workId,
+                                        icon: 'Gem',
+                                    });
+                                    if (newNode) {
+                                        setNodes(prev => [...prev, newNode]);
+                                        incrementSettingsVersion();
+                                    }
+                                }}
                                 onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent, #6366f1)'; e.currentTarget.style.background = 'rgba(99,102,241,0.04)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
                                 onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-medium, #d1d5db)'; e.currentTarget.style.background = 'transparent'; e.currentTarget.style.transform = 'none'; }}
                             >
@@ -707,9 +1380,76 @@ export default function BookInfoPanel() {
                                 )}
                             </div>
                         </div>
+                        </div>
+
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
+        {deleteConfirm && (
+            <BookInfoDeleteModal
+                message={deleteConfirm.message}
+                onConfirm={deleteConfirm.onConfirm}
+                onCancel={deleteConfirm.onCancel}
+            />
+        )}
+        {cropperSrc && (
+            <ImageCropper
+                imageSrc={cropperSrc}
+                onConfirm={(croppedDataUrl) => {
+                    // 直接保存封面，不触发 settingsVersion 更新以避免 tab 重置
+                    setBookData(prev => {
+                        const next = { ...prev, coverImage: croppedDataUrl };
+                        if (bookInfoNode) {
+                            updateSettingsNode(bookInfoNode.id, { content: next }, nodes.map(n => n.id === bookInfoNode.id ? { ...n, content: next } : n));
+                        }
+                        return next;
+                    });
+                    setCropperSrc(null);
+                }}
+                onCancel={() => setCropperSrc(null)}
+            />
+        )}
+        </>
+    );
+}
+
+// 删除确认弹窗（与 SettingsPanel 的 DeleteConfirmModal 相同逻辑）
+function BookInfoDeleteModal({ message, onConfirm, onCancel }) {
+    const [skipToday, setSkipToday] = useState(false);
+    const [neverRemind, setNeverRemind] = useState(false);
+    const handleConfirm = () => {
+        try {
+            if (neverRemind) localStorage.setItem('author-delete-never-remind', 'true');
+            else if (skipToday) localStorage.setItem('author-delete-skip-today', new Date().toISOString().slice(0, 10));
+        } catch { /* ignore */ }
+        onConfirm();
+    };
+    return createPortal(
+        <div style={{ position: 'fixed', inset: 0, zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }} onClick={onCancel}>
+            <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-light)', borderRadius: 12, padding: '24px 28px', minWidth: 340, maxWidth: 440, boxShadow: '0 12px 40px rgba(0,0,0,0.25)', animation: 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }} onClick={e => e.stopPropagation()}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                    <span style={{ fontSize: 20 }}>⚠️</span>
+                    <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>确认删除</span>
+                </div>
+                <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, margin: '0 0 20px' }}>{message}</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text-secondary)' }}>
+                        <input type="checkbox" checked={skipToday} disabled={neverRemind} onChange={e => setSkipToday(e.target.checked)} style={{ accentColor: 'var(--accent)', width: 15, height: 15, cursor: 'pointer' }} />
+                        今日不再提醒
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text-secondary)' }}>
+                        <input type="checkbox" checked={neverRemind} onChange={e => { setNeverRemind(e.target.checked); if (e.target.checked) setSkipToday(false); }} style={{ accentColor: 'var(--accent)', width: 15, height: 15, cursor: 'pointer' }} />
+                        不再提醒
+                    </label>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                    <button onClick={onCancel} style={{ padding: '8px 20px', border: '1px solid var(--border-light)', borderRadius: 8, background: 'var(--bg-secondary)', cursor: 'pointer', fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>取消</button>
+                    <button onClick={handleConfirm} style={{ padding: '8px 20px', border: 'none', borderRadius: 8, background: '#e53e3e', cursor: 'pointer', fontSize: 13, color: '#fff', fontWeight: 600, boxShadow: '0 2px 8px rgba(229,62,62,0.3)' }}>删除</button>
+                </div>
+            </div>
+        </div>,
+        document.body
     );
 }

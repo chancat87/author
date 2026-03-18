@@ -70,6 +70,14 @@ export default function Tooltip({ content, shortcut, side = 'top', delay = 400, 
 
     useEffect(() => () => clearTimeout(timerRef.current), []);
 
+    // 点击任意位置时隐藏 tooltip（防止快速点击后残留）
+    useEffect(() => {
+        if (!visible) return;
+        const onPointerDown = () => hide();
+        document.addEventListener('pointerdown', onPointerDown, true);
+        return () => document.removeEventListener('pointerdown', onPointerDown, true);
+    }, [visible, hide]);
+
     // 精确定位（考虑 tooltip 自身尺寸）
     useEffect(() => {
         if (!visible || !tooltipRef.current) return;
@@ -126,6 +134,7 @@ export default function Tooltip({ content, shortcut, side = 'top', delay = 400, 
                 ref={triggerRef}
                 onMouseEnter={show}
                 onMouseLeave={hide}
+                onPointerDown={hide}
                 onFocus={show}
                 onBlur={hide}
                 style={{ display: 'contents' }}

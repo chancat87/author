@@ -8,7 +8,7 @@ import {
     Sparkles, Heart, Star, Shield, Zap, Feather, Compass, Flag, Tag, Layers
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
-import { getSettingsNodes, getActiveWorkId } from '../lib/settings';
+import { getSettingsNodes, getActiveWorkId, deleteSettingsNode, saveSettingsNodes, addSettingsNode } from '../lib/settings';
 import { useI18n } from '../lib/useI18n';
 import { getIconByName } from './SettingsCategoryPanel';
 
@@ -142,7 +142,13 @@ export function getPinnedCategories() {
         const raw = localStorage.getItem(PINNED_KEY);
         if (!raw) return DEFAULT_PINNED;
         const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? parsed : DEFAULT_PINNED;
+        if (!Array.isArray(parsed)) return DEFAULT_PINNED;
+        // 只过滤掉旧的裸 'custom'（已迁移为 custom-xxx），保留 custom-xxx 条目
+        const filtered = parsed.filter(c => c !== 'custom');
+        if (filtered.length !== parsed.length) {
+            savePinnedCategories(filtered);
+        }
+        return filtered.length > 0 ? filtered : DEFAULT_PINNED;
     } catch { return DEFAULT_PINNED; }
 }
 
@@ -163,6 +169,41 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
     const [itemCounts, setItemCounts] = useState({});
     const [hoveredId, setHoveredId] = useState(null);
     const [pinnedList, setPinnedList] = useState(() => getPinnedCategories());
+    const [showNewInput, setShowNewInput] = useState(false);
+    const [newCatName, setNewCatName] = useState('');
+    const newInputRef = useRef(null);
+
+    // 共享刷新逻辑：从 nodes 重建分类列表（含虚拟内置分类）
+    const refreshCategoriesFromNodes = (nodes, workId) => {
+        const catFolders = nodes.filter(n =>
+            (n.type === 'folder' || n.type === 'special') && n.parentId === workId && n.category !== 'bookInfo'
+        );
+        const counts = {};
+        catFolders.forEach(folder => {
+            const countDesc = (pid) => {
+                let c = 0;
+                nodes.filter(n => n.parentId === pid).forEach(child => {
+                    if (child.type === 'item') c++; else c += countDesc(child.id);
+                });
+                return c;
+            };
+            counts[folder.category] = countDesc(folder.id);
+        });
+        const builtInCats = ['character', 'location', 'world', 'object', 'plot', 'rules'];
+        const existingCats = new Set(catFolders.map(f => f.category));
+        const virtualEntries = builtInCats
+            .filter(cat => !existingCats.has(cat))
+            .map(cat => ({ id: `__virtual__${cat}`, name: CAT_LABELS[cat] || cat, type: 'folder', category: cat, parentId: workId }));
+        virtualEntries.forEach(v => { counts[v.category] = 0; });
+        const allEntries = [];
+        builtInCats.forEach(cat => {
+            const existing = catFolders.find(f => f.category === cat);
+            allEntries.push(existing || virtualEntries.find(v => v.category === cat));
+        });
+        catFolders.filter(f => !builtInCats.includes(f.category)).forEach(f => allEntries.push(f));
+        setItemCounts(counts);
+        setCategories(allEntries.filter(Boolean));
+    };
 
     // 加载分类列表
     useEffect(() => {
@@ -172,7 +213,7 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
             if (!workId) return;
             const nodes = await getSettingsNodes(workId);
             const catFolders = nodes.filter(n =>
-                (n.type === 'folder' || n.type === 'special') && n.parentId === workId
+                (n.type === 'folder' || n.type === 'special') && n.parentId === workId && n.category !== 'bookInfo'
             );
             const counts = {};
             catFolders.forEach(folder => {
@@ -186,8 +227,20 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
                 };
                 counts[folder.category] = countDescendants(folder.id);
             });
-            setItemCounts(counts);
-            setCategories(catFolders);
+            // 确保所有内置分类始终显示（即使没有对应的 folder 节点）
+            const builtInCats = ['character', 'location', 'world', 'object', 'plot', 'rules'];
+            const existingCats = new Set(catFolders.map(f => f.category));
+            const virtualEntries = builtInCats
+                .filter(cat => !existingCats.has(cat))
+                .map(cat => ({
+                    id: `__virtual__${cat}`,
+                    name: CAT_LABELS[cat] || cat,
+                    type: 'folder',
+                    category: cat,
+                    parentId: workId,
+                }));
+            virtualEntries.forEach(v => { counts[v.category] = 0; });
+            refreshCategoriesFromNodes(nodes, workId);
         };
         loadCategories();
     }, []);
@@ -235,6 +288,42 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
         onClose?.();
     }, [editMode, onOpenCategory, onClose]);
 
+    // 删除分类
+    const handleDeleteCategory = useCallback(async (e, cat) => {
+        e.stopPropagation();
+        const workId = getActiveWorkId();
+        if (!workId) return;
+        const nodes = await getSettingsNodes(workId);
+        const isBuiltIn = !!CAT_LABELS[cat.category];
+        if (isBuiltIn) {
+            // 内置分类：清空 item 节点
+            const toDelete = new Set();
+            const collect = (pid) => {
+                nodes.filter(n => n.parentId === pid).forEach(child => {
+                    if (child.type === 'item') toDelete.add(child.id);
+                    else collect(child.id);
+                });
+            };
+            collect(cat.id);
+            if (toDelete.size > 0) {
+                const updated = nodes.filter(n => !toDelete.has(n.id));
+                await saveSettingsNodes(updated, workId);
+            }
+        } else {
+            // 自定义分类：删除整个文件夹
+            await deleteSettingsNode(cat.id);
+        }
+        // 重新加载
+        const refreshed = await getSettingsNodes(workId);
+        refreshCategoriesFromNodes(refreshed, workId);
+        // 从 pinned 列表中移除
+        setPinnedList(prev => {
+            const next = prev.filter(c => c !== cat.category);
+            savePinnedCategories(next);
+            return next;
+        });
+    }, []);
+
     if (!mounted) return null;
 
     return createPortal(
@@ -260,7 +349,7 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
                 </div>
 
                 {editMode && (
-                    <div style={styles.hint}>勾选的分类将显示在左侧导航栏</div>
+                    <div style={styles.hint}>勾选显示在导航栏，点 × 删除分类</div>
                 )}
 
                 {/* 网格 */}
@@ -289,14 +378,33 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
                                     </span>
                                     <span style={styles.label}>{cat.name}</span>
                                     {editMode ? (
-                                        <span style={{
-                                            ...styles.check,
-                                            ...(pinnedList.includes(cat.category) ? styles.checkChecked : {}),
-                                        }}>
-                                            {pinnedList.includes(cat.category) && <Check size={10} />}
-                                        </span>
+                                        <>
+                                            <span style={{
+                                                ...styles.check,
+                                                ...(pinnedList.includes(cat.category) ? styles.checkChecked : {}),
+                                                top: 5, left: 5, right: 'auto',
+                                            }}>
+                                                {pinnedList.includes(cat.category) && <Check size={10} />}
+                                            </span>
+                                            <span
+                                                onClick={e => handleDeleteCategory(e, cat)}
+                                                title="删除分类"
+                                                style={{
+                                                    position: 'absolute', top: 3, right: 3,
+                                                    width: 20, height: 20, borderRadius: 6,
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                    color: 'var(--text-muted, #9ca3af)',
+                                                    cursor: 'pointer', transition: 'all 0.15s',
+                                                    background: 'transparent',
+                                                }}
+                                                onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = 'rgba(239,68,68,0.12)'; }}
+                                                onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted, #9ca3af)'; e.currentTarget.style.background = 'transparent'; }}
+                                            >
+                                                <X size={12} />
+                                            </span>
+                                        </>
                                     ) : (
-                                        count > 0 && <span style={styles.count}>{count}</span>
+                                        <span style={styles.count}>{count}</span>
                                     )}
                                 </div>
                             );
@@ -304,22 +412,94 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
 
                         {/* 新建分类 */}
                         {!editMode && (
-                            <div
-                                style={{
-                                    ...styles.item,
-                                    ...styles.addItem,
-                                    ...(hoveredId === '_add' ? { background: 'var(--bg-secondary, #f9fafb)', borderColor: 'var(--accent, #3b82f6)' } : {}),
-                                }}
-                                onClick={() => { onAddCategory?.(); onClose?.(); }}
-                                onMouseEnter={() => setHoveredId('_add')}
-                                onMouseLeave={() => setHoveredId(null)}
-                                title="新建分类"
-                            >
-                                <span style={{ ...styles.iconWrap, color: 'var(--text-muted, #9ca3af)', background: 'var(--bg-hover, #f3f4f6)' }}>
-                                    <Plus size={20} />
-                                </span>
-                                <span style={styles.label}>新建分类</span>
-                            </div>
+                            showNewInput ? (
+                                <div
+                                    style={{
+                                        ...styles.item,
+                                        ...styles.addItem,
+                                        borderColor: 'var(--accent, #3b82f6)',
+                                        background: 'var(--bg-secondary, #f9fafb)',
+                                        gap: 6, justifyContent: 'center',
+                                    }}
+                                >
+                                    <input
+                                        ref={newInputRef}
+                                        value={newCatName}
+                                        onChange={e => setNewCatName(e.target.value)}
+                                        onKeyDown={async e => {
+                                            if (e.key === 'Enter' && !e.isComposing && newCatName.trim()) {
+                                                const workId = getActiveWorkId();
+                                                if (!workId) return;
+                                                await addSettingsNode({
+                                                    name: newCatName.trim(),
+                                                    type: 'folder',
+                                                    category: 'custom-' + Date.now().toString(36) + Math.random().toString(36).substr(2, 4),
+                                                    parentId: workId,
+                                                    icon: 'FolderOpen',
+                                                });
+                                                setShowNewInput(false);
+                                                setNewCatName('');
+                                                // 刷新列表
+                                                const refreshed = await getSettingsNodes(workId);
+                                                refreshCategoriesFromNodes(refreshed, workId);
+                                            }
+                                            if (e.key === 'Escape') { setShowNewInput(false); setNewCatName(''); }
+                                        }}
+                                        placeholder="分类名称"
+                                        autoFocus
+                                        style={{
+                                            width: '100%', padding: '4px 8px',
+                                            border: '1.5px solid var(--accent, #3b82f6)',
+                                            borderRadius: 8, fontSize: 12,
+                                            background: 'var(--bg-primary, #fff)',
+                                            color: 'var(--text-primary, #1f2937)',
+                                            outline: 'none', textAlign: 'center',
+                                        }}
+                                    />
+                                    <div style={{ display: 'flex', gap: 4 }}>
+                                        <button
+                                            style={{ border: 'none', borderRadius: 6, background: 'var(--accent, #3b82f6)', color: '#fff', fontSize: 10, fontWeight: 600, padding: '3px 10px', cursor: 'pointer' }}
+                                            onClick={async () => {
+                                                if (!newCatName.trim()) return;
+                                                const workId = getActiveWorkId();
+                                                if (!workId) return;
+                                                await addSettingsNode({
+                                                    name: newCatName.trim(),
+                                                    type: 'folder',
+                                                    category: 'custom-' + Date.now().toString(36) + Math.random().toString(36).substr(2, 4),
+                                                    parentId: workId,
+                                                    icon: 'FolderOpen',
+                                                });
+                                                setShowNewInput(false);
+                                                setNewCatName('');
+                                                const refreshed = await getSettingsNodes(workId);
+                                                refreshCategoriesFromNodes(refreshed, workId);
+                                            }}
+                                        >确定</button>
+                                        <button
+                                            style={{ border: 'none', borderRadius: 6, background: 'var(--bg-hover, #f3f4f6)', color: 'var(--text-muted)', fontSize: 10, padding: '3px 8px', cursor: 'pointer' }}
+                                            onClick={() => { setShowNewInput(false); setNewCatName(''); }}
+                                        >取消</button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div
+                                    style={{
+                                        ...styles.item,
+                                        ...styles.addItem,
+                                        ...(hoveredId === '_add' ? { background: 'var(--bg-secondary, #f9fafb)', borderColor: 'var(--accent, #3b82f6)' } : {}),
+                                    }}
+                                    onClick={() => { setShowNewInput(true); setNewCatName(''); }}
+                                    onMouseEnter={() => setHoveredId('_add')}
+                                    onMouseLeave={() => setHoveredId(null)}
+                                    title="新建分类"
+                                >
+                                    <span style={{ ...styles.iconWrap, color: 'var(--text-muted, #9ca3af)', background: 'var(--bg-hover, #f3f4f6)' }}>
+                                        <Plus size={20} />
+                                    </span>
+                                    <span style={styles.label}>新建分类</span>
+                                </div>
+                            )
                         )}
                     </div>
                 </div>
