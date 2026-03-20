@@ -375,7 +375,6 @@ body {
   border-right: 1px solid var(--border-light);
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
   align-items: center;
   padding: 12px 0;
   transition: width 0.2s ease;
@@ -402,6 +401,10 @@ body {
   width: 100%;
   padding: 0;
   flex-shrink: 0;
+}
+
+.sidebar-nav-bottom {
+  margin-top: auto;
 }
 
 .sidebar-nav-pane.sidebar-nav-expanded .sidebar-nav-top,
@@ -483,7 +486,7 @@ body {
   position: absolute;
   top: var(--toolbar-h, 85px) !important;
   left: 0;
-  bottom: 0;
+  bottom: var(--status-bar-h, 31px);
   z-index: 25;
   flex-shrink: 0;
   transform: none;
@@ -1096,16 +1099,13 @@ body.resizing .main-content {
 
 /* 工具栏下拉菜单 */
 .toolbar-dropdown-menu {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  margin-top: 4px;
+  position: fixed;
   background: var(--bg-card);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
   min-width: 180px;
-  z-index: 60;
+  z-index: 9999;
   padding: 4px;
   animation: fadeIn 0.12s ease;
 }
@@ -1143,17 +1143,13 @@ body.resizing .main-content {
 
 /* 颜色选择器浮层 */
 .color-picker-popover {
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  margin-top: 6px;
+  position: fixed;
   background: var(--bg-card);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
   padding: 12px;
-  z-index: 60;
+  z-index: 9999;
   min-width: 200px;
   animation: fadeIn 0.12s ease;
 }

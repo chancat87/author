@@ -6,6 +6,7 @@ import { useI18n } from '../lib/useI18n';
 import { getSettingsNodes, updateSettingsNode, deleteSettingsNode, saveSettingsNodes, getActiveWorkId, getAllWorks, getChatApiConfig, addWork, removeWork, addSettingsNode, renameWork } from '../lib/settings';
 import { getChapters } from '../lib/storage';
 import { createPortal } from 'react-dom';
+import { promptInput } from '../lib/promptInput';
 import {
     X, Maximize2, Minimize2, BookOpen, Users, MapPin, Globe, Gem, ClipboardList, Ruler,
     Layers, Clock, ChevronRight, FileText, Settings as SettingsIcon,
@@ -768,7 +769,7 @@ export default function BookInfoPanel() {
                             作品列表
                             <button
                                 onClick={async () => {
-                                    const name = prompt('新作品名称：');
+                                    const name = await promptInput('新作品名称：');
                                     if (!name || !name.trim()) return;
                                     const workNode = await addWork(name.trim());
                                     const allWorks = await getAllWorks();
@@ -1205,7 +1206,7 @@ export default function BookInfoPanel() {
                                     display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: 4,
                                 }}
                                 onClick={async () => {
-                                    const name = prompt('新分类名称：');
+                                    const name = await promptInput('新分类名称：');
                                     if (!name || !name.trim()) return;
                                     const workId = getActiveWorkId();
                                     if (!workId) return;

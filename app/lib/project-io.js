@@ -551,7 +551,13 @@ export async function exportWorkAsTxt(chapters, fileName) {
     const text = chapters.map(ch => {
         const title = ch.title || '';
         const content = htmlToText(ch.content);
-        return `${title}\n\n${content}`;
+        // 每段前添加两个全角空格作为段落缩进
+        const indented = content.split(/\n\n+/).map(p => {
+            const trimmed = p.trim();
+            if (!trimmed) return '';
+            return '\u3000\u3000' + trimmed;
+        }).join('\n\n');
+        return `${title}\n\n${indented}`;
     }).join('\n\n\n');
 
     await downloadFile(text, `${fileName || '导出作品'}.txt`);
@@ -565,7 +571,13 @@ export async function exportWorkAsMarkdown(chapters, fileName) {
     const md = chapters.map(ch => {
         const title = ch.title || '未命名章节';
         const content = htmlToText(ch.content);
-        return `# ${title}\n\n${content}`;
+        // 每段前添加两个全角空格作为段落缩进
+        const indented = content.split(/\n\n+/).map(p => {
+            const trimmed = p.trim();
+            if (!trimmed) return '';
+            return '\u3000\u3000' + trimmed;
+        }).join('\n\n');
+        return `# ${title}\n\n${indented}`;
     }).join('\n\n---\n\n');
 
     await downloadFile(md, `${fileName || '导出作品'}.md`);
@@ -636,6 +648,7 @@ export async function exportWorkAsDocx(chapters, fileName) {
                 children: runs,
                 spacing: { after: 120, line: 360 },
                 alignment: AlignmentType.LEFT,
+                indent: { firstLine: 480 }, // 2em ≈ 480 twips (24pt × 2 × 10)
             }));
         }
     });
@@ -687,7 +700,7 @@ export async function exportWorkAsEpub(chapters, fileName) {
         const content = htmlToText(ch.content);
         const paragraphsHtml = content.split(/\n\n+/)
             .filter(p => p.trim())
-            .map(p => `    <p>${p.trim().replace(/\n/g, '<br/>')}</p>`)
+            .map(p => `    <p style="text-indent:2em;line-height:1.8;margin:0.5em 0">${p.trim().replace(/\n/g, '<br/>')}</p>`)
             .join('\n');
 
         const xhtml = `<?xml version="1.0" encoding="UTF-8"?>

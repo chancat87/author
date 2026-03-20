@@ -369,15 +369,31 @@ function FindBar({ editor, visible, onClose }) {
         }
         const doc = editor.state.doc;
         const results = [];
-        const searchLower = caseSensitive ? searchText : searchText.toLowerCase();
+        // 为了避免 toLowerCase 可能改变字符串长度导致的位置偏移，
+        // 改为从文档中提取纯文本并在原始文本上进行搜索
+        const searchNeedle = caseSensitive ? searchText : searchText.toLowerCase();
+        const needleLen = searchText.length;
 
         doc.descendants((node, pos) => {
             if (node.isText) {
-                const text = caseSensitive ? node.text : node.text.toLowerCase();
-                let idx = 0;
-                while ((idx = text.indexOf(searchLower, idx)) !== -1) {
-                    results.push({ from: pos + idx, to: pos + idx + searchText.length });
-                    idx += 1;
+                const origText = node.text;
+                const haystack = caseSensitive ? origText : origText.toLowerCase();
+                // 确保 toLowerCase 没有改变长度，否则逐字符搜索
+                if (haystack.length === origText.length) {
+                    let idx = 0;
+                    while ((idx = haystack.indexOf(searchNeedle, idx)) !== -1) {
+                        results.push({ from: pos + idx, to: pos + idx + needleLen });
+                        idx += 1;
+                    }
+                } else {
+                    // toLowerCase 改变了字符串长度（如 İ→i̇），退回到在原始文本上逐位匹配
+                    for (let i = 0; i <= origText.length - needleLen; i++) {
+                        const slice = origText.substring(i, i + needleLen);
+                        const cmp = caseSensitive ? slice : slice.toLowerCase();
+                        if (cmp === searchNeedle) {
+                            results.push({ from: pos + i, to: pos + i + needleLen });
+                        }
+                    }
                 }
             }
         });
@@ -390,43 +406,66 @@ function FindBar({ editor, visible, onClose }) {
         const results = findMatches(query);
         if (results.length > 0) {
             setCurrentIndex(0);
-            goToMatch(results, 0);
         } else {
             setCurrentIndex(-1);
         }
     }, [query, caseSensitive]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // 同步高亮装饰到编辑器
+    // 同步高亮装饰到编辑器，并在高亮更新后再跳转
     useEffect(() => {
         if (!editor) return;
         if (matches.length > 0) {
             editor.commands.setSearchHighlight({ matches, currentIndex });
+            // 确保装饰器先渲染，再跳转到当前匹配
+            if (currentIndex >= 0 && currentIndex < matches.length) {
+                goToMatch(matches, currentIndex);
+            }
         } else {
             editor.commands.clearSearchHighlight();
         }
-    }, [editor, matches, currentIndex]);
+    }, [editor, matches, currentIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // 文档内容变化时重新搜索，避免使用过期位置
+    useEffect(() => {
+        if (!editor || !query) return;
+        const handleUpdate = ({ editor: e }) => {
+            // 文档变更后延迟重新计算匹配
+            const results = findMatches(query);
+            if (results.length > 0) {
+                setCurrentIndex(prev => Math.min(prev, results.length - 1));
+            } else {
+                setCurrentIndex(-1);
+            }
+        };
+        editor.on('update', handleUpdate);
+        return () => editor.off('update', handleUpdate);
+    }, [editor, query, findMatches]);
 
     // 跳转到指定匹配
     const goToMatch = useCallback((matchList, idx) => {
         if (!editor || !matchList.length || idx < 0 || idx >= matchList.length) return;
         const { from, to } = matchList[idx];
-        const tr = editor.state.tr.setSelection(TextSelection.create(editor.state.doc, from, to));
-        editor.view.dispatch(tr);
-        // 使用 DOM scrollIntoView 滚动到匹配位置
-        // ProseMirror 的 tr.scrollIntoView() 不适用于外层 .editor-container 滚动容器
+        try {
+            const tr = editor.state.tr.setSelection(TextSelection.create(editor.state.doc, from, to));
+            editor.view.dispatch(tr);
+        } catch (e) {
+            // 位置可能已过期，忽略选区错误
+        }
+        // 等待装饰器渲染完成后，通过 .search-highlight-current 元素滚动
+        // 这比 domAtPos 更可靠，因为装饰器的位置始终与文档同步
         requestAnimationFrame(() => {
-            try {
-                const domPos = editor.view.domAtPos(from);
-                const domNode = domPos.node.nodeType === Node.TEXT_NODE ? domPos.node.parentElement : domPos.node;
-                if (domNode) {
-                    domNode.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-            } catch (e) {
-                // fallback: 尝试通过 .search-highlight-current 元素滚动
-                const currentEl = document.querySelector('.search-highlight-current');
-                if (currentEl) {
-                    currentEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
+            const currentEl = document.querySelector('.search-highlight-current');
+            if (currentEl) {
+                currentEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } else {
+                // fallback: 如果装饰器尚未渲染，使用 domAtPos
+                try {
+                    const domPos = editor.view.domAtPos(from);
+                    const domNode = domPos.node.nodeType === Node.TEXT_NODE ? domPos.node.parentElement : domPos.node;
+                    if (domNode) {
+                        domNode.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                } catch (e2) { /* ignore */ }
             }
         });
     }, [editor]);
@@ -436,16 +475,16 @@ function FindBar({ editor, visible, onClose }) {
         if (matches.length === 0) return;
         const next = (currentIndex + 1) % matches.length;
         setCurrentIndex(next);
-        goToMatch(matches, next);
-    }, [matches, currentIndex, goToMatch]);
+        // goToMatch 由 useEffect 中 currentIndex 变化后触发
+    }, [matches, currentIndex]);
 
     // 上一个
     const goPrev = useCallback(() => {
         if (matches.length === 0) return;
         const prev = (currentIndex - 1 + matches.length) % matches.length;
         setCurrentIndex(prev);
-        goToMatch(matches, prev);
-    }, [matches, currentIndex, goToMatch]);
+        // goToMatch 由 useEffect 中 currentIndex 变化后触发
+    }, [matches, currentIndex]);
 
     // 替换当前
     const replaceCurrent = useCallback(() => {
@@ -1416,6 +1455,23 @@ function InlineContextPanel({ contextItems, contextSelection, setContextSelectio
     );
 }
 
+// ==================== 工具栏固定定位下拉 ====================
+// 计算触发按钮下方的 fixed 定位坐标
+function getDropdownPos(btnEl, align = 'left') {
+    if (!btnEl) return {};
+    const r = btnEl.getBoundingClientRect();
+    const style = { position: 'fixed', zIndex: 9999, top: r.bottom + 4 };
+    if (align === 'center') {
+        style.left = r.left + r.width / 2;
+        style.transform = 'translateX(-50%)';
+    } else if (align === 'right') {
+        style.right = window.innerWidth - r.right;
+    } else {
+        style.left = r.left;
+    }
+    return style;
+}
+
 // ==================== 颜色选择器组件 ====================
 const PRESET_COLORS = [
     '#000000', '#434343', '#666666', '#999999', '#cccccc',
@@ -1424,9 +1480,9 @@ const PRESET_COLORS = [
     '#8e44ad', '#9b59b6', '#e91e63', '#795548', '#607d8b',
 ];
 
-function ColorPicker({ label, currentColor, onSelect, onClose }) {
+function ColorPicker({ label, currentColor, onSelect, onClose, style }) {
     return (
-        <div className="color-picker-popover" onMouseDown={e => e.preventDefault()} onClick={e => e.stopPropagation()}>
+        <div className="color-picker-popover" style={style} onMouseDown={e => e.preventDefault()} onClick={e => e.stopPropagation()}>
             <div className="color-picker-label">{label}</div>
             <div className="color-picker-grid">
                 {PRESET_COLORS.map(color => (
@@ -1471,6 +1527,7 @@ function EditorToolbar({ editor, margins, setMargins }) {
     const [showFontSize, setShowFontSize] = useState(false);
     const [showTypeset, setShowTypeset] = useState(false);
     const [showMargins, setShowMargins] = useState(false);
+    const [dropPos, setDropPos] = useState({});
     const [fontSize, setFontSize] = useState(() => {
         if (typeof window !== 'undefined') return parseInt(localStorage.getItem('author-font-size')) || 17;
         return 17;
@@ -1545,11 +1602,11 @@ function EditorToolbar({ editor, margins, setMargins }) {
 
             {/* 字体族 */}
             <div className="toolbar-dropdown-wrap" onClick={e => e.stopPropagation()}>
-                <button className="toolbar-btn toolbar-dropdown-btn" onClick={() => { closeAll(); setShowFontFamily(!showFontFamily); }} title="字体">
+                <button className="toolbar-btn toolbar-dropdown-btn" onClick={e => { closeAll(); setDropPos(getDropdownPos(e.currentTarget)); setShowFontFamily(!showFontFamily); }} title="字体">
                     {currentFontLabel} <span className="dropdown-arrow">▾</span>
                 </button>
                 {showFontFamily && (
-                    <div className="toolbar-dropdown-menu">
+                    <div className="toolbar-dropdown-menu" style={dropPos}>
                         {FONT_FAMILIES.map(f => (
                             <button
                                 key={f.label}
@@ -1590,7 +1647,7 @@ function EditorToolbar({ editor, margins, setMargins }) {
             <div className="toolbar-dropdown-wrap" onClick={e => e.stopPropagation()}>
                 <button
                     className="toolbar-btn toolbar-color-btn"
-                    onClick={() => { closeAll(); setShowFontColor(!showFontColor); }}
+                    onClick={e => { closeAll(); setDropPos(getDropdownPos(e.currentTarget, 'center')); setShowFontColor(!showFontColor); }}
                     title="字体颜色"
                 >
                     <span style={{ borderBottom: `3px solid ${currentColor || 'var(--text-primary)'}` }}>A</span>
@@ -1605,6 +1662,7 @@ function EditorToolbar({ editor, margins, setMargins }) {
                             else editor.chain().focus().unsetColor().run();
                         }}
                         onClose={() => setShowFontColor(false)}
+                        style={dropPos}
                     />
                 )}
             </div>
@@ -1613,7 +1671,7 @@ function EditorToolbar({ editor, margins, setMargins }) {
             <div className="toolbar-dropdown-wrap" onClick={e => e.stopPropagation()}>
                 <button
                     className="toolbar-btn toolbar-color-btn"
-                    onClick={() => { closeAll(); setShowBgColor(!showBgColor); }}
+                    onClick={e => { closeAll(); setDropPos(getDropdownPos(e.currentTarget, 'center')); setShowBgColor(!showBgColor); }}
                     title="背景颜色（高亮）"
                 >
                     <span style={{
@@ -1633,6 +1691,7 @@ function EditorToolbar({ editor, margins, setMargins }) {
                             else editor.chain().focus().unsetHighlight().run();
                         }}
                         onClose={() => setShowBgColor(false)}
+                        style={dropPos}
                     />
                 )}
             </div>
@@ -1662,14 +1721,14 @@ function EditorToolbar({ editor, margins, setMargins }) {
             <div className="toolbar-dropdown-wrap" onClick={e => e.stopPropagation()}>
                 <button
                     className={`toolbar-btn ${showTypeset ? 'active' : ''}`}
-                    onClick={() => { closeAll(); setShowTypeset(!showTypeset); }}
+                    onClick={e => { closeAll(); setDropPos(getDropdownPos(e.currentTarget, 'right')); setShowTypeset(!showTypeset); }}
                     title="字号与行距"
                     style={{ fontSize: 12 }}
                 >
                     Aa <span className="dropdown-arrow">▾</span>
                 </button>
                 {showTypeset && (
-                    <div className="typeset-popover" style={{ position: 'absolute', top: '100%', bottom: 'auto', right: 0, marginTop: 4, zIndex: 120 }}>
+                    <div className="typeset-popover" style={{ position: 'fixed', ...dropPos, zIndex: 9999 }}>
                         <div className="typeset-row">
                             <label>字号</label>
                             <input
@@ -1699,14 +1758,14 @@ function EditorToolbar({ editor, margins, setMargins }) {
             <div className="toolbar-dropdown-wrap" onClick={e => e.stopPropagation()}>
                 <button
                     className={`toolbar-btn ${showMargins ? 'active' : ''}`}
-                    onClick={() => { closeAll(); setShowMargins(!showMargins); }}
+                    onClick={e => { closeAll(); setDropPos(getDropdownPos(e.currentTarget, 'right')); setShowMargins(!showMargins); }}
                     title="页面设置"
                     style={{ fontSize: 12 }}
                 >
                     📄 <span className="dropdown-arrow">▾</span>
                 </button>
                 {showMargins && (
-                    <div className="typeset-popover" style={{ position: 'absolute', top: '100%', bottom: 'auto', right: 0, marginTop: 4, zIndex: 120 }}>
+                    <div className="typeset-popover" style={{ position: 'fixed', ...dropPos, zIndex: 9999 }}>
                         <div className="typeset-row">
                             <label>上下</label>
                             <input

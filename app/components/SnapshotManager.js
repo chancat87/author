@@ -5,6 +5,7 @@ import { X, Star } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { useI18n } from '../lib/useI18n';
 import { getSnapshots, createSnapshot, restoreSnapshot, deleteSnapshot } from '../lib/snapshots';
+import { promptInput } from '../lib/promptInput';
 
 export default function SnapshotManager({ onRestored }) {
     const { showSnapshots: open, setShowSnapshots } = useAppStore();
@@ -36,7 +37,7 @@ export default function SnapshotManager({ onRestored }) {
     if (!open) return null;
 
     const handleCreateManual = async () => {
-        const label = prompt(t('snapshot.promptLabel'), t('snapshot.promptDefault'));
+        const label = await promptInput(t('snapshot.promptLabel'), t('snapshot.promptDefault'));
         if (!label) return;
         setIsCreating(true);
         try {
