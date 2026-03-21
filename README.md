@@ -279,8 +279,8 @@ This project is licensed under [AGPL-3.0](LICENSE).
 
 ## 🙏 Acknowledgments
 
-### 🤖 AI Tools
-This project was built with the help of the following AI tools and services:
+### 🤖 AI Partners
+This project was built with the help of the following AI partners:
 
 | Tool | Role |
 |------|------|
