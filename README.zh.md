@@ -447,7 +447,7 @@ Author 支持从多种格式导入设定集：**JSON / Markdown / TXT / DOCX / P
 ### 🤖 AI 伙伴
 本项目在以下 AI 伙伴的辅助下开发：
 
-| 工具 | 作用 |
+| 名称 | 作用 |
 |------|------|
 | [Google Antigravity](https://antigravity.google/) | AI 驱动的 IDE — 本项目的开发平台 |
 | [Claude Opus 4.6](https://www.anthropic.com/)（Thinking） | 主力编程助手 — 架构设计、功能实现、调试 |

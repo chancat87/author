@@ -282,7 +282,7 @@ This project is licensed under [AGPL-3.0](LICENSE).
 ### 🤖 AI Partners
 This project was built with the help of the following AI partners:
 
-| Tool | Role |
+| Name | Role |
 |------|------|
 | [Google Antigravity](https://antigravity.google/) | AI-powered IDE — the development platform for this project |
 | [Claude Opus 4.6](https://www.anthropic.com/) (Thinking) | Primary coding assistant — architecture, implementation, debugging |
