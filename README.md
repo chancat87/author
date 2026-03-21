@@ -279,7 +279,19 @@ This project is licensed under [AGPL-3.0](LICENSE).
 
 ## 🙏 Acknowledgments
 
-- [Google Antigravity](https://antigravity.google/) — AI programming partner
+### 🤖 AI Tools
+This project was built with the help of the following AI tools and services:
+
+| Tool | Role |
+|------|------|
+| [Google Antigravity](https://antigravity.google/) | AI-powered IDE — the development platform for this project |
+| [Claude Opus 4.6](https://www.anthropic.com/) (Thinking) | Primary coding assistant — architecture, implementation, debugging |
+| [Gemini 3 Pro](https://deepmind.google/technologies/gemini/) (High) | UI review, screenshot analysis, design iteration |
+| [Gemini 3 Flash](https://deepmind.google/technologies/gemini/) | Built-in browser automation tool |
+| [Chrome DevTools MCP](https://developer.chrome.com/) | Browser testing, performance analysis, DOM inspection |
+| [GitHub MCP](https://github.com/) | Repository management, PR reviews, code search |
+
+### 📦 Open Source
 - [Tiptap](https://tiptap.dev/) — Editor framework
 - [Next.js](https://nextjs.org/) — React full-stack framework
 - [Zustand](https://zustand-demo.pmnd.rs/) — State management

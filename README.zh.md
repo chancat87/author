@@ -444,7 +444,19 @@ Author 支持从多种格式导入设定集：**JSON / Markdown / TXT / DOCX / P
 
 ## 🙏 致谢
 
-- [Google Antigravity](https://antigravity.google/) — AI 编程伙伴
+### 🤖 AI 工具
+本项目在以下 AI 工具和服务的辅助下开发：
+
+| 工具 | 作用 |
+|------|------|
+| [Google Antigravity](https://antigravity.google/) | AI 驱动的 IDE — 本项目的开发平台 |
+| [Claude Opus 4.6](https://www.anthropic.com/)（Thinking） | 主力编程助手 — 架构设计、功能实现、调试 |
+| [Gemini 3 Pro](https://deepmind.google/technologies/gemini/)（High） | UI 审查、截图分析、设计迭代 |
+| [Gemini 3 Flash](https://deepmind.google/technologies/gemini/) | 内置浏览器自动化工具 |
+| [Chrome DevTools MCP](https://developer.chrome.com/) | 浏览器测试、性能分析、DOM 检查 |
+| [GitHub MCP](https://github.com/) | 仓库管理、PR 审查、代码搜索 |
+
+### 📦 开源项目
 - [Tiptap](https://tiptap.dev/) — 编辑器框架
 - [Next.js](https://nextjs.org/) — React 全栈框架
 - [Zustand](https://zustand-demo.pmnd.rs/) — 状态管理
