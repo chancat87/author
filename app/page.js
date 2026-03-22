@@ -26,7 +26,12 @@ import { exportProject, importProject } from './lib/project-io';
 import { createSnapshot } from './lib/snapshots';
 // 动态导入编辑器和设定集面板及侧边栏（避免 SSR 问题）
 const Sidebar = dynamic(() => import('./components/Sidebar'), { ssr: false });
-const Editor = dynamic(() => import('./components/Editor'), { ssr: false });
+const Editor = dynamic(() => import('./components/Editor'), {
+  ssr: false,
+  loading: () => (
+    <div style={{ flex: 1, background: 'var(--bg-canvas)', transition: 'none' }} />
+  ),
+});
 const SettingsPanel = dynamic(() => import('./components/SettingsPanel'), { ssr: false });
 const CategorySettingsModal = dynamic(() => import('./components/CategorySettingsModal'), { ssr: false });
 const HelpPanel = dynamic(() => import('./components/HelpPanel'), { ssr: false });
@@ -452,7 +457,7 @@ export default function Home() {
             <Editor
               id="tour-editor"
               ref={editorRef}
-              key={activeChapterId}
+              chapterId={activeChapterId}
               content={activeChapter.content}
               onUpdate={handleEditorUpdate}
               onAiRequest={handleInlineAiRequest}

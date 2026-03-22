@@ -1216,7 +1216,7 @@ body.resizing .main-content {
   align-items: flex-start;
   padding: 40px 16px 80px;
   background: var(--bg-canvas) !important;
-  transition: background var(--transition-normal), margin-right 0.3s ease;
+  transition: margin-right 0.3s ease;
   /* 禁用滚动锚定，防止虚拟分页元素重排时导致原生滚动条跳动 */
   overflow-anchor: none;
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
+import crypto from 'crypto';
 
 // 数据持久化 API — 将所有用户数据存储到本地文件系统
 // 每个用户有独立的目录（通过 userId cookie 隔离）
@@ -45,6 +46,23 @@ function resolveFilePath(userId, key) {
     return filePath;
 }
 
+// 安全读取 JSON 文件（带重试，防止读到写入一半的数据）
+async function safeReadJson(filePath, maxRetries = 3) {
+    for (let i = 0; i < maxRetries; i++) {
+        const content = await fs.readFile(filePath, 'utf-8');
+        try {
+            return JSON.parse(content);
+        } catch (parseErr) {
+            // JSON 解析失败 = 可能读到了写入一半的文件，等待后重试
+            if (i < maxRetries - 1) {
+                await new Promise(r => setTimeout(r, 80 * (i + 1)));
+                continue;
+            }
+            throw parseErr; // 最后一次仍然失败，抛出错误
+        }
+    }
+}
+
 // GET /api/storage?key=xxx — 读取数据
 export async function GET(request) {
     try {
@@ -62,8 +80,8 @@ export async function GET(request) {
         const filePath = resolveFilePath(userId, key);
 
         try {
-            const content = await fs.readFile(filePath, 'utf-8');
-            return NextResponse.json({ data: JSON.parse(content) });
+            const data = await safeReadJson(filePath);
+            return NextResponse.json({ data });
         } catch (e) {
             if (e.code === 'ENOENT') {
                 // 尝试自动领养：当前用户目录为空但 data/ 下有其他用户数据
@@ -72,8 +90,8 @@ export async function GET(request) {
                 if (adopted) {
                     // 领养成功，重试读取
                     try {
-                        const content2 = await fs.readFile(filePath, 'utf-8');
-                        return NextResponse.json({ data: JSON.parse(content2) });
+                        const data2 = await safeReadJson(filePath);
+                        return NextResponse.json({ data: data2 });
                     } catch { }
                 }
                 return NextResponse.json({ data: null });
@@ -153,7 +171,11 @@ export async function POST(request) {
 
         const filePath = resolveFilePath(userId, key);
         await ensureDir(path.dirname(filePath));
-        await fs.writeFile(filePath, JSON.stringify(value, null, 2), 'utf-8');
+
+        // 原子写入：先写临时文件，再重命名，防止并发读取到半截数据
+        const tmpPath = filePath + '.tmp.' + crypto.randomBytes(4).toString('hex');
+        await fs.writeFile(tmpPath, JSON.stringify(value, null, 2), 'utf-8');
+        await fs.rename(tmpPath, filePath);
 
         return NextResponse.json({ ok: true });
     } catch (error) {

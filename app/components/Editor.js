@@ -41,7 +41,7 @@ const PAGE_HEIGHT = 1056; // A4 纸 @ 96dpi
 const PAGE_GAP = 24;      // 页间灰色间隙
 
 
-const Editor = forwardRef(function Editor({ content, onUpdate, editable = true, onAiRequest, onArchiveGeneration, contextItems, contextSelection, setContextSelection }, ref) {
+const Editor = forwardRef(function Editor({ content, chapterId, onUpdate, editable = true, onAiRequest, onArchiveGeneration, contextItems, contextSelection, setContextSelection }, ref) {
     const clipPathId = useId();
     const debounceRef = useRef(null);
     const contentRef = useRef(null);
@@ -148,22 +148,32 @@ const Editor = forwardRef(function Editor({ content, onUpdate, editable = true, 
         },
     });
 
-    // 防止父组件传来的 content 稍有差异即导致整个编辑器重置并跳动
-    // 仅当新内容与当前内容脱节时才重置（例如切换章节）
-    const previousChapterId = useRef(content);
+    // 切换章节时重置编辑器内容（替代 key={chapterId} 强制重挂载，避免闪白）
+    const prevChapterIdRef = useRef(chapterId);
     useEffect(() => {
         if (!editor || content === undefined) return;
-        const currentHtml = editor.getHTML();
 
-        // 简单启发式：如果长度差距极大（用户不可能一秒内打这么多字），或者内容完全不包含现有内容，才做全量替换
+        if (prevChapterIdRef.current !== chapterId) {
+            // 章节切换：直接设置新内容 + 清空撤销历史
+            prevChapterIdRef.current = chapterId;
+            editor.commands.setContent(content || '', false);
+            // 清空撤销历史，避免跨章节 undo
+            const { tr } = editor.state;
+            editor.view.dispatch(tr.setMeta('addToHistory', false));
+            // 滚动到顶部
+            const container = document.querySelector('.editor-container');
+            if (container) container.scrollTop = 0;
+            return;
+        }
+
+        // 同一章节内的内容变更：仅当差异显著时才替换（防止用户打字时重置）
+        const currentHtml = editor.getHTML();
         if (content !== currentHtml) {
-            // 我们需要区分是“用户打字后传回的最新内容”（不用动）还是“因为点击左侧栏切换了章节”（需要重置）
-            // 如果新传入的 content 和当前存在非常显著差异，才执行 setContent
             if (Math.abs(content.length - currentHtml.length) > 50 || !currentHtml.includes(content.substring(0, 50))) {
                 editor.commands.setContent(content || '', false);
             }
         }
-    }, [content, editor]);
+    }, [content, chapterId, editor]);
 
     // 将方法暴露给父组件
     useEffect(() => {
@@ -241,7 +251,9 @@ const Editor = forwardRef(function Editor({ content, onUpdate, editable = true, 
         return () => document.removeEventListener('keydown', handler);
     }, []);
 
-    if (!editor) return null;
+    if (!editor) return (
+        <div className="editor-container" style={{ flex: 1, background: 'var(--bg-canvas)' }} />
+    );
 
     // 容器总高度 = 页数 × 单页高 + 间隙总高
     const totalWorkspaceHeight = pageCount * PAGE_HEIGHT + (pageCount - 1) * PAGE_GAP;
