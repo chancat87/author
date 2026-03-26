@@ -102,7 +102,6 @@ jobs:
           prerelease: false
           files: |
             dist/*.exe
-            dist/*.yml
-            dist/*.yaml
+            dist/latest.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

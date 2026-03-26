@@ -49,8 +49,15 @@ next-env.d.ts
 # sensitive config
 mcp_config.json
 
-# plan docs (Chinese dir name)
-方案和计划文件/
+# internal docs, plans, drafts (any language/naming)
+/docs/
+方案*/
+计划*/
+*草稿*/
+*draft*/
 
-# docs
-/docs/firebase-debug.log
+# debug logs (anywhere)
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+database-debug.log
