@@ -19,6 +19,9 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     # 🔒 仅在原始仓库运行，防止 fork 利用 Secrets
