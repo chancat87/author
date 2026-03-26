@@ -16,6 +16,8 @@ on:
 
 jobs:
   docker:
+    # 🔒 仅在原始仓库运行，防止 fork 利用 Secrets
+    if: github.repository == 'YuanShiJiLoong/author'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
