@@ -65,24 +65,38 @@ jobs:
           CURR_TAG=${GITHUB_REF#refs/tags/}
           
           if [ -z "$PREV_TAG" ] || [ "$PREV_TAG" = "$CURR_TAG" ]; then
-            # 第一个 tag，取最近 20 条
             NOTES=$(git log --oneline -20 --pretty=format:"- %s")
           else
             NOTES=$(git log --oneline ${PREV_TAG}..${CURR_TAG} --pretty=format:"- %s")
           fi
           
-          # 写入文件避免多行转义问题
-          echo "## 更新内容" > release_notes.md
+          # 双语 Release Notes
+          cat > release_notes.md << 'HEADER'
+          ## 📋 更新内容 / Changelog
+
+          HEADER
+          
+          # 中文部分
+          echo "### 🇨🇳 中文" >> release_notes.md
           echo "" >> release_notes.md
           echo "$NOTES" >> release_notes.md
           echo "" >> release_notes.md
-          echo "---" >> release_notes.md
           echo "📦 下载 \`.exe\` 安装包即可使用，云同步功能已内置。" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "---" >> release_notes.md
+          echo "" >> release_notes.md
+          
+          # 英文部分
+          echo "### 🇺🇸 English" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "$NOTES" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "📦 Download the \`.exe\` installer to get started. Cloud sync is built-in." >> release_notes.md
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          name: Author ${{ github.ref_name }}
+          name: Author ${{ github.ref_name }} — 更新发布 / Release
           body_path: release_notes.md
           draft: false
           prerelease: false
