@@ -125,6 +125,49 @@ npm start
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/YuanShiJiLoong/author)
 
+### ☁️ Cloud Sync Setup (Self-Deploy)
+
+Cloud sync is built into the desktop client. If you're self-deploying from source, follow these steps to enable login & sync:
+
+#### 1. Create a Firebase Project
+
+1. Go to [Firebase Console](https://console.firebase.google.com/) → **Create Project**
+2. Enable **Authentication** → Sign-in method → **Google**
+3. Create a **Firestore Database** (Start in production mode)
+4. Set Firestore Security Rules to restrict per-user access:
+
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
+```
+
+#### 2. Configure Environment Variables
+
+Copy `.env.example` to `.env.local` and fill in the Firebase section:
+
+```bash
+NEXT_PUBLIC_FIREBASE_API_KEY=your_api_key
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
+```
+
+> You can find these values in Firebase Console → Project Settings → General → Your Apps → SDK Config.
+
+#### 3. For Vercel Deployment
+
+Add the same variables in **Vercel Dashboard → Project Settings → Environment Variables**, then redeploy.
+
+> 💡 Firebase API keys are designed to be public (client-side identifiers). Data security is enforced by Firebase Auth + Firestore Security Rules, not by hiding the API key.
+
 ---
 
 ## 🔄 Updating

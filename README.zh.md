@@ -127,6 +127,49 @@ npm start
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/YuanShiJiLoong/author)
 
+### ☁️ 云同步配置（自部署用户）
+
+桌面客户端已内置云同步功能。如果你通过源码自部署，需要以下步骤启用登录和云同步：
+
+#### 1. 创建 Firebase 项目
+
+1. 前往 [Firebase 控制台](https://console.firebase.google.com/) → **创建项目**
+2. 启用 **Authentication** → 登录方式 → **Google**
+3. 创建 **Firestore Database**（生产模式）
+4. 设置 Firestore 安全规则，限制每个用户只能访问自己的数据：
+
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
+```
+
+#### 2. 配置环境变量
+
+将 `.env.example` 复制为 `.env.local`，填入 Firebase 配置：
+
+```bash
+NEXT_PUBLIC_FIREBASE_API_KEY=你的_api_key
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=你的项目.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=你的项目ID
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=你的项目.appspot.com
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=你的sender_id
+NEXT_PUBLIC_FIREBASE_APP_ID=你的app_id
+```
+
+> 这些值可在 Firebase 控制台 → 项目设置 → 常规 → 你的应用 → SDK 配置 中找到。
+
+#### 3. Vercel 部署
+
+在 **Vercel 控制面板 → 项目设置 → Environment Variables** 中添加相同的变量，然后重新部署。
+
+> 💡 Firebase API Key 设计上就是公开的（客户端标识符）。数据安全由 Firebase Auth + Firestore 安全规则保障，而非隐藏 API Key。
+
 ---
 
 ## 🔄 更新
