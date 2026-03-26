@@ -1,0 +1,89 @@
+# ============================================
+#  自动构建 Electron 安装包并发布 Release
+# ============================================
+#  触发条件: 推送 v* 标签
+#  需要在 GitHub Secrets 中配置:
+#    - NEXT_PUBLIC_FIREBASE_API_KEY
+#    - NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+#    - NEXT_PUBLIC_FIREBASE_PROJECT_ID
+#    - NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+#    - NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+#    - NEXT_PUBLIC_FIREBASE_APP_ID
+# ============================================
+
+name: Electron Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Next.js (with Firebase config)
+        env:
+          NEXT_PUBLIC_FIREBASE_API_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ secrets.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
+          NEXT_PUBLIC_FIREBASE_APP_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}
+        run: npx next build
+
+      - name: Build Electron installer
+        run: npx electron-builder --win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate release notes
+        id: notes
+        shell: bash
+        run: |
+          # 获取上一个 tag
+          PREV_TAG=$(git tag --sort=-creatordate | head -n 2 | tail -n 1)
+          CURR_TAG=${GITHUB_REF#refs/tags/}
+          
+          if [ -z "$PREV_TAG" ] || [ "$PREV_TAG" = "$CURR_TAG" ]; then
+            # 第一个 tag，取最近 20 条
+            NOTES=$(git log --oneline -20 --pretty=format:"- %s")
+          else
+            NOTES=$(git log --oneline ${PREV_TAG}..${CURR_TAG} --pretty=format:"- %s")
+          fi
+          
+          # 写入文件避免多行转义问题
+          echo "## 更新内容" > release_notes.md
+          echo "" >> release_notes.md
+          echo "$NOTES" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "---" >> release_notes.md
+          echo "📦 下载 \`.exe\` 安装包即可使用，云同步功能已内置。" >> release_notes.md
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Author ${{ github.ref_name }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: false
+          files: |
+            dist/*.exe
+            dist/*.yml
+            dist/*.yaml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
