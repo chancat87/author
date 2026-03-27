@@ -56,6 +56,9 @@ mcp_config.json
 *草稿*/
 *draft*/
 
+# firebase local cache
+.firebase/
+
 # debug logs (anywhere)
 firebase-debug.log
 firestore-debug.log
