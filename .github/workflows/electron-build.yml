@@ -52,51 +52,57 @@ jobs:
         run: npx next build
 
       - name: Build Electron installer
-        run: npx electron-builder --win
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --win --publish never
 
       - name: Generate release notes
         id: notes
         shell: bash
         run: |
-          # 获取上一个 tag
-          PREV_TAG=$(git tag --sort=-creatordate | head -n 2 | tail -n 1)
-          CURR_TAG=${GITHUB_REF#refs/tags/}
-          
-          if [ -z "$PREV_TAG" ] || [ "$PREV_TAG" = "$CURR_TAG" ]; then
-            NOTES=$(git log --oneline -20 --pretty=format:"- %s")
+          # 1. 尝试读取预热好的标题
+          if [ -f "RELEASE_TITLE.txt" ]; then
+            TITLE_DESC=$(cat RELEASE_TITLE.txt)
           else
-            NOTES=$(git log --oneline ${PREV_TAG}..${CURR_TAG} --pretty=format:"- %s")
+            TITLE_DESC=$(git log -1 --pretty=format:"%s" | sed 's/^v[0-9\.]*: *//')
           fi
-          
-          # 双语 Release Notes
-          cat > release_notes.md << 'HEADER'
-          ## 📋 更新内容 / Changelog
+          echo "title_desc=$TITLE_DESC" >> $GITHUB_OUTPUT
 
-          HEADER
-          
-          # 中文部分
-          echo "### 🇨🇳 中文" >> release_notes.md
-          echo "" >> release_notes.md
-          echo "$NOTES" >> release_notes.md
-          echo "" >> release_notes.md
-          echo "📦 下载 \`.exe\` 安装包即可使用，云同步功能已内置。" >> release_notes.md
-          echo "" >> release_notes.md
-          echo "---" >> release_notes.md
-          echo "" >> release_notes.md
-          
-          # 英文部分
-          echo "### 🇺🇸 English" >> release_notes.md
-          echo "" >> release_notes.md
-          echo "$NOTES" >> release_notes.md
-          echo "" >> release_notes.md
-          echo "📦 Download the \`.exe\` installer to get started. Cloud sync is built-in." >> release_notes.md
+          # 2. 尝试读取预热好的双语详细日记
+          if [ -f "RELEASE_NOTES.md" ]; then
+            cp RELEASE_NOTES.md release_notes.md
+          else
+            # 兼容旧逻辑：回退到拉取 commits 列表
+            PREV_TAG=$(git tag --sort=-creatordate | head -n 2 | tail -n 1)
+            CURR_TAG=${GITHUB_REF#refs/tags/}
+            
+            if [ -z "$PREV_TAG" ] || [ "$PREV_TAG" = "$CURR_TAG" ]; then
+              NOTES=$(git log --oneline -20 --pretty=format:"- %s")
+            else
+              NOTES=$(git log --oneline ${PREV_TAG}..${CURR_TAG} --pretty=format:"- %s")
+            fi
+            
+            cat > release_notes.md << 'HEADER'
+            ## 📋 更新内容 / Changelog
+
+            HEADER
+            echo "### 🇨🇳 中文" >> release_notes.md
+            echo "" >> release_notes.md
+            echo "$NOTES" >> release_notes.md
+            echo "" >> release_notes.md
+            echo "📦 下载 \`.exe\` 安装包即可使用，云同步功能已内置。" >> release_notes.md
+            echo "" >> release_notes.md
+            echo "---" >> release_notes.md
+            echo "" >> release_notes.md
+            echo "### 🇺🇸 English" >> release_notes.md
+            echo "" >> release_notes.md
+            echo "$NOTES" >> release_notes.md
+            echo "" >> release_notes.md
+            echo "📦 Download the \`.exe\` installer to get started. Cloud sync is built-in." >> release_notes.md
+          fi
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          name: Author ${{ github.ref_name }} — 更新发布 / Release
+          name: Author ${{ github.ref_name }} — ${{ steps.notes.outputs.title_desc }}
           body_path: release_notes.md
           draft: false
           prerelease: false
