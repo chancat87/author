@@ -13,6 +13,9 @@
 
 name: Electron Build & Release
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 on:
   push:
     tags:
@@ -80,10 +83,8 @@ jobs:
               NOTES=$(git log --oneline ${PREV_TAG}..${CURR_TAG} --pretty=format:"- %s")
             fi
             
-            cat > release_notes.md << 'HEADER'
-            ## 📋 更新内容 / Changelog
-
-            HEADER
+            echo "## 📋 更新内容 / Changelog" > release_notes.md
+            echo "" >> release_notes.md
             echo "### 🇨🇳 中文" >> release_notes.md
             echo "" >> release_notes.md
             echo "$NOTES" >> release_notes.md
