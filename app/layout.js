@@ -2,6 +2,7 @@
 
 import "./globals.css";
 import { useEffect, useState } from "react";
+import { Analytics } from '@vercel/analytics/react';
 
 // 内联脚本：在 HTML 解析阶段同步读取 theme，避免 hydration 不匹配和闪烁
 const themeInitScript = `
@@ -35,6 +36,7 @@ export default function RootLayout({ children }) {
       </head>
       <body suppressHydrationWarning>
         {children}
+        <Analytics />
       </body>
     </html>
   );
