@@ -21,7 +21,7 @@ import GhostMark from './GhostMark';
 import EditorBubbleMenu from './EditorBubbleMenu';
 import { createSlashExtension, SlashCommandMenu } from './SlashCommands';
 import { useEffect, useCallback, useRef, useState, useMemo, useId, forwardRef, useImperativeHandle } from 'react';
-import { ChevronUp, ChevronDown } from 'lucide-react';
+import { ChevronUp, ChevronDown, Undo2, Redo2, Wand2 } from 'lucide-react';
 import { ragRecommend } from '../lib/context-engine';
 import { useAppStore } from '../store/useAppStore';
 import ModelPicker from './ModelPicker';
@@ -178,7 +178,11 @@ const Editor = forwardRef(function Editor({ content, chapterId, onUpdate, editab
 
         // 同一章节内的内容变更：仅当差异显著时才替换（防止用户打字时重置）
         const currentHtml = editor.getHTML();
-        if (content !== currentHtml) {
+        if (content && content !== currentHtml) {
+            // 核心修复：如果用户正在活跃输入（光标在编辑器内），绝对不能用外部旧 props 强行覆盖 DOM
+            // 否则在长按换行（急速输入）时，由于父组件 React State 存在延迟，会导致严重的光标乱跳和吞字
+            if (editor.isFocused) return;
+
             if (Math.abs(content.length - currentHtml.length) > 50 || !currentHtml.includes(content.substring(0, 50))) {
                 isLoadingContentRef.current = true;
                 editor.commands.setContent(content || '', false);
@@ -1606,6 +1610,72 @@ function EditorToolbar({ editor, margins, setMargins }) {
     const currentColor = editor.getAttributes('textStyle').color || '';
     const currentHighlight = editor.getAttributes('highlight').color || '';
 
+    // ===== 一键排版 =====
+    const handleAutoFormat = () => {
+        if (!editor) return;
+        const json = editor.getJSON();
+        let changed = false;
+
+        if (json.content) {
+            const newContent = [];
+            for (const block of json.content) {
+                // 仅处理普通段落
+                if (block.type === 'paragraph') {
+                    // 1. 删除纯空段落
+                    if (!block.content || block.content.length === 0) {
+                        changed = true;
+                        continue;
+                    }
+
+                    let content = [...block.content];
+                    
+                    // 2. 去除首尾空白符（包含全角空格、半角空格等）
+                    const first = { ...content[0] };
+                    if (first.type === 'text' && first.text) {
+                        const original = first.text;
+                        first.text = first.text.replace(/^[\s\u3000\u200B]+/, '');
+                        if (first.text !== original) {
+                            content[0] = first;
+                            changed = true;
+                        }
+                    }
+
+                    const last = { ...content[content.length - 1] };
+                    if (last.type === 'text' && last.text) {
+                        const original = last.text;
+                        last.text = last.text.replace(/[\s\u3000\u200B]+$/, '');
+                        if (last.text !== original) {
+                            content[content.length - 1] = last;
+                            changed = true;
+                        }
+                    }
+                    
+                    // 清理变成空字符串的 text 节点
+                    content = content.filter(c => !(c.type === 'text' && !c.text));
+                    
+                    if (content.length === 0) {
+                        changed = true;
+                        continue; // 整段被清理空了，删除该段落
+                    }
+                    
+                    block.content = content;
+                }
+                newContent.push(block);
+            }
+            
+            // 如果全文排版后全是空段落，至少留一个空段落让用户可以打字
+            if (newContent.length === 0) {
+                newContent.push({ type: 'paragraph' });
+            }
+            json.content = newContent;
+        }
+
+        if (changed) {
+            // 通过 setContent 替换，原生支持 Ctrl+Z 撤销
+            editor.chain().setContent(json, true).run();
+        }
+    };
+
     return (
         <div className="editor-toolbar" ref={toolbarRef} onMouseDown={e => { if (e.target.tagName !== 'INPUT') e.preventDefault(); }}>
             {/* 编辑器 AI 模型切换器 */}
@@ -1616,10 +1686,11 @@ function EditorToolbar({ editor, margins, setMargins }) {
 
             <div className="toolbar-divider" />
 
-            {/* 撤销/重做 */}
+            {/* 一键排版/撤销/重做 */}
             <div className="toolbar-group">
-                <button className="toolbar-btn" onClick={() => editor.chain().focus().undo().run()} title="撤销 (Ctrl+Z)">↩</button>
-                <button className="toolbar-btn" onClick={() => editor.chain().focus().redo().run()} title="重做 (Ctrl+Y)">↪</button>
+                <button className="toolbar-btn" onClick={() => editor.chain().focus().undo().run()} title="撤销 (Ctrl+Z)"><Undo2 size={16} strokeWidth={2.5} /></button>
+                <button className="toolbar-btn" onClick={handleAutoFormat} title="一键排版 (去除多余空格与空行)"><Wand2 size={16} strokeWidth={2.5} /></button>
+                <button className="toolbar-btn" onClick={() => editor.chain().focus().redo().run()} title="重做 (Ctrl+Y)"><Redo2 size={16} strokeWidth={2.5} /></button>
             </div>
 
             <div className="toolbar-divider" />

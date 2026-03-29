@@ -88,6 +88,8 @@ If you encounter a white screen or the app fails to start, you can check the loc
 
 ## 🚀 Getting Started
 
+> 💡 **Highly Recommended**: For most users who only need daily writing and cloud multi-device synchronization, please [directly download and install the client](https://github.com/YuanShiJiLoong/author/releases/latest). Source code deployment or Vercel deployment is only recommended for advanced users who need **secondary development** or are willing to configure a Firebase database themselves.
+
 ### Requirements
 - **Node.js** 18+
 - **npm** 9+ or **pnpm** 8+
@@ -130,11 +132,15 @@ npm start
 
 ### Deploy to Vercel
 
+> 💡 **⚠️ Note:** The version deployed via Vercel does **not** have cloud sync features by default (you need to configure your own manual Firebase database separately). If you just want multi-device synchronization, please **download the client directly** to avoid the hassle.
+
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/YuanShiJiLoong/author)
 
 ### ☁️ Cloud Sync Setup (Self-Deploy)
 
-Cloud sync is built into the desktop client. If you're self-deploying from source, follow these steps to enable login & sync:
+> 💡 **Tip:** The desktop client (Windows/macOS) **has a built-in official cloud sync server**, requiring no extra configuration to use cross-device sync. If you find configuring Firebase too tedious, **it is highly recommended to directly download and use the client**.
+
+If you insist on self-deploying via source code or Vercel and want to enable multi-device sync, follow these steps to configure your own Firebase database:
 
 #### 1. Create a Firebase Project
 
@@ -285,6 +291,155 @@ If you've set up a Tavily/Exa proxy pool using multiple free-tier accounts, you 
 4. Leave blank to use the official default URL
 
 > 💡 The system automatically appends `/search` to your URL — no need to add it manually
+
+---
+
+## 🧠 Vectorization (Embedding) & RAG Settings Retrieval
+
+> 💡 This feature is designed for long-form works with many settings entries (>20). Typical short stories usually don't need this.
+
+### What Is Vectorization?
+
+By default, AI conversations inject **all settings entries** into the context. When the number of entries is large, this exceeds the model's context length limit.
+
+**Vectorized retrieval (RAG)** works differently: each settings entry is converted into a mathematical vector. During a conversation, the system automatically calculates semantic similarity and only injects the **most relevant entries** into the context — instead of dumping everything.
+
+### When Do You Need It?
+
+| Scenario | Recommendation |
+|----------|---------------|
+| Settings entries < 20 | Not needed — full injection works fine |
+| Settings entries 20–100 | Recommended — improves recall accuracy |
+| Settings entries > 100 | Highly recommended — critical settings won't be forgotten |
+
+### How to Configure
+
+1. Open **Settings** → **API Configuration**
+2. Find and enable the "Separate Embedding API" toggle
+3. Fill in the following:
+
+| Setting | Description |
+|---------|-------------|
+| **Embedding API Key** | API key for the embedding model (can share the same key as your chat model provider) |
+| **Embedding Base URL** | API endpoint (e.g., `https://api.openai.com/v1`) |
+| **Embedding Model** | Model name (see recommendations below) |
+
+#### Recommended Models
+
+| Provider | Model Name | Notes |
+|----------|-----------|-------|
+| OpenAI | `text-embedding-3-small` | Cost-effective, 1536 dimensions |
+| OpenAI | `text-embedding-3-large` | Higher accuracy, 3072 dimensions |
+| ZhipuAI | `embedding-3` | Optimized for Chinese, 2048 dimensions |
+| SiliconFlow | `BAAI/bge-m3` | Multilingual, free tier available |
+
+### Automatic Vectorization
+
+- **Auto-trigger**: After a settings entry changes, the system automatically debounces for 3 seconds before triggering vectorization.
+- **Incremental update**: Only modified entries are updated. It avoids full rebuilds to save API quotas and time.
+- **Local storage**: Vector data is stored locally in IndexedDB and never uploaded to any server.
+- **Auto-initialization**: When importing settings or syncing from the cloud, the system will automatically build missing vector indexes in the background.
+
+### Manual Rebuild
+
+If you switch Embedding models or the vector index becomes corrupted, you can manually rebuild:
+
+1. Open **Settings** → **API Configuration**
+2. Click the "**Rebuild Vector Index**" button
+3. Wait for all entries to be re-vectorized
+
+### Workflow
+
+```
+User edits settings entry → 3s debounce → Call Embedding API for vector
+                                                    ↓
+                                           Store in local IndexedDB
+                                                    ↓
+AI conversation → Vectorize user input → Cosine similarity matching → Inject Top-K settings into context
+```
+
+---
+
+## 💾 Settings Import Format Documentation
+
+Author supports importing settings from multiple formats: **JSON / Markdown / TXT / DOCX / PDF**.
+
+### Core Structure: Four Tiers
+
+The import system uses **structural markers** to strictly distinguish the following four tiers. Regardless of the format used, this nested structure must be followed:
+`Category → Entry → Field → Value (can be multiline)`
+
+Therefore, **any custom category, custom tag, or custom field can be correctly recognized** and losslessly restored.
+
+### Format Reliability & Tier Marker Reference
+
+| Rating | Format | Category | Entry | Field | Multiline |
+|------|--------|----------|-------|-------|-----------|
+| ⭐⭐⭐⭐⭐ (Lossless) | **JSON** | `category` | `name` | `content` key-val | `\n` newline |
+| ⭐⭐⭐⭐⭐ (Lossless) | **MD** | `## Category Name` | `### Entry Name` | `**Tag**: Value` | Indented text |
+| ⭐⭐⭐⭐ (Lossless) | **TXT** | `│ Category Name` | `【Entry Name】` | `〈Tag〉: Value` | Indented text |
+| ⭐⭐⭐ (High-Fidelity) | **DOCX** | Heading 1 | Heading 2 | **Bold** Tag + colon | Indented paragraph |
+| ⭐⭐ (High-Fidelity) | **PDF** | `■ Category Name` | `◆ Entry Name` | `▸ Tag: Value` | Indented text |
+
+---
+
+### Markdown Format Template (Recommended)
+
+Use `##` for categories, `###` for entry names, and `**Tag**: Content` for fields:
+
+```markdown
+## Any Custom Category
+
+### John Doe
+
+**Role**: Protagonist
+**Background Story**: Born deep in the mountains.
+  Studied martial arts with his grandfather since childhood.
+  His master said: "You must find the answers yourself."
+**Custom Bloodline**: Half-dragon bloodline
+
+### Sarah White
+**Gender**: Female
+**Personality**: Lively and cheerful, detail-oriented
+```
+
+---
+
+### TXT Format Template
+
+Use `│` for the category box, `【】` for entry names, and `〈Tag〉:` for fields:
+
+```
+┌──────────────────────────
+│ Any Custom Category
+└──────────────────────────
+
+【John Doe】
+〈Gender〉: Male
+〈Background Story〉: Born deep in the mountains.
+  Studied martial arts with his grandfather since childhood.
+  His master said: "You must find the answers yourself."
+〈Custom Bloodline〉: Half-dragon bloodline
+```
+
+---
+
+### DOCX Format Template
+
+In Word, use **Heading styles and bolding** to mark structure:
+- **Heading 1 (H1)** → Category Name (e.g., "Any Custom Category")
+- **Heading 2 (H2)** → Entry Name (e.g., "John Doe")
+- **Body First Paragraph** → **Bold Field Name**: Content (e.g., **Custom Bloodline**: Half-dragon bloodline)
+- **Body Continuation** → Multiline content with first-line indent
+
+---
+
+### 💡 Compatibility Design & Notes
+
+1. **Auto Tag Fallback (Backwards Compatibility)** — If a structural marker is missing in TXT/Markdown (e.g., using `Name: John Doe` instead of `**Name**: John Doe`), the system will automatically parse it compatibly *only if* `Name` belongs to the known core field set. However, to guarantee 100% recognition and extraction of *custom* fields, you must add the structural formatting.
+2. **Multiline Value Handling** — Whenever you start with `**Tag**: ` or `〈Tag〉: `, any subsequent **lines indented by 2 spaces** will be considered the body of that field (multiline value extraction), until the next structural tag is encountered.
+3. **DOCX / PDF Parsing Limitations** — PDFs are extracted using specially designed `▸` identifiers. If the imported PDF/DOCX file was not generated by this system, a heuristic parser will attempt to extract the content as best as possible, but 100% fidelity cannot be guaranteed.
+4. **JSON is the Most Complete** — JSON is undoubtedly the strictest format and the only one capable of 100% migrating all attributes (including writing mode and project info). If you are simply changing writing devices, JSON import/export is strongly recommended.
 
 ---
 

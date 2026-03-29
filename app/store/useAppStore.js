@@ -60,6 +60,9 @@ const store = create((set, get) => ({
     showLoginModal: false,
     setShowLoginModal: (show) => set({ showLoginModal: !!show }),
 
+    showSyncGuideModal: false,
+    setShowSyncGuideModal: (show) => set({ showSyncGuideModal: !!show }),
+
     showAccountModal: false,
     accountModalSwitcher: false,
     setShowAccountModal: (show, switcher = false) => set({ showAccountModal: !!show, accountModalSwitcher: !!switcher }),

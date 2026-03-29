@@ -1,23 +1,25 @@
 ## 📋 本次焕新简报 / Release Overview
 
-在本次更新中，我们重点对应用的外部部署环境（特别是如 Vercel 等 Serverless 平台）的兼容性做出了关键修复，同时优化了发版构建的脚本链路，确保版本控制更加严谨。
+本次常规更新（v1.2.9）为核心模型调度引入了更多自由度量控制机制，大幅优化了本地系统底层对官方 Token Caching 的识别表现。同时，我们修复了由高度估测错算导致的开局向导组件渲染越出屏幕边界的历史沉疴。
 
 ### 🇨🇳 中文更新概览
 
-- 🛡️ **云端只读部署环境 500 熔断机制**：修复了当应用部署在 Vercel 等无写入权限的 Serverless 环境下时，频繁调用 `/api/storage` 导致的不断抛出 `500 Server Error` 错误。系统现在会智能通过 POST 探针感知环境读写权限，并在服务端触发拦截时立刻绕开 API，优雅降级回 IndexedDB 或 Firebase，彻底根绝同步状态死循环。
-- 🔧 **构建链标题去重规范化**：修复了在触发 GitHub Actions 自动发版构建期间，系统无法识别手写包含重叠版本号的自定义前缀，从而导致像 `Author v1.2.8 — Author v1.2.7...` 等“俄罗斯套娃”式废话标题。现在底层已加入 Node.js 正则防呆拦截代码。
-- 📦 **强化发版审计指南**：全站更新工作流规范说明。针对每一次 GitHub Tag 发版新增强制手撸更新日志节点，减少因复制粘贴疏忽产生的文档残留。
+- 🎛️ **开放更自由的底层模型参数配置**：为进阶创作者们特别新增了「高级模型参数配置」组件。现在可在设定面板针对特定的供应商模型**独立修改并覆盖**其专属的 *Temperature*（温度）、*Top P*（核采样约束）、*Max Output Tokens*（最大输出限制）甚至最新的 *Reasoning Effort*（深度思考推理强度）。
+- 📉 **Prompt Caching 命中记录可见化**：优化后台长文本统计逻辑的接入，系统底层正式打通最新 API 上下文缓存流的解析链路；右侧 AI 面板「统计」选项卡内现已实时刷新并高亮显示 **缓存命中 Tokens (Cache Hits)**，直观展现为你节省的巨量输入开销。
+- 🔧 **修复全屏向导悬浮定位越屏的缺陷**：根绝了在新安装应用触发应用引导功能（TourOverlay）时，因为其组件内部把初始气泡估算高度硬编码为异常庞大的 `460px` ，造成原本指代左下角云同步图标的说明框向飞出窗口顶部错乱的问题。
+- 📖 **应用内部语料库补充与热修缮**：彻底校对梳理了全版本多语环境（特别是俄语、阿拉伯语与英语）的翻译遗漏，长篇 `README` 文档现已实现了 1:1 的全内容无删减对齐，并重构补充了 RAG 本地向量机制及详细参数说明。
 
-📦 点击下方 `.exe` 直链下载，无需繁琐配置，双击运行即可开启您的零干涉心流创作。
+📦 全自动封装构建流程完毕，点击下方 `.exe` 图标立刻开启纯粹自由的写作心流。
 
 ---
 
 ### 🇺🇸 English Release Notes
 
-In this update, we made key reliability fixes targeting external deployment environments (specifically Serverless platforms like Vercel with strict filesystem permissions) and refined the internal CI/CD release logging mechanism to curb layout oversights.
+The Version 1.2.9 release unlocks a vast grid of low-level LLM parameter tweaks, explicitly surfacing prompt context cache statistics directly onto the UI, alongside a critical UX hotfix correcting heavily misaligned out-of-bound onboarding elements.
 
-- 🛡️ **Serverless Environment API Loop Circuit Breaker:** Resolved a critical recursive synchronization bug where hosting environments without explicit write capabilities (such as Vercel) caused the front-end to spam the `/api/storage` endpoint with continuously failing `500 Server Error` signals. The system now utilizes a smart POST-ping mechanism capable of diagnosing read-only environments locally, bypassing storage APIs immediately, and gracefully falling back to IndexedDB or Firebase without stalling.
-- 🔧 **Automated Release Notes Title Normalization:** Addressed an annoying GitHub Action automation quirk causing redundant release title injections containing stacked version prefixes (e.g., `Author v1.2.8 — Author v1.2.7...`). The deployment script now leverages rigorous regex-based sanitization in Node.js to enforce single unified release headers.
-- 📦 **Strengthened Publishing Guidelines:** Heavily revamped internal workspace release flow. The release workflow is now fortified with explicit checkpoints enforcing manually-drafted update briefs per version to combat un-updated residual files persisting into final builds.
+- 🎛️ **Independent Advanced Tuning Matrix:** Added dynamic switches allowing deeper configuration logic for specialized writing behaviors! Users can now explicitly force-override *Temperature*, *Top P*, *Max Output Tokens*, and new complex *Reasoning Effort* traits independently per LLM provider right inside API settings.
+- 📉 **Native Prompt Caching Visor:** We've heavily tapped into token-spend optimization protocols—meaning you get deep API context-cache metric integrations! A real-time **Cache Hit Rate (Tokens)** tracker has been mapped cleanly inside your AI Sidebar's stat tab highlighting your exact long-context savings dynamically!
+- 🔧 **Tour Overlay Off-Canvas Alignment Fix:** Extinguished an annoying long-standing glitch where newly executed application tutorials deployed tooltip overlays using a huge `460px` height-guess threshold causing lower-anchored popups (especially bottom sync menus) to physically fly miles away tracking off-screen bounds. 
+- 📖 **Embedded Local Documentation Reworks:** We've comprehensively overhauled inner document blocks and multi-lingual `README` files to strictly incorporate the shiny features previously pushed like the intricate offline RAG text vector mechanism. Entire multi-lingual files (EN/RU/ZH/AR) were thoroughly reviewed to align perfectly with zero truncations.
 
 📦 Simply grab the `.exe` installer right below and run it directly. Cloud sync engine is already packed nicely inside.

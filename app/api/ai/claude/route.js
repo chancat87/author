@@ -73,10 +73,20 @@ export async function POST(request) {
             'anthropic-version': '2023-06-01',
         };
 
+        // 将 system prompt 转为 content block 格式并启用提示缓存
+        const safeSystemPrompt = applyContentSafety(systemPrompt);
+        const systemBlocks = [
+            {
+                type: 'text',
+                text: safeSystemPrompt,
+                cache_control: { type: 'ephemeral' },
+            }
+        ];
+
         const baseParams = {
             model,
             max_tokens: maxTokens || 8192,
-            system: applyContentSafety(systemPrompt),
+            system: systemBlocks,
             ...(temperature != null ? { temperature } : {}),
             ...(topP != null ? { top_p: topP } : {}),
         };
@@ -199,11 +209,13 @@ export async function POST(request) {
                         controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: textContent })}\n\n`));
                     }
                     if (round1Data.usage) {
+                        const cachedTokens = (round1Data.usage.cache_read_input_tokens || 0);
                         controller.enqueue(encoder.encode(`data: ${JSON.stringify({
                             usage: {
                                 promptTokens: round1Data.usage.input_tokens || 0,
                                 completionTokens: round1Data.usage.output_tokens || 0,
                                 totalTokens: (round1Data.usage.input_tokens || 0) + (round1Data.usage.output_tokens || 0),
+                                cachedTokens,
                             }
                         })}\n\n`));
                     }
@@ -326,7 +338,7 @@ function streamClaudeResponse(response, sources = null) {
                                     }
                                 }
 
-                                // 消息结束 — 提取 usage
+                                // 消息结束 — 提取 usage（含缓存 token）
                                 if (eventType === 'message_delta') {
                                     const usage = json.usage;
                                     if (usage) {
@@ -340,15 +352,17 @@ function streamClaudeResponse(response, sources = null) {
                                     }
                                 }
 
-                                // message_start 事件中包含 input tokens
+                                // message_start 事件中包含 input tokens + 缓存 tokens
                                 if (eventType === 'message_start') {
                                     const usage = json.message?.usage;
                                     if (usage?.input_tokens) {
+                                        const cachedTokens = usage.cache_read_input_tokens || 0;
                                         controller.enqueue(encoder.encode(`data: ${JSON.stringify({
                                             usage: {
                                                 promptTokens: usage.input_tokens || 0,
                                                 completionTokens: 0,
                                                 totalTokens: usage.input_tokens || 0,
+                                                cachedTokens,
                                             }
                                         })}\n\n`));
                                     }

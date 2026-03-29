@@ -144,11 +144,13 @@ export async function POST(request) {
                                         // 提取 usage
                                         const usage = json.response?.usage;
                                         if (usage) {
+                                            const cachedTokens = usage.input_tokens_details?.cached_tokens || 0;
                                             controller.enqueue(encoder.encode(`data: ${JSON.stringify({
                                                 usage: {
                                                     promptTokens: usage.input_tokens || 0,
                                                     completionTokens: usage.output_tokens || 0,
                                                     totalTokens: (usage.input_tokens || 0) + (usage.output_tokens || 0),
+                                                    cachedTokens,
                                                 }
                                             })}\n\n`));
                                         }

@@ -112,6 +112,22 @@ const CATEGORY_NAME_MAP = {
     '写作规则': 'rules', '写作': 'rules', '规则': 'rules',
 };
 
+// 构建所有已知字段标签集合（用于兼容旧格式导入）
+function buildKnownLabelsSet() {
+    const labels = new Set();
+    for (const catAliases of Object.values(FIELD_ALIASES)) {
+        for (const [fk, aliases] of Object.entries(catAliases)) {
+            if (fk === '_nameAliases') continue;
+            if (Array.isArray(aliases)) aliases.forEach(a => labels.add(a));
+        }
+    }
+    for (const catLabels of Object.values(FIELD_LABELS)) {
+        Object.values(catLabels).forEach(l => labels.add(l));
+    }
+    return labels;
+}
+const ALL_KNOWN_LABELS = buildKnownLabelsSet();
+
 // ==================== 分类检测 ====================
 
 export function detectCategory(text) {
@@ -155,10 +171,12 @@ export function isStructuredText(text) {
 export function preprocessPdfText(text) {
     const lines = text.split('\n');
 
-    // 判断是否为字段行（短标签 + 冒号 + 内容）
+    // 判断是否为字段行（短标签 + 冒号 + 内容，或 ▸ 标记）
     const isFieldLine = (s) => {
         if (!s) return false;
-        return /^[^\s：:【】。！？■◆]{1,6}[：:]\s*/.test(s.trim());
+        // 新格式：▸ 标签：值
+        if (/^\u25b8\s*.+?[\uff1a:]/.test(s.trim())) return true;
+        return /^[^\s\uff1a:\u3010\u3011\u3002\uff01\uff1f\u25a0\u25c6\u25b8]{1,6}[\uff1a:]\s*/.test(s.trim());
     };
 
     const SENTENCE_ENDINGS = /[。！？）】」、；\.\!\?\)\]]$/;
@@ -166,8 +184,8 @@ export function preprocessPdfText(text) {
     const categoryIndices = new Set();
     const entryIndices = new Set();
 
-    // 检测是否有 ■ / ◆ 标记
-    const hasMarkers = lines.some(l => /^[■◆]\s/.test(l.trim()));
+    // 检测是否有 ■ / ◆ / ▸ 标记
+    const hasMarkers = lines.some(l => /^[\u25a0\u25c6\u25b8]\s/.test(l.trim()));
 
     if (hasMarkers) {
         // ===== 标记模式：直接使用 ■/◆ =====
@@ -221,13 +239,13 @@ export function preprocessPdfText(text) {
     console.log('[preprocessPdfText] categories:', [...categoryIndices].map(i => `L${i}: "${lines[i].trim()}"`));
     console.log('[preprocessPdfText] entries:', [...entryIndices].map(i => `L${i}: "${lines[i].trim()}"`));
 
-    // 生成结果：去掉 ■/◆ 前缀，加上 ##/### 标记
+    // 生成结果：去掉 ■/◆ 前缀，加上 ##/### 标记，保留 ▸ 给 parseStructuredText 识别
     const result = [];
     for (let i = 0; i < lines.length; i++) {
         if (categoryIndices.has(i)) {
-            result.push(`## ${lines[i].trim().replace(/^■\s*/, '')}`);
+            result.push(`## ${lines[i].trim().replace(/^\u25a0\s*/, '')}`);
         } else if (entryIndices.has(i)) {
-            result.push(`### ${lines[i].trim().replace(/^◆\s*/, '')}`);
+            result.push(`### ${lines[i].trim().replace(/^\u25c6\s*/, '')}`);
         } else {
             result.push(lines[i]);
         }
@@ -239,7 +257,12 @@ export function preprocessPdfText(text) {
 
 /**
  * 结构化文本解析 — 正确处理分类节头 + 【条目】 + 字段：值 格式
- * 支持 TXT 导出格式和 Markdown 导出格式
+ * 支持三种结构标记（优先级从高到低）：
+ *   1. MD:  **label**：value
+ *   2. TXT: 〈label〉：value
+ *   3. PDF: ▸ label：value
+ *   4. 兼容旧格式: label：value（仅当 label ∈ 已知标签集时）
+ * 多行续行统一用 2 空格缩进
  * @returns {Array<{name: string, category: string, fields: Object}>}
  */
 export function parseStructuredText(text) {
@@ -290,7 +313,7 @@ export function parseStructuredText(text) {
         if (catBoxMatch) {
             flushEntry();
             const catName = catBoxMatch[1].trim();
-            currentCategory = CATEGORY_NAME_MAP[catName] || detectCategory(catName);
+            currentCategory = CATEGORY_NAME_MAP[catName] || catName;
             continue;
         }
 
@@ -299,7 +322,7 @@ export function parseStructuredText(text) {
         if (mdH2 && !trimmed.startsWith('###')) {
             const catName = mdH2[1].replace(/\s*—\s*设定集.*$/, '').trim();
             flushEntry();
-            currentCategory = CATEGORY_NAME_MAP[catName] || detectCategory(catName);
+            currentCategory = CATEGORY_NAME_MAP[catName] || catName;
             continue;
         }
 
@@ -321,8 +344,7 @@ export function parseStructuredText(text) {
 
         // 如果没有条目名但在分类下遇到了内容行，自动以分类名创建条目
         if (!currentEntryName) {
-            // 检测当前行是否像内容行（有冒号标签、加粗标签、或列表项）
-            const looksLikeContent = /^(?:[-*]\s+)?(?:\*\*.+?\*\*\s*[：:]|[^\s：:\[\]【】]{1,15}[：:])/.test(trimmed)
+            const looksLikeContent = /^(?:[-*]\s+)?(?:\*\*.+?\*\*\s*[：:]|〈.+?〉\s*[：:]|\u25b8\s*.+?[：:]|[^\s：:\[\]【】]{1,15}[：:])/.test(trimmed)
                 || /^[-*]\s+/.test(trimmed);
             if (looksLikeContent) {
                 const catNames = Object.entries(CATEGORY_NAME_MAP).find(([, v]) => v === currentCategory);
@@ -332,7 +354,9 @@ export function parseStructuredText(text) {
             }
         }
 
-        // === Markdown 加粗标签: **label**：value  或  - **label**：value ===
+        // === 结构标记字段解析（优先级从高到低） ===
+
+        // ① MD 加粗标签: **label**：value  或  - **label**：value
         const mdBold = trimmed.match(/^(?:[-*]\s+)?\*\*(.+?)\*\*\s*[：:]\s*(.*)/);
         if (mdBold) {
             flushField();
@@ -341,20 +365,49 @@ export function parseStructuredText(text) {
             continue;
         }
 
-        // === 冒号格式: label：value  或  - label：value ===
+        // ② TXT 尖括号标签: 〈label〉：value
+        const angleBracket = trimmed.match(/^〈(.+?)〉\s*[：:]\s*(.*)/);
+        if (angleBracket) {
+            flushField();
+            currentFieldLabel = angleBracket[1].trim();
+            if (angleBracket[2].trim()) currentFieldLines.push(angleBracket[2].trim());
+            continue;
+        }
+
+        // ③ PDF 三角标签: ▸ label：value
+        const triangleMark = trimmed.match(/^\u25b8\s*(.+?)\s*[：:]\s*(.*)/);
+        if (triangleMark) {
+            flushField();
+            currentFieldLabel = triangleMark[1].trim();
+            if (triangleMark[2].trim()) currentFieldLines.push(triangleMark[2].trim());
+            continue;
+        }
+
+        // ④ 兼容旧格式: label：value（仅当 label ∈ 已知标签集 或 为简短标签）
         const colonMatch = trimmed.match(/^(?:[-*]\s+)?([^\s：:\[\]【】]{1,15})[：:]\s*(.*)/);
         if (colonMatch) {
-            flushField();
-            currentFieldLabel = colonMatch[1].trim();
-            if (colonMatch[2].trim()) currentFieldLines.push(colonMatch[2].trim());
+            const potentialLabel = colonMatch[1].trim();
+            // 只有在已知标签集中才认为是字段开始，否则当作续行
+            if (ALL_KNOWN_LABELS.has(potentialLabel)) {
+                flushField();
+                currentFieldLabel = potentialLabel;
+                if (colonMatch[2].trim()) currentFieldLines.push(colonMatch[2].trim());
+                continue;
+            }
+        }
+
+        // === 续行判断 ===
+
+        // 优先级 4：2 空格缩进续行（新格式导出的多行值）
+        if (/^\s{2,}/.test(line) && currentFieldLabel) {
+            currentFieldLines.push(trimmed);
             continue;
         }
 
         // === 普通内容行（追加到当前字段，或作为描述） ===
         if (currentFieldLabel) {
-            currentFieldLines.push(line);
+            currentFieldLines.push(trimmed);
         } else if (currentEntryName) {
-            // 没有字段标签时，将内容收集为 description（去掉 markdown 列表前缀）
             const cleanLine = trimmed.replace(/^[-*]\s+/, '');
             if (cleanLine) {
                 if (!currentFields.description) currentFields.description = '';
@@ -467,7 +520,9 @@ export function exportNodesToTxt(nodes) {
         output += `═══════════════════════════\n\n`;
     }
 
-    const categories = ['character', 'location', 'world', 'object', 'plot', 'rules'];
+    const knownCategories = ['character', 'location', 'world', 'object', 'plot', 'rules'];
+    const customCategories = [...new Set(nodes.filter(n => n.type === 'item').map(n => n.category))].filter(c => !knownCategories.includes(c));
+    const categories = [...knownCategories, ...customCategories];
     for (const cat of categories) {
         const items = nodes.filter(n => n.type === 'item' && n.category === cat);
         if (items.length === 0) continue;
@@ -484,13 +539,21 @@ export function exportNodesToTxt(nodes) {
             const content = item.content || {};
             for (const [key, label] of Object.entries(labels)) {
                 if (content[key]) {
-                    output += `${label}：${content[key]}\n`;
+                    const lines = content[key].split('\n');
+                    output += `〈${label}〉：${lines[0]}\n`;
+                    for (let i = 1; i < lines.length; i++) {
+                        output += `  ${lines[i]}\n`;
+                    }
                 }
             }
             const knownKeys = new Set(Object.keys(labels));
             for (const [key, val] of Object.entries(content)) {
                 if (!knownKeys.has(key) && val) {
-                    output += `${key}：${val}\n`;
+                    const lines = val.split('\n');
+                    output += `〈${key}〉：${lines[0]}\n`;
+                    for (let i = 1; i < lines.length; i++) {
+                        output += `  ${lines[i]}\n`;
+                    }
                 }
             }
             output += '\n';
@@ -511,7 +574,9 @@ export function exportNodesToMarkdown(nodes) {
         output += `# ${workNode.name} — 设定集\n\n`;
     }
 
-    const categories = ['character', 'location', 'world', 'object', 'plot', 'rules'];
+    const knownCategories = ['character', 'location', 'world', 'object', 'plot', 'rules'];
+    const customCategories = [...new Set(nodes.filter(n => n.type === 'item').map(n => n.category))].filter(c => !knownCategories.includes(c));
+    const categories = [...knownCategories, ...customCategories];
     for (const cat of categories) {
         const items = nodes.filter(n => n.type === 'item' && n.category === cat);
         if (items.length === 0) continue;
@@ -526,13 +591,23 @@ export function exportNodesToMarkdown(nodes) {
             const content = item.content || {};
             for (const [key, label] of Object.entries(labels)) {
                 if (content[key]) {
-                    output += `**${label}**：${content[key]}\n\n`;
+                    const lines = content[key].split('\n');
+                    output += `**${label}**：${lines[0]}\n`;
+                    for (let i = 1; i < lines.length; i++) {
+                        output += `  ${lines[i]}\n`;
+                    }
+                    output += '\n';
                 }
             }
             const knownKeys = new Set(Object.keys(labels));
             for (const [key, val] of Object.entries(content)) {
                 if (!knownKeys.has(key) && val) {
-                    output += `**${key}**：${val}\n\n`;
+                    const lines = val.split('\n');
+                    output += `**${key}**：${lines[0]}\n`;
+                    for (let i = 1; i < lines.length; i++) {
+                        output += `  ${lines[i]}\n`;
+                    }
+                    output += '\n';
                 }
             }
         }
@@ -559,7 +634,9 @@ export async function exportNodesToDocx(nodes) {
         spacing: { after: 300 },
     }));
 
-    const categories = ['character', 'location', 'world', 'object', 'plot', 'rules'];
+    const knownCategories = ['character', 'location', 'world', 'object', 'plot', 'rules'];
+    const customCategories = [...new Set(nodes.filter(n => n.type === 'item').map(n => n.category))].filter(c => !knownCategories.includes(c));
+    const categories = [...knownCategories, ...customCategories];
     for (const cat of categories) {
         const items = nodes.filter(n => n.type === 'item' && n.category === cat);
         if (items.length === 0) continue;
@@ -583,27 +660,45 @@ export async function exportNodesToDocx(nodes) {
             const content = item.content || {};
             for (const [key, label] of Object.entries(labels)) {
                 if (content[key]) {
+                    const lines = content[key].split('\n');
                     children.push(new Paragraph({
                         children: [
                             new TextRun({ text: `${label}：`, bold: true, size: 24, font: '宋体' }),
-                            new TextRun({ text: content[key], size: 24, font: '宋体' }),
+                            new TextRun({ text: lines[0], size: 24, font: '宋体' }),
                         ],
-                        spacing: { after: 100, line: 360 },
+                        spacing: { after: lines.length > 1 ? 40 : 100, line: 360 },
                         alignment: AlignmentType.LEFT,
                     }));
+                    for (let i = 1; i < lines.length; i++) {
+                        children.push(new Paragraph({
+                            children: [new TextRun({ text: lines[i], size: 24, font: '宋体' })],
+                            indent: { left: 480 },
+                            spacing: { after: i === lines.length - 1 ? 100 : 40, line: 360 },
+                            alignment: AlignmentType.LEFT,
+                        }));
+                    }
                 }
             }
             const knownKeys = new Set(Object.keys(labels));
             for (const [key, val] of Object.entries(content)) {
                 if (!knownKeys.has(key) && val) {
+                    const lines = val.split('\n');
                     children.push(new Paragraph({
                         children: [
                             new TextRun({ text: `${key}：`, bold: true, size: 24, font: '宋体' }),
-                            new TextRun({ text: val, size: 24, font: '宋体' }),
+                            new TextRun({ text: lines[0], size: 24, font: '宋体' }),
                         ],
-                        spacing: { after: 100, line: 360 },
+                        spacing: { after: lines.length > 1 ? 40 : 100, line: 360 },
                         alignment: AlignmentType.LEFT,
                     }));
+                    for (let i = 1; i < lines.length; i++) {
+                        children.push(new Paragraph({
+                            children: [new TextRun({ text: lines[i], size: 24, font: '宋体' })],
+                            indent: { left: 480 },
+                            spacing: { after: i === lines.length - 1 ? 100 : 40, line: 360 },
+                            alignment: AlignmentType.LEFT,
+                        }));
+                    }
                 }
             }
         }
@@ -642,9 +737,9 @@ export async function parseDocxToText(file) {
         .replace(/<h1[^>]*>([\s\S]*?)<\/h1>/gi, (_, c) => `\n## ${c.replace(/<[^>]*>/g, '').trim()}\n`)
         .replace(/<h2[^>]*>([\s\S]*?)<\/h2>/gi, (_, c) => `\n### ${c.replace(/<[^>]*>/g, '').trim()}\n`)
         .replace(/<h[3-6][^>]*>([\s\S]*?)<\/h[3-6]>/gi, (_, c) => `\n#### ${c.replace(/<[^>]*>/g, '').trim()}\n`)
-        // 加粗文本保留为标签格式
-        .replace(/<strong>([\s\S]*?)<\/strong>/gi, (_, c) => c.replace(/<[^>]*>/g, ''))
-        .replace(/<b>([\s\S]*?)<\/b>/gi, (_, c) => c.replace(/<[^>]*>/g, ''))
+        // 加粗文本保留为 **...** 格式（让解析器能识别加粗标签模式）
+        .replace(/<strong>([\s\S]*?)<\/strong>/gi, (_, c) => `**${c.replace(/<[^>]*>/g, '')}**`)
+        .replace(/<b>([\s\S]*?)<\/b>/gi, (_, c) => `**${c.replace(/<[^>]*>/g, '')}**`)
         // 段落和换行
         .replace(/<\/(?:p|li|div)>/gi, '\n')
         .replace(/<br\s*\/?>/gi, '\n')
@@ -698,7 +793,9 @@ export function exportSettingsAsPdf(nodes) {
     const title = `${workNode?.name || '设定集'} — 设定集`;
 
     let html = '';
-    const categories = ['character', 'location', 'world', 'object', 'plot', 'rules'];
+    const knownCategories = ['character', 'location', 'world', 'object', 'plot', 'rules'];
+    const customCategories = [...new Set(nodes.filter(n => n.type === 'item').map(n => n.category))].filter(c => !knownCategories.includes(c));
+    const categories = [...knownCategories, ...customCategories];
     for (const cat of categories) {
         const items = nodes.filter(n => n.type === 'item' && n.category === cat);
         if (items.length === 0) continue;
@@ -712,13 +809,25 @@ export function exportSettingsAsPdf(nodes) {
             const content = item.content || {};
             for (const [key, label] of Object.entries(labels)) {
                 if (content[key]) {
-                    html += `<p style="margin:4px 0;line-height:1.7;"><b>${label}：</b>${content[key]}</p>`;
+                    const lines = content[key].split('\n');
+                    const escaped0 = lines[0].replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                    html += `<p style="margin:4px 0;line-height:1.7;"><b>▸ ${label}：</b>${escaped0}</p>`;
+                    for (let i = 1; i < lines.length; i++) {
+                        const escaped = lines[i].replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                        html += `<p style="margin:2px 0 2px 2em;line-height:1.7;">${escaped}</p>`;
+                    }
                 }
             }
             const knownKeys = new Set(Object.keys(labels));
             for (const [key, val] of Object.entries(content)) {
                 if (!knownKeys.has(key) && val) {
-                    html += `<p style="margin:4px 0;line-height:1.7;"><b>${key}：</b>${val}</p>`;
+                    const lines = val.split('\n');
+                    const escaped0 = lines[0].replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                    html += `<p style="margin:4px 0;line-height:1.7;"><b>▸ ${key}：</b>${escaped0}</p>`;
+                    for (let i = 1; i < lines.length; i++) {
+                        const escaped = lines[i].replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                        html += `<p style="margin:2px 0 2px 2em;line-height:1.7;">${escaped}</p>`;
+                    }
                 }
             }
         }

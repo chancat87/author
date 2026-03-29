@@ -46,6 +46,7 @@ const CloudSyncIndicator = dynamic(() => import('./components/CloudSyncIndicator
 const LoginModal = dynamic(() => import('./components/LoginModal'), { ssr: false });
 const AccountModal = dynamic(() => import('./components/AccountModal'), { ssr: false });
 const RegisterModal = dynamic(() => import('./components/RegisterModal'), { ssr: false });
+const SyncGuideModal = dynamic(() => import('./components/SyncGuideModal'), { ssr: false });
 
 export default function Home() {
   const {
@@ -338,10 +339,10 @@ export default function Home() {
         body: JSON.stringify({
           systemPrompt, userPrompt, apiConfig,
           ...(apiConfig?.useAdvancedParams ? {
-            maxTokens: apiConfig.maxOutputTokens || 65536,
-            temperature: apiConfig.temperature ?? 1,
-            topP: apiConfig.topP ?? 0.95,
-            reasoningEffort: apiConfig.reasoningEffort || 'auto',
+            ...(apiConfig.enableMaxOutputTokens ? { maxTokens: apiConfig.maxOutputTokens || 65536 } : {}),
+            ...(apiConfig.enableTemperature ? { temperature: apiConfig.temperature ?? 1 } : {}),
+            ...(apiConfig.enableTopP ? { topP: apiConfig.topP ?? 0.95 } : {}),
+            ...(apiConfig.enableReasoningEffort ? { reasoningEffort: apiConfig.reasoningEffort || 'auto' } : {}),
           } : {}),
         }),
         signal,
@@ -391,6 +392,7 @@ export default function Home() {
           promptTokens: usageData.promptTokens || 0,
           completionTokens: usageData.completionTokens || 0,
           totalTokens: usageData.totalTokens || 0,
+          cachedTokens: usageData.cachedTokens || 0,
           durationMs,
           source: 'inline',
           provider: apiConfig?.provider || 'unknown',
@@ -594,6 +596,7 @@ export default function Home() {
       <AccountModal />
       <RegisterModal />
       <WelcomeModal />
+      <SyncGuideModal />
     </div>
   );
 }

@@ -352,6 +352,23 @@ export async function forcePullFromCloud(localSet) {
             
             // 无条件覆盖本地
             if (cloudData && cloudData.value !== undefined) {
+                // 数据完整性防御性日志
+                if (key.startsWith('author-settings-nodes')) {
+                    const nodes = cloudData.value;
+                    if (Array.isArray(nodes)) {
+                        const brokenItems = nodes.filter(n => n.type === 'item' && !n.parentId);
+                        if (brokenItems.length > 0) {
+                            console.warn(`[firestore] ⚠️ 发现 ${brokenItems.length} 个缺失 parentId 的游离设定条目:`, brokenItems.map(n => n.name));
+                        }
+                    } else if (nodes === null || typeof nodes !== 'object') {
+                        console.warn(`[firestore] ⚠️ 异常的设定数据结构:`, nodes);
+                    }
+                } else if (key.startsWith('author-chapters')) {
+                    if (!Array.isArray(cloudData.value) || cloudData.value.length === 0) {
+                         console.warn(`[firestore] ⚠️ 拉取到空章节数据:`, key);
+                    }
+                }
+
                 await localSet(key, cloudData.value);
                 pulledCount++;
             }

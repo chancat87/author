@@ -349,11 +349,13 @@ function streamWithGrounding(upstreamRes, preSources) {
 
                                 // usage 信息
                                 if (json.usage) {
+                                    const cachedTokens = json.usage.prompt_tokens_details?.cached_tokens || 0;
                                     controller.enqueue(encoder.encode(`data: ${JSON.stringify({
                                         usage: {
                                             promptTokens: json.usage.prompt_tokens || 0,
                                             completionTokens: json.usage.completion_tokens || 0,
                                             totalTokens: json.usage.total_tokens || 0,
+                                            cachedTokens,
                                         }
                                     })}\n\n`));
                                 }

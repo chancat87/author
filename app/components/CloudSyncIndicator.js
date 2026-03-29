@@ -12,7 +12,7 @@ import { useI18n } from '../lib/useI18n';
  * - 已登录：显示用户头像 + 绿色圆点，点击弹出账户菜单
  */
 export default function CloudSyncIndicator() {
-    const { setShowLoginModal, setShowAccountModal } = useAppStore();
+    const { setShowLoginModal, setShowAccountModal, setShowSyncGuideModal } = useAppStore();
     const { t } = useI18n();
     const [authUser, setAuthUser] = useState(null);
     const [syncStatus, setSyncStatus] = useState(null);
@@ -37,7 +37,37 @@ export default function CloudSyncIndicator() {
         return () => { unmounted = true; };
     }, []);
 
-    if (!firebaseAvailable) return null;
+    if (!firebaseAvailable) {
+        const isElectron = typeof window !== 'undefined' && window.electron;
+
+        if (isElectron) {
+            // Electron 环境下 Firebase 必定可用，即使暂时加载未完成也应该走正常未登录的流程
+            return (
+                <button
+                    id="tour-cloud-sync"
+                    className="cloud-sync-indicator cloud-sync-login"
+                    onClick={() => setShowLoginModal(true)}
+                    title="登录以开启云同步"
+                >
+                    <CloudOff size={15} />
+                    <span className="cloud-sync-label">{t('cloudSync.sync') || '同步'}</span>
+                </button>
+            );
+        }
+
+        // 非 Electron 环境（Web/Vercel）且未配置 Firebase
+        return (
+            <button
+                id="tour-cloud-sync"
+                className="cloud-sync-indicator cloud-sync-login"
+                onClick={() => setShowSyncGuideModal(true)}
+                title={t('settings.syncGuide') || '云同步指南'}
+            >
+                <CloudOff size={15} />
+                <span className="cloud-sync-label">{t('cloudSync.sync') || '同步'}</span>
+            </button>
+        );
+    }
 
     const handleSignOut = async () => {
         try {
@@ -64,6 +94,7 @@ export default function CloudSyncIndicator() {
     if (!authUser) {
         return (
             <button
+                id="tour-cloud-sync"
                 className="cloud-sync-indicator cloud-sync-login"
                 onClick={() => setShowLoginModal(true)}
                 title="登录以开启云同步"
@@ -80,6 +111,7 @@ export default function CloudSyncIndicator() {
     return (
         <>
             <button
+                id="tour-cloud-sync"
                 ref={btnRef}
                 className="cloud-sync-indicator cloud-sync-active"
                 onClick={() => setMenuOpen(!menuOpen)}

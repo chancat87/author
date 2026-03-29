@@ -484,10 +484,10 @@ export default function AiSidebar({ onInsertText }) {
         const requestBody = {
             systemPrompt, userPrompt, apiConfig,
             ...(apiConfig?.useAdvancedParams ? {
-                maxTokens: apiConfig.maxOutputTokens || 65536,
-                temperature: apiConfig.temperature ?? 1,
-                topP: apiConfig.topP ?? 0.95,
-                reasoningEffort: apiConfig.reasoningEffort || 'auto',
+                ...(apiConfig.enableMaxOutputTokens ? { maxTokens: apiConfig.maxOutputTokens || 65536 } : {}),
+                ...(apiConfig.enableTemperature ? { temperature: apiConfig.temperature ?? 1 } : {}),
+                ...(apiConfig.enableTopP ? { topP: apiConfig.topP ?? 0.95 } : {}),
+                ...(apiConfig.enableReasoningEffort ? { reasoningEffort: apiConfig.reasoningEffort || 'auto' } : {}),
             } : {}),
             ...(toolsPayload ? { tools: toolsPayload } : {}),
         };
@@ -545,6 +545,7 @@ export default function AiSidebar({ onInsertText }) {
                 promptTokens: usageData.promptTokens || 0,
                 completionTokens: usageData.completionTokens || 0,
                 totalTokens: usageData.totalTokens || 0,
+                cachedTokens: usageData.cachedTokens || 0,
                 durationMs,
                 source: 'chat',
                 provider: apiConfig?.provider || 'unknown',
@@ -1778,6 +1779,12 @@ export default function AiSidebar({ onInsertText }) {
                                                 <div className="stats-card-value">{tokenStats.totalCompletionTokens.toLocaleString()}</div>
                                                 <div className="stats-card-label">{t('aiSidebar.statsTotalOutput')}</div>
                                             </div>
+                                            {tokenStats.totalCachedTokens > 0 && (
+                                                <div className="stats-card stats-card-cached">
+                                                    <div className="stats-card-value">{tokenStats.totalCachedTokens.toLocaleString()}</div>
+                                                    <div className="stats-card-label">{t('aiSidebar.statsCachedTokens')}</div>
+                                                </div>
+                                            )}
                                             <div className="stats-card">
                                                 <div className="stats-card-value">{tokenStats.totalRequests}</div>
                                                 <div className="stats-card-label">{t('aiSidebar.statsTotalRequests')}</div>
@@ -1912,6 +1919,14 @@ export default function AiSidebar({ onInsertText }) {
                                                                     </span>
                                                                     <span className="info-stat-label">In / Out</span>
                                                                 </div>
+                                                                {m.cachedTokens > 0 && (
+                                                                    <div className="info-stat-group" title={t('aiSidebar.statsCachedTokens')}>
+                                                                        <span className="info-stat-value" style={{ color: 'var(--color-success, #22c55e)' }}>
+                                                                            {m.cachedTokens > 1000 ? (m.cachedTokens / 1000).toFixed(1) + 'k' : m.cachedTokens}
+                                                                        </span>
+                                                                        <span className="info-stat-label">Cached</span>
+                                                                    </div>
+                                                                )}
                                                                 {m.avgSpeed > 0 && (
                                                                     <div className="info-stat-group">
                                                                         <span className="info-stat-value">{m.avgSpeed.toFixed(1)}</span>

@@ -10,7 +10,7 @@ import {
     Bell, RotateCcw, Monitor, CircleDot, Smartphone, Clapperboard,
     Heart, Star, Shield, Zap, Feather, Compass, Flag, Tag, Layers,
     Bookmark, Crown, Flame, Lightbulb, Music, Palette, Sword, Target,
-    Moon, Sun, Cloud, TreePine, Mountain, Waves, Building, Car,
+    Moon, Sun, Cloud, CloudOff, TreePine, Mountain, Waves, Building, Car,
     Plus
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
@@ -325,13 +325,20 @@ export default function SettingsPanel() {
             exportSettingsAsPdf(workNodes);
         } else {
             // JSON 格式
-            const exportNodes = workNodes.map(({ embedding, ...rest }) => rest);
+            const exportNodes = workNodes.filter(n => n.type !== 'work').map(({ embedding, ...rest }) => rest);
+            const itemNodes = workNodes.filter(n => n.type === 'item');
+            const items = itemNodes.map(n => ({
+                name: n.name,
+                category: n.category || 'character',
+                content: n.content || {},
+            }));
             const projectSettings = getProjectSettings();
             const data = {
                 type: 'author-settings-export',
                 version: 2,
                 workName: workEntry.name,
                 exportedAt: new Date().toISOString(),
+                items,
                 nodes: exportNodes,
                 writingMode: projectSettings.writingMode || 'webnovel',
             };
@@ -396,45 +403,81 @@ export default function SettingsPanel() {
         if (ext === 'json') {
             try {
                 const data = JSON.parse(text);
-                if (data.type !== 'author-settings-export' || !Array.isArray(data.nodes)) {
+                if (data.type !== 'author-settings-export') {
                     alert(t('settings.importInvalidFile')); return;
                 }
-                const importedNodes = data.nodes;
-                const importedWorkNode = importedNodes.find(n => n.type === 'work');
-                if (!importedWorkNode) { alert(t('settings.importNoWork')); return; }
-                // 分离 work 节点和子节点
-                const importedSubNodes = importedNodes.filter(n => n.type !== 'work');
 
+                // 恢复项目设置
                 const restorePS = () => {
                     if (data.writingMode) {
                         const ps = getProjectSettings();
-                        if (data.writingMode) ps.writingMode = data.writingMode;
+                        ps.writingMode = data.writingMode;
                         saveProjectSettings(ps); setSettings(ps);
-                        if (data.writingMode) { setWritingModeState(data.writingMode); setWritingMode(data.writingMode); }
+                        setWritingModeState(data.writingMode); setWritingMode(data.writingMode);
                     }
-                    // 兼容旧版导出
-                    if (data.bookInfo && Object.values(data.bookInfo).some(v => v)) {
+                };
+
+                // 优先使用 items 简洁格式，回退到 nodes 格式
+                if (Array.isArray(data.items) && data.items.length > 0) {
+                    // ===== items 格式（新版 / 用户手写） =====
+                    if (!activeWorkId) { alert(t('settings.importNoWork')); return; }
+                    const importedItems = data.items.map(item => ({
+                        name: item.name || '导入条目',
+                        category: item.category || 'character',
+                        content: item.content || {},
+                    }));
+                    // 检测冲突
+                    const existingItems = nodes.filter(n => n.type === 'item' && n.parentId);
+                    const conflicts = [];
+                    const noConflicts = [];
+                    for (const item of importedItems) {
+                        const existing = existingItems.find(n =>
+                            n.name === item.name && n.category === item.category &&
+                            nodes.find(p => p.id === n.parentId && (p.parentId === activeWorkId || p.id === activeWorkId))
+                        );
+                        if (existing) {
+                            conflicts.push({ name: item.name, category: item.category, existing, imported: item });
+                        } else {
+                            noConflicts.push(item);
+                        }
+                    }
+                    restorePS();
+                    if (conflicts.length > 0) {
+                        setConflictData({ conflicts, noConflicts });
+                    } else {
+                        await doImportItems(noConflicts, []);
+                    }
+                } else if (Array.isArray(data.nodes)) {
+                    // ===== nodes 格式（旧版兼容） =====
+                    const importedNodes = data.nodes;
+                    const importedWorkNode = importedNodes.find(n => n.type === 'work');
+                    const workName = importedWorkNode?.name || data.workName || '导入作品';
+                    const importedSubNodes = importedNodes.filter(n => n.type !== 'work');
+
+                    // 兼容旧版 bookInfo
+                    if (data.bookInfo && importedWorkNode && Object.values(data.bookInfo).some(v => v)) {
                         const biNode = importedSubNodes.find(n => n.parentId === importedWorkNode.id && n.category === 'bookInfo');
                         if (biNode && (!biNode.content || Object.keys(biNode.content).length === 0)) {
                             biNode.content = data.bookInfo;
                         }
                     }
-                };
-                const existingWork = works.find(w => w.name === importedWorkNode.name);
-                if (existingWork) {
-                    if (!confirm((t('settings.importOverwrite')).replace('{name}', importedWorkNode.name))) return;
-                    // 覆盖现有作品的节点
-                    await saveSettingsNodes(importedSubNodes, existingWork.id);
-                    restorePS();
-                    setWorks(await getAllWorks());
-                    await handleSwitchWork(existingWork.id);
+
+                    const existingWork = works.find(w => w.name === workName);
+                    if (existingWork) {
+                        if (!confirm((t('settings.importOverwrite')).replace('{name}', workName))) return;
+                        await saveSettingsNodes(importedSubNodes, existingWork.id);
+                        restorePS();
+                        setWorks(await getAllWorks());
+                        await handleSwitchWork(existingWork.id);
+                    } else {
+                        const newWork = await addWork(workName, importedWorkNode?.id);
+                        await saveSettingsNodes(importedSubNodes, newWork.id);
+                        restorePS();
+                        setWorks(await getAllWorks());
+                        await handleSwitchWork(newWork.id);
+                    }
                 } else {
-                    // 创建新作品
-                    const newWork = await addWork(importedWorkNode.name, importedWorkNode.id);
-                    await saveSettingsNodes(importedSubNodes, newWork.id);
-                    restorePS();
-                    setWorks(await getAllWorks());
-                    await handleSwitchWork(newWork.id);
+                    alert(t('settings.importInvalidFile')); return;
                 }
             } catch (err) { alert((t('settings.importError')) + err.message); }
             return;
@@ -1282,7 +1325,7 @@ export const PROVIDERS = [
 ];
 
 function PreferencesForm() {
-    const { language, setLanguage, visualTheme, setVisualTheme, sidebarPushMode, setSidebarPushMode, aiSidebarPushMode, setAiSidebarPushMode } = useAppStore();
+    const { language, setLanguage, visualTheme, setVisualTheme, sidebarPushMode, setSidebarPushMode, aiSidebarPushMode, setAiSidebarPushMode, setShowSyncGuideModal } = useAppStore();
     const { t } = useI18n();
 
     // ---- Firebase 账户 ----
@@ -1410,25 +1453,59 @@ function PreferencesForm() {
             </p>
 
             {/* ===== 云同步账户 ===== */}
-            {firebaseAvailable && (
-                <div style={{ marginBottom: 28, padding: '20px 24px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-light)', background: 'var(--bg-secondary)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                        <Cloud size={16} style={{ color: 'var(--accent)' }} />
-                        <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>云同步</span>
-                        {authUser && (
-                            <span style={{
-                                fontSize: 11, padding: '2px 8px', borderRadius: 20,
-                                background: 'rgba(34,197,94,0.1)', color: '#22c55e', fontWeight: 500,
-                                marginLeft: 'auto',
-                            }}>
-                                <CheckCircle2 size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
-                                已连接
-                            </span>
-                        )}
-                    </div>
+            <div style={{ marginBottom: 28, padding: '20px 24px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-light)', background: 'var(--bg-secondary)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                    <Cloud size={16} style={{ color: 'var(--accent)' }} />
+                    <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>云同步</span>
+                    {firebaseAvailable && authUser && (
+                        <span style={{
+                            fontSize: 11, padding: '2px 8px', borderRadius: 20,
+                            background: 'rgba(34,197,94,0.1)', color: '#22c55e', fontWeight: 500,
+                            marginLeft: 'auto',
+                        }}>
+                            <CheckCircle2 size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
+                            已连接
+                        </span>
+                    )}
+                </div>
 
-                    {authUser ? (
-                        /* 已登录状态 */
+                {!firebaseAvailable ? (
+                    /* 未配置 Firebase（本地离线模式） */
+                    <div style={{
+                        padding: '16px 20px', borderRadius: 'var(--radius-md)',
+                        background: 'var(--bg-primary)', border: '1px solid var(--border-light)',
+                        display: 'flex', flexDirection: 'column', gap: 12,
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                            <div style={{ padding: 8, background: 'var(--bg-secondary)', borderRadius: '50%', color: 'var(--text-muted)' }}>
+                                <CloudOff size={20} />
+                            </div>
+                            <div>
+                                <h4 style={{ margin: '0 0 6px 0', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>本地离线模式</h4>
+                                <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                                    当前未配置云同步服务。您的所有数据都安全地保存在浏览器本地，不会上传到任何服务器。
+                                    配置云同步后，可开启多设备之间的自动同步功能。
+                                </p>
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+                            <button
+                                onClick={() => setShowSyncGuideModal(true)}
+                                style={{
+                                    padding: '6px 14px', fontSize: 12, fontWeight: 500,
+                                    background: 'var(--accent)', color: '#fff', border: 'none',
+                                    borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+                                    transition: 'all 0.2s', boxShadow: '0 2px 8px var(--accent-glow)'
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                                onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+                            >
+                                了解如何开启云同步
+                            </button>
+                        </div>
+                    </div>
+                ) : authUser ? (
+                    /* 已登录状态 */
                         <div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
                                 {authUser.photoURL ? (
@@ -1569,7 +1646,6 @@ function PreferencesForm() {
                         </div>
                     )}
                 </div>
-            )}
 
             {/* 写作模式选择器 */}
             <div style={{ marginBottom: 28 }}>
@@ -2304,54 +2380,93 @@ function ApiConfigForm({ data, onChange }) {
                 <div style={{ padding: '16px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', marginBottom: 20 }}>
                     {/* Temperature */}
                     <div style={{ marginBottom: 14 }}>
-                        <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 5 }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 5 }}>
+                            <input type="checkbox" checked={data.enableTemperature || false} onChange={e => update('enableTemperature', e.target.checked)} style={{ margin: 0 }} />
                             {t('apiConfig.temperature')}
                         </label>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <input type="range" min="0" max="2" step="0.05" value={data.temperature ?? 1} onChange={e => update('temperature', parseFloat(e.target.value))} style={{ flex: 1, accentColor: 'var(--accent)' }} />
-                            <input type="number" min="0" max="2" step="0.05" className="modal-input" style={{ width: 72, margin: 0, padding: '5px 8px', fontSize: 13, textAlign: 'center' }} value={data.temperature ?? 1} onChange={e => update('temperature', parseFloat(e.target.value) || 0)} />
-                        </div>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{t('apiConfig.temperatureDesc')}</div>
+                        {data.enableTemperature && (
+                            <>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingLeft: 22 }}>
+                                    <input type="range" min="0" max="2" step="0.05" value={data.temperature ?? 1} onChange={e => update('temperature', parseFloat(e.target.value))} style={{ flex: 1, accentColor: 'var(--accent)' }} />
+                                    <input type="number" min="0" max="2" step="0.05" className="modal-input" style={{ width: 72, margin: 0, padding: '5px 8px', fontSize: 13, textAlign: 'center' }} value={data.temperature ?? 1} onChange={e => update('temperature', parseFloat(e.target.value) || 0)} />
+                                </div>
+                                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, paddingLeft: 22 }}>{t('apiConfig.temperatureDesc')}</div>
+                            </>
+                        )}
                     </div>
 
                     {/* Top P */}
                     <div style={{ marginBottom: 14 }}>
-                        <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 5 }}>{t('apiConfig.topP')}</label>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <input type="range" min="0" max="1" step="0.05" value={data.topP ?? 0.95} onChange={e => update('topP', parseFloat(e.target.value))} style={{ flex: 1, accentColor: 'var(--accent)' }} />
-                            <input type="number" min="0" max="1" step="0.05" className="modal-input" style={{ width: 72, margin: 0, padding: '5px 8px', fontSize: 13, textAlign: 'center' }} value={data.topP ?? 0.95} onChange={e => update('topP', parseFloat(e.target.value) || 0)} />
-                        </div>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{t('apiConfig.topPDesc')}</div>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 5 }}>
+                            <input type="checkbox" checked={data.enableTopP || false} onChange={e => update('enableTopP', e.target.checked)} style={{ margin: 0 }} />
+                            {t('apiConfig.topP')}
+                        </label>
+                        {data.enableTopP && (
+                            <>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingLeft: 22 }}>
+                                    <input type="range" min="0" max="1" step="0.05" value={data.topP ?? 0.95} onChange={e => update('topP', parseFloat(e.target.value))} style={{ flex: 1, accentColor: 'var(--accent)' }} />
+                                    <input type="number" min="0" max="1" step="0.05" className="modal-input" style={{ width: 72, margin: 0, padding: '5px 8px', fontSize: 13, textAlign: 'center' }} value={data.topP ?? 0.95} onChange={e => update('topP', parseFloat(e.target.value) || 0)} />
+                                </div>
+                                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, paddingLeft: 22 }}>{t('apiConfig.topPDesc')}</div>
+                            </>
+                        )}
                     </div>
 
                     {/* 最大上下文长度 */}
                     <div style={{ marginBottom: 14 }}>
-                        <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 5 }}>{t('apiConfig.maxContextLength')}</label>
-                        <input type="number" min="1024" step="1024" className="modal-input" style={{ margin: 0, width: 160, padding: '5px 8px', fontSize: 13 }} value={data.maxContextLength ?? 200000} onChange={e => update('maxContextLength', parseInt(e.target.value) || 4096)} />
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{t('apiConfig.maxContextLengthDesc')}</div>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 5 }}>
+                            <input type="checkbox" checked={data.enableMaxContextLength || false} onChange={e => update('enableMaxContextLength', e.target.checked)} style={{ margin: 0 }} />
+                            {t('apiConfig.maxContextLength')}
+                        </label>
+                        {data.enableMaxContextLength && (
+                            <>
+                                <div style={{ paddingLeft: 22 }}>
+                                    <input type="number" min="1024" step="1024" className="modal-input" style={{ margin: 0, width: 160, padding: '5px 8px', fontSize: 13 }} value={data.maxContextLength ?? 200000} onChange={e => update('maxContextLength', parseInt(e.target.value) || 4096)} />
+                                </div>
+                                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, paddingLeft: 22 }}>{t('apiConfig.maxContextLengthDesc')}</div>
+                            </>
+                        )}
                     </div>
 
                     {/* 最大输出 Token */}
                     {data.provider !== 'openai-responses' && (
                         <div style={{ marginBottom: 14 }}>
-                            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 5 }}>{t('apiConfig.maxOutputTokens')}</label>
-                            <input type="number" min="256" step="256" className="modal-input" style={{ margin: 0, width: 160, padding: '5px 8px', fontSize: 13 }} value={data.maxOutputTokens ?? 65536} onChange={e => update('maxOutputTokens', parseInt(e.target.value) || 4096)} />
-                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{t('apiConfig.maxOutputTokensDesc')}</div>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 5 }}>
+                                <input type="checkbox" checked={data.enableMaxOutputTokens || false} onChange={e => update('enableMaxOutputTokens', e.target.checked)} style={{ margin: 0 }} />
+                                {t('apiConfig.maxOutputTokens')}
+                            </label>
+                            {data.enableMaxOutputTokens && (
+                                <>
+                                    <div style={{ paddingLeft: 22 }}>
+                                        <input type="number" min="256" step="256" className="modal-input" style={{ margin: 0, width: 160, padding: '5px 8px', fontSize: 13 }} value={data.maxOutputTokens ?? 65536} onChange={e => update('maxOutputTokens', parseInt(e.target.value) || 4096)} />
+                                    </div>
+                                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, paddingLeft: 22 }}>{t('apiConfig.maxOutputTokensDesc')}</div>
+                                </>
+                            )}
                         </div>
                     )}
 
                     {/* 思考层级 */}
                     {data.provider !== 'openai-responses' && (
                         <div style={{ marginBottom: 14 }}>
-                            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 5 }}>{t('apiConfig.reasoningEffort')}</label>
-                            <select className="modal-input" style={{ margin: 0, width: 160, padding: '5px 8px', fontSize: 13 }} value={data.reasoningEffort || 'auto'} onChange={e => update('reasoningEffort', e.target.value)}>
-                                <option value="auto">{t('apiConfig.reasoningAuto')}</option>
-                                <option value="none">{t('apiConfig.reasoningNone') || '关闭思考'}</option>
-                                <option value="low">Low</option>
-                                <option value="medium">Medium</option>
-                                <option value="high">High</option>
-                            </select>
-                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{t('apiConfig.reasoningEffortDesc')}</div>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 5 }}>
+                                <input type="checkbox" checked={data.enableReasoningEffort || false} onChange={e => update('enableReasoningEffort', e.target.checked)} style={{ margin: 0 }} />
+                                {t('apiConfig.reasoningEffort')}
+                            </label>
+                            {data.enableReasoningEffort && (
+                                <>
+                                    <div style={{ paddingLeft: 22 }}>
+                                        <select className="modal-input" style={{ margin: 0, width: 160, padding: '5px 8px', fontSize: 13 }} value={data.reasoningEffort || 'auto'} onChange={e => update('reasoningEffort', e.target.value)}>
+                                            <option value="auto">{t('apiConfig.reasoningAuto')}</option>
+                                            <option value="none">{t('apiConfig.reasoningNone') || '关闭思考'}</option>
+                                            <option value="low">Low</option>
+                                            <option value="medium">Medium</option>
+                                            <option value="high">High</option>
+                                        </select>
+                                    </div>
+                                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, paddingLeft: 22 }}>{t('apiConfig.reasoningEffortDesc')}</div>
+                                </>
+                            )}
                         </div>
                     )}
                 </div>

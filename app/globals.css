@@ -1309,9 +1309,6 @@ body.resizing .main-content {
   text-indent: 2em;
 }
 
-.tiptap p:first-child {
-  text-indent: 0;
-}
 
 /* 含公式/特殊元素的段落取消首行缩进 */
 .tiptap p:has(.math-inline),
@@ -7463,6 +7460,19 @@ h5.chat-md-heading {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+/* Cache hits card — green theme */
+.stats-card-cached::before {
+  background: linear-gradient(90deg, #22c55e, #16a34a);
+  opacity: 1;
+}
+
+.stats-card-cached .stats-card-value {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .stats-detail-row {

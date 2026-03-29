@@ -220,12 +220,14 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
     // ---- 云同步状态（侧栏图标指示） ----
     const [cloudAuthUser, setCloudAuthUser] = useState(null);
     const [cloudSyncStatus, setCloudSyncStatus] = useState(null);
+    const [firebaseAvailable, setFirebaseAvailable] = useState(false);
     useEffect(() => {
         let unmounted = false;
         (async () => {
             try {
                 const { isFirebaseConfigured } = await import('../lib/firebase');
                 if (!isFirebaseConfigured || unmounted) return;
+                setFirebaseAvailable(true);
                 const { onAuthChange, initAuth } = await import('../lib/auth');
                 const { onSyncStatusChange } = await import('../lib/firestore-sync');
                 initAuth();
@@ -834,6 +836,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                         {/* 云同步快捷入口 */}
                         <div ref={syncMenuAnchorRef} style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
                             <IconButton
+                                id="tour-sidebar-sync"
                                 icon={!cloudAuthUser ? <CloudOff size={18} />
                                     : cloudSyncStatus?.syncing ? <RefreshCw size={18} className="spin" />
                                     : <Cloud size={18} />}
@@ -843,10 +846,20 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                                         : cloudSyncStatus?.idle ? '自动同步已暂停'
                                         : cloudSyncStatus?.lastSync ? `已同步 · ${new Date(cloudSyncStatus.lastSync).toLocaleTimeString()}`
                                         : '云同步')
-                                    : '点击登录，开启云同步'}
+                                    : (!firebaseAvailable && !(typeof window !== 'undefined' && window.electron) ? (t('settings.syncGuide') || '云同步指南') : '点击登录，开启云同步')}
                                 text={sidebarOpen ? '同步' : undefined}
                                 tooltipSide="right"
                                 onClick={async () => {
+                                    if (!firebaseAvailable) {
+                                        const isElectron = typeof window !== 'undefined' && window.electron;
+                                        if (isElectron) {
+                                            useAppStore.getState().setShowLoginModal(true);
+                                        } else {
+                                            useAppStore.getState().setShowSyncGuideModal(true);
+                                        }
+                                        return;
+                                    }
+
                                     if (!cloudAuthUser) {
                                         useAppStore.getState().setShowLoginModal(true);
                                         return;

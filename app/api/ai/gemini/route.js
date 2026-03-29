@@ -155,11 +155,15 @@ export async function POST(request) {
                                     // 提取 usage（通常在最后一个 chunk）
                                     const usageMeta = json.usageMetadata;
                                     if (usageMeta?.totalTokenCount) {
+                                        const cachedTokens = usageMeta.cachedContentTokenCount || 0;
+                                        const thoughtsTokens = usageMeta.thoughtsTokenCount || 0;
+                                        const completionTokens = (usageMeta.candidatesTokenCount || 0) + thoughtsTokens;
                                         controller.enqueue(encoder.encode(`data: ${JSON.stringify({
                                             usage: {
                                                 promptTokens: usageMeta.promptTokenCount || 0,
-                                                completionTokens: usageMeta.candidatesTokenCount || 0,
+                                                completionTokens,
                                                 totalTokens: usageMeta.totalTokenCount || 0,
+                                                cachedTokens,
                                             }
                                         })}\n\n`));
                                     }

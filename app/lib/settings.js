@@ -265,6 +265,11 @@ export function getChatApiConfig() {
             searchConfig: chat.searchConfig || main.searchConfig,
             // 继承高级参数设置
             useAdvancedParams: chat.useAdvancedParams ?? main.useAdvancedParams,
+            enableTemperature: chat.enableTemperature ?? main.enableTemperature,
+            enableTopP: chat.enableTopP ?? main.enableTopP,
+            enableMaxContextLength: chat.enableMaxContextLength ?? main.enableMaxContextLength,
+            enableMaxOutputTokens: chat.enableMaxOutputTokens ?? main.enableMaxOutputTokens,
+            enableReasoningEffort: chat.enableReasoningEffort ?? main.enableReasoningEffort,
             temperature: chat.temperature ?? main.temperature,
             topP: chat.topP ?? main.topP,
             maxContextLength: chat.maxContextLength ?? main.maxContextLength,

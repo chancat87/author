@@ -42,10 +42,22 @@ export default function TourOverlay({ onOpenHelp }) {
             placement: 'right'
         },
         {
+            targetId: 'tour-sidebar-sync',
+            title: t('tour.stepCloudSyncTitle'),
+            content: t('tour.stepCloudSyncContent'),
+            placement: 'top'
+        },
+        {
+            targetId: 'tour-cloud-sync',
+            title: t('tour.stepAccountTitle'),
+            content: t('tour.stepAccountContent'),
+            placement: 'left'
+        },
+        {
             targetId: 'tour-github',
             title: t('tour.step5Title'),
             content: t('tour.step5Content'),
-            placement: 'right'
+            placement: 'top'
         }
     ], [t]);
 
@@ -237,7 +249,7 @@ export default function TourOverlay({ onOpenHelp }) {
         }
     }
 
-    const tooltipHeightGuess = 460;
+    const tooltipHeightGuess = 200;
 
     if (tooltipStyle.top && typeof tooltipStyle.top === 'number') {
         // Ensure tooltip doesn't go above viewport
@@ -255,6 +267,20 @@ export default function TourOverlay({ onOpenHelp }) {
     if (tooltipStyle.bottom && typeof tooltipStyle.bottom === 'number') {
         if (tooltipStyle.bottom < 20) {
             tooltipStyle.bottom = 20;
+        }
+    }
+
+    // Ensure tooltip doesn't go off-screen horizontally (for top/bottom placements)
+    const tooltipWidthGuess = 280;
+    if (tooltipStyle.left && typeof tooltipStyle.left === 'number') {
+        if (tooltipStyle.left < tooltipWidthGuess / 2 + 20) {
+            tooltipStyle.left = 20;
+            tooltipStyle.transform = tooltipStyle.transform?.replace('translateX(-50%)', '') || undefined;
+        }
+        if (tooltipStyle.left > windowSize.w - tooltipWidthGuess / 2 - 20) {
+            tooltipStyle.left = undefined;
+            tooltipStyle.right = 20;
+            tooltipStyle.transform = tooltipStyle.transform?.replace('translateX(-50%)', '') || undefined;
         }
     }
 
