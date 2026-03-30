@@ -494,9 +494,10 @@ export async function downloadFile(content, fileName, mimeType = 'text/plain') {
     if (typeof window !== 'undefined' && window.showSaveFilePicker) {
         try {
             const ext = fileName.includes('.') ? '.' + fileName.split('.').pop() : '.txt';
+            const acceptType = ext === '.md' ? 'text/markdown' : mimeType;
             const handle = await window.showSaveFilePicker({
                 suggestedName: fileName,
-                types: [{ description: fileName, accept: { [mimeType]: [ext] } }],
+                types: [{ description: fileName, accept: { [acceptType]: [ext] } }],
             });
             const writable = await handle.createWritable();
             await writable.write(content);
@@ -504,6 +505,7 @@ export async function downloadFile(content, fileName, mimeType = 'text/plain') {
             return;
         } catch (e) {
             if (e.name === 'AbortError') return;
+            console.warn('showSaveFilePicker fallback:', e);
         }
     }
     // fallback: data URL
@@ -522,7 +524,7 @@ export async function downloadBlob(blob, fileName, mimeType) {
             const ext = fileName.includes('.') ? '.' + fileName.split('.').pop() : '';
             const handle = await window.showSaveFilePicker({
                 suggestedName: fileName,
-                types: [{ description: fileName, accept: { [mimeType]: ['.' + ext] } }],
+                types: [{ description: fileName, accept: { [mimeType]: ext ? [ext] : [] } }],
             });
             const writable = await handle.createWritable();
             await writable.write(blob);
@@ -530,6 +532,7 @@ export async function downloadBlob(blob, fileName, mimeType) {
             return;
         } catch (e) {
             if (e.name === 'AbortError') return;
+            console.warn('showSaveFilePicker fallback:', e);
         }
     }
     // fallback: blob URL
@@ -580,7 +583,7 @@ export async function exportWorkAsMarkdown(chapters, fileName) {
         return `# ${title}\n\n${indented}`;
     }).join('\n\n---\n\n');
 
-    await downloadFile(md, `${fileName || '导出作品'}.md`);
+    await downloadFile(md, `${fileName || '导出作品'}.md`, 'text/markdown');
 }
 
 /**

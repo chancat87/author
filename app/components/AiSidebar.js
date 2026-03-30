@@ -12,7 +12,7 @@ import { getProjectSettings, getChatApiConfig, getActiveWorkId, getSettingsNodes
 import { useAppStore } from '../store/useAppStore';
 import ChatMarkdown from './ChatMarkdown';
 import ModelPicker from './ModelPicker';
-import { FolderOpen, Plus, X, Pencil, Trash2, RefreshCw, GitBranch, CornerDownLeft, ClipboardList, Copy, Code2, FileText } from 'lucide-react';
+import { FolderOpen, Plus, X, Pencil, Trash2, RefreshCw, GitBranch, CornerDownLeft, ClipboardList, Copy, Code2, FileText, Maximize2, Minimize2 } from 'lucide-react';
 import { useI18n } from '../lib/useI18n';
 
 /* ---------- 上下文查看器弹窗组件 ---------- */
@@ -385,6 +385,8 @@ export default function AiSidebar({ onInsertText }) {
     const [expandedActions, setExpandedActions] = useState(new Set());
     // 统计刷新版本号
     const [statsVersion, setStatsVersion] = useState(0);
+    // 输入框全屏展开状态
+    const [inputExpanded, setInputExpanded] = useState(false);
 
     const chatEndRef = useRef(null);
     const chatContainerRef = useRef(null);
@@ -1542,21 +1544,36 @@ export default function AiSidebar({ onInsertText }) {
                         {/* 模型切换器 + 输入框 */}
                         <div className="chat-input-area">
                             <div style={{ display: 'flex', gap: 6, flex: 1, alignItems: 'center' }}>
-                                <textarea
-                                    ref={inputRef}
-                                    className="chat-input"
-                                    placeholder={t('aiSidebar.inputPlaceholder')}
-                                    value={inputText}
-                                    onChange={e => setInputText(e.target.value)}
-                                    onKeyDown={e => {
-                                        if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                                            e.preventDefault();
-                                            handleSend();
-                                        }
-                                    }}
-                                    disabled={chatStreaming}
-                                    rows={2}
-                                />
+                                <div style={{ flex: 1, position: 'relative', display: 'flex' }}>
+                                    <textarea
+                                        ref={inputRef}
+                                        className="chat-input"
+                                        style={{ paddingRight: 32 }}
+                                        placeholder={t('aiSidebar.inputPlaceholder')}
+                                        value={inputText}
+                                        onChange={e => setInputText(e.target.value)}
+                                        onKeyDown={e => {
+                                            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                                                e.preventDefault();
+                                                handleSend();
+                                            }
+                                        }}
+                                        disabled={chatStreaming}
+                                        rows={2}
+                                    />
+                                    <button
+                                        style={{
+                                            position: 'absolute', right: 4, bottom: 4, background: 'none', border: 'none',
+                                            color: 'var(--text-muted)', cursor: 'pointer', padding: 4,
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-sm)',
+                                        }}
+                                        onClick={() => setInputExpanded(true)}
+                                        title={t('aiSidebar.expandInput') || '全屏输入'}
+                                        disabled={chatStreaming}
+                                    >
+                                        <Maximize2 size={14} />
+                                    </button>
+                                </div>
                                 {chatStreaming ? (
                                     <button
                                         className="chat-send-btn chat-stop-btn"
@@ -1961,6 +1978,61 @@ export default function AiSidebar({ onInsertText }) {
                     )
                 }
             </div >
+
+            {/* 输入框全屏展开弹窗 */}
+            {
+                inputExpanded && (
+                    <div style={{
+                        position: 'fixed', inset: 0, zIndex: 9999,
+                        background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        backdropFilter: 'blur(3px)'
+                    }} onClick={() => setInputExpanded(false)}>
+                        <div style={{
+                            background: 'var(--bg-primary)', borderRadius: 'var(--radius-lg)',
+                            width: '90%', maxWidth: 800, height: '70vh', minHeight: 400,
+                            padding: '16px 20px', boxShadow: 'var(--shadow-xl)', display: 'flex', flexDirection: 'column', gap: 12
+                        }} onClick={e => e.stopPropagation()}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <Maximize2 size={18} /> {t('aiSidebar.expandInputTitle') || '全屏输入'}
+                                </div>
+                                <button onClick={() => setInputExpanded(false)} style={{
+                                    background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex'
+                                }}>✕</button>
+                            </div>
+                            <textarea
+                                className="chat-input"
+                                style={{ flex: 1, resize: 'none', fontSize: 14, padding: 12 }}
+                                placeholder={t('aiSidebar.inputPlaceholder')}
+                                value={inputText}
+                                onChange={e => setInputText(e.target.value)}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter' && e.ctrlKey && inputText.trim()) {
+                                        e.preventDefault();
+                                        handleSend();
+                                        setInputExpanded(false);
+                                    }
+                                }}
+                                autoFocus
+                            />
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Ctrl + Enter 单键发送 (Command + Enter)</div>
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                    <button className="btn" onClick={() => setInputExpanded(false)}>取消</button>
+                                    <button
+                                        className="btn primary"
+                                        disabled={!inputText.trim()}
+                                        onClick={() => {
+                                            handleSend();
+                                            setInputExpanded(false);
+                                        }}
+                                    >发送请求</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
 
             {/* 上下文查看器弹窗 */}
             {

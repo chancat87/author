@@ -41,9 +41,9 @@
 - **多 AI 供应商**：智谱 GLM-4 / DeepSeek / OpenAI / Google Gemini / Claude / SiliconFlow / 火山引擎 / 阿里云百炼 / MiniMax / Moonshot + 自定义端点
 - **智能模型拉取** — 一键从 API 拉取完整模型列表，自动兼容各种中转站格式（`/models`、`/v1/models`），超时保护不卡死
 - **续写 / 改写 / 润色 / 扩写**，一键生成
-- **Ghost Text** 流式预览 — 像 Cursor 一样实时显示 AI 生成内容，支持接受/拒绝
+- **沉浸式写作引擎（Ghost Text）** 流式预览 — 像 Cursor 一样实时显示 AI 生成内容，支持接受/拒绝
 - **自由对话模式** — 与 AI 讨论剧情、角色、设定
-- **上下文引擎** — AI 自动感知你的角色设定、世界观、前文，保持剧情连贯
+- **AI 全局记忆（Context Engine）** — AI 自动感知你的角色设定、世界观、前文，保持剧情连贯
 - **API 格式切换** — 阿里云百炼和 MiniMax 同时支持 OpenAI 和 Anthropic 两种 API 格式
 
 ### 📚 设定集管理

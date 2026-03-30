@@ -177,11 +177,12 @@ async function downloadTextFile(content, fileName) {
     if (typeof window !== 'undefined' && window.showSaveFilePicker) {
         try {
             const ext = fileName.split('.').pop() || 'txt';
+            const mimeType = ext === 'md' ? 'text/markdown' : 'text/plain';
             const handle = await window.showSaveFilePicker({
                 suggestedName: fileName,
                 types: [{
                     description: ext.toUpperCase() + ' File',
-                    accept: { 'text/plain': ['.' + ext] },
+                    accept: { [mimeType]: ['.' + ext] },
                 }],
             });
             const writable = await handle.createWritable();
@@ -190,6 +191,7 @@ async function downloadTextFile(content, fileName) {
             return;
         } catch (e) {
             if (e.name === 'AbortError') return; // 用户取消
+            console.warn('showSaveFilePicker fallback:', e);
             // 降级到方式二
         }
     }

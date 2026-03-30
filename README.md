@@ -41,9 +41,9 @@ I watched the versatility of these models being gutted. I don't want us to live 
 - **Multi-provider support**: ZhipuAI GLM-4 / DeepSeek / OpenAI / Google Gemini / Claude / SiliconFlow / Volcengine / Moonshot + custom endpoints
 - **Smart model fetching** — one-click fetch full model list from API, auto-compatible with various proxy formats (`/models`, `/v1/models`), with timeout protection
 - **Continue / Rewrite / Polish / Expand** — one-click generation
-- **Ghost Text** streaming preview — see AI output in real-time like Cursor, with accept/reject
+- **Immersive Writing Engine (Ghost Text)** streaming preview — see AI output in real-time like Cursor, with accept/reject
 - **Free chat mode** — discuss plot, characters, and settings with AI
-- **Context engine** — AI automatically reads your character profiles, worldbuilding, and previous chapters to maintain story consistency
+- **Global AI Memory (Context Engine)** — AI automatically reads your character profiles, worldbuilding, and previous chapters to maintain story consistency
 
 ### 📚 Worldbuilding Manager
 - **Tree-structured** management for characters, locations, items, outlines, and writing rules

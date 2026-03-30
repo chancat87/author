@@ -135,6 +135,46 @@ function createWindow() {
         log(`[Download] Original filename: ${suggestedName}`);
     });
 
+    // 捕获底层渲染线程崩溃（如内存溢出 OOM、GPU 崩溃等导致的突然白屏）
+    mainWindow.webContents.on('render-process-gone', (event, details) => {
+        log(`[Crash] Renderer process gone. Reason: ${details.reason}, Code: ${details.exitCode}`);
+        if (details.reason !== 'clean-exit') {
+            const options = {
+                type: 'error',
+                title: '系统崩溃拦截',
+                message: '渲染进程由于致命错误（如内存不足或驱动异常）突然终止。',
+                detail: `崩溃原因: ${details.reason}\n错误码: ${details.exitCode}\n\n系统被迫中断。如果您刚才正在编辑，文字会安全保留在本地存储中不会丢失。\n您可以随时安全地重启应用。`,
+                buttons: ['立即重启', '结束应用'],
+                defaultId: 0
+            };
+            const btnIdx = dialog.showMessageBoxSync(mainWindow, options);
+            if (btnIdx === 0) {
+                app.relaunch();
+                app.quit();
+            } else {
+                app.quit();
+            }
+        }
+    });
+
+    // 网页长时间无响应
+    mainWindow.webContents.on('unresponsive', () => {
+        log('[Crash] Renderer process became unresponsive.');
+        const options = {
+            type: 'warning',
+            title: '进程失去响应',
+            message: '由于高负荷运算或资源挤占，程序目前暂时无法响应。',
+            detail: '您可以耐心等待系统恢复，或者选择强制重启程序。',
+            buttons: ['继续等待', '强制重启'],
+            defaultId: 0
+        };
+        const btnIdx = dialog.showMessageBoxSync(mainWindow, options);
+        if (btnIdx === 1) {
+            app.relaunch();
+            app.quit();
+        }
+    });
+
     let isForceClosing = false;
 
     // 拦截关闭事件，询问是否需要同步
