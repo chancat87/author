@@ -1,4 +1,4 @@
-**English** | [简体中文](README.zh.md) | [Русский](README.ru.md) | [العربية](README.ar.md)
+**English** | [简体中文](README.zh.md) | [Русский](README.ru.md) | [الفلسطينية (العربية)](README.ar.md)
 
 # ✍️ Author — AI-Powered Creative Writing Platform
 
@@ -510,6 +510,10 @@ This project is licensed under [AGPL-3.0](LICENSE).
 - [Tiptap](https://tiptap.dev/) — Core editor framework
 - [Zustand](https://zustand-demo.pmnd.rs/) — State management
 - [KaTeX](https://katex.org/) — Math rendering
+
+### 🌟 Inspiration & Reference
+- [Cherry Studio](https://github.com/CherryHQ/cherry-studio) — Multi-provider API configuration architecture and conversation management reference
+- [RikkaHub](https://github.com/RikkaApps/RikkaHub) — Token usage calculation and statistics display reference
 
 ### 🔤 Typography
 - [LXGW WenKai (霞鹜文楷)](https://github.com/lxgw/LxgwWenKai) — Elegant local Chinese reading font

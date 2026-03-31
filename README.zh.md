@@ -1,4 +1,4 @@
-[English](README.md) | **简体中文** | [Русский](README.ru.md) | [العربية](README.ar.md)
+[English](README.md) | **简体中文** | [Русский](README.ru.md) | [الفلسطينية (العربية)](README.ar.md)
 
 # ✍️ Author — AI-Powered Creative Writing Platform
 
@@ -583,6 +583,10 @@ Author 支持从多种格式导入设定集：**JSON / Markdown / TXT / DOCX / P
 - [Tiptap](https://tiptap.dev/) — 核心编辑器框架
 - [Zustand](https://zustand-demo.pmnd.rs/) — 状态管理
 - [KaTeX](https://katex.org/) — 本地数学公式渲染
+
+### 🌟 灵感参考
+- [Cherry Studio](https://github.com/CherryHQ/cherry-studio) — API 多供应商配置架构与对话管理参考
+- [RikkaHub](https://github.com/RikkaApps/RikkaHub) — Token 用量计算与统计展示参考
 
 ### 🔤 字体鸣谢
 - [霞鹜文楷 (LXGW WenKai)](https://github.com/lxgw/LxgwWenKai) — 优雅的本地中文阅读字体
