@@ -248,14 +248,26 @@ export function getProjectSettings() {
                 };
             }
         }
-        // 自动迁移：为 providerConfigs 中的每个供应商补全 models 数组
+        // 自动迁移：为 providerConfigs 中的每个供应商补全 models 数组 + providerType
         if (settings.apiConfig?.providerConfigs) {
             for (const [key, cfg] of Object.entries(settings.apiConfig.providerConfigs)) {
                 if (!cfg.models) {
+                    // 首次迁移：models 字段不存在时，从当前活跃 model 初始化
                     cfg.models = cfg.model ? [cfg.model] : [];
-                } else if (cfg.model && !cfg.models.includes(cfg.model)) {
-                    cfg.models.unshift(cfg.model);
                 }
+                // 注意：不再自动将 cfg.model 注入 cfg.models，否则用户无法从快切列表中删除模型
+                // 自动迁移：补全 providerType 字段（多实例支持）
+                if (!cfg.providerType) {
+                    // 旧数据 key 本身就是 providerType，实例 key 含下划线后缀
+                    cfg.providerType = key.replace(/_[a-z0-9]+$/, '');
+                }
+            }
+        }
+        // 在返回前，将 providerType 写入 apiConfig 顶层，方便下游直接使用
+        if (settings.apiConfig?.provider && settings.apiConfig.providerConfigs) {
+            const activeCfg = settings.apiConfig.providerConfigs[settings.apiConfig.provider];
+            if (activeCfg?.providerType) {
+                settings.apiConfig.providerType = activeCfg.providerType;
             }
         }
         return settings;
@@ -292,10 +304,13 @@ export function saveProjectSettings(settings) {
 export function getChatApiConfig() {
     const settings = getProjectSettings();
     const chat = settings.chatApiConfig;
+    const base = (chat && chat.provider) ? chat : settings.apiConfig;
+    const main = settings.apiConfig || {};
+
+    let result;
     if (chat && chat.provider) {
         // 从主配置继承 tools 和 searchConfig（如果 chat 中缺失）
-        const main = settings.apiConfig || {};
-        return {
+        result = {
             ...chat,
             tools: chat.tools || main.tools,
             searchConfig: chat.searchConfig || main.searchConfig,
@@ -314,8 +329,146 @@ export function getChatApiConfig() {
             // 继承代理设置（代理是全局配置，不分主/聊天）
             proxyUrl: chat.proxyUrl || main.proxyUrl,
         };
+    } else {
+        result = { ...main };
     }
-    return settings.apiConfig;
+
+    // 应用模型级参数覆盖（如果存在）
+    const instanceKey = result.provider;
+    const modelId = result.model;
+    if (instanceKey && modelId) {
+        const mParams = getModelParams(instanceKey, modelId);
+        if (mParams) {
+            if (mParams.temperature != null) { result.temperature = mParams.temperature; result.enableTemperature = true; }
+            if (mParams.topP != null) { result.topP = mParams.topP; result.enableTopP = true; }
+            if (mParams.maxContextLength != null) { result.maxContextLength = mParams.maxContextLength; result.enableMaxContextLength = true; }
+            if (mParams.maxOutputTokens != null) { result.maxOutputTokens = mParams.maxOutputTokens; result.enableMaxOutputTokens = true; }
+            if (mParams.reasoningEffort != null) { result.reasoningEffort = mParams.reasoningEffort; result.enableReasoningEffort = true; }
+            // 模型级参数自动开启 useAdvancedParams
+            result.useAdvancedParams = true;
+        }
+    }
+
+    // 解析 providerType（多实例架构下 provider 可能是 'deepseek_abc123' 这类实例 key）
+    if (instanceKey) {
+        const cfg = settings.apiConfig?.providerConfigs?.[instanceKey];
+        result.providerType = cfg?.providerType || instanceKey;
+    }
+
+    return result;
+}
+
+// ==================== 供应商多实例管理 ====================
+
+/**
+ * 创建同类型供应商的新实例
+ * @param {string} providerType - 原始供应商类型 key（如 'deepseek'）
+ * @param {string} instanceName - 用户自定义实例名称（可选，自动生成）
+ * @param {Object} initialConfig - 初始配置（可选）
+ * @returns {string} 新创建的实例 key
+ */
+export function addProviderInstance(providerType, instanceName, initialConfig = {}) {
+    const settings = getProjectSettings();
+    const pc = settings.apiConfig.providerConfigs || {};
+    // 生成唯一实例 key
+    const suffix = Date.now().toString(36) + Math.random().toString(36).substr(2, 4);
+    const instanceKey = `${providerType}_${suffix}`;
+    pc[instanceKey] = {
+        apiKey: initialConfig.apiKey || '',
+        baseUrl: initialConfig.baseUrl || '',
+        model: initialConfig.model || '',
+        models: initialConfig.models || [],
+        apiFormat: initialConfig.apiFormat || '',
+        providerType,
+        instanceName: instanceName || `${providerType} (${suffix.slice(0, 4)})`,
+        modelParams: {},
+    };
+    settings.apiConfig.providerConfigs = pc;
+    saveProjectSettings(settings);
+    return instanceKey;
+}
+
+/**
+ * 删除供应商实例
+ * @param {string} instanceKey - 要删除的实例 key
+ */
+export function deleteProviderInstance(instanceKey) {
+    const settings = getProjectSettings();
+    const pc = settings.apiConfig.providerConfigs || {};
+    if (!pc[instanceKey]) return false;
+    delete pc[instanceKey];
+    // 如果当前活跃的 provider 就是这个实例，切回第一个可用
+    if (settings.apiConfig.provider === instanceKey) {
+        const remaining = Object.keys(pc);
+        if (remaining.length > 0) {
+            const first = remaining[0];
+            settings.apiConfig.provider = first;
+            settings.apiConfig.apiKey = pc[first].apiKey || '';
+            settings.apiConfig.baseUrl = pc[first].baseUrl || '';
+            settings.apiConfig.model = pc[first].model || '';
+        }
+    }
+    if (settings.chatApiConfig?.provider === instanceKey) {
+        settings.chatApiConfig = null;
+    }
+    settings.apiConfig.providerConfigs = pc;
+    saveProjectSettings(settings);
+    return true;
+}
+
+/**
+ * 获取指定模型的独立参数覆盖
+ * @param {string} instanceKey - 供应商实例 key
+ * @param {string} modelId - 模型 ID
+ * @returns {Object|null} 参数对象或 null
+ */
+export function getModelParams(instanceKey, modelId) {
+    if (!instanceKey || !modelId) return null;
+    const settings = getProjectSettings();
+    const cfg = settings.apiConfig?.providerConfigs?.[instanceKey];
+    if (!cfg?.modelParams?.[modelId]) return null;
+    const p = cfg.modelParams[modelId];
+    // 返回非空的参数对象，如果所有字段都为 null 则整体返回 null
+    const hasAny = Object.values(p).some(v => v != null);
+    return hasAny ? p : null;
+}
+
+/**
+ * 设置指定模型的独立参数覆盖
+ * @param {string} instanceKey - 供应商实例 key
+ * @param {string} modelId - 模型 ID
+ * @param {Object} params - { temperature?, topP?, maxContextLength?, maxOutputTokens?, reasoningEffort? }
+ */
+export function setModelParams(instanceKey, modelId, params) {
+    if (!instanceKey || !modelId) return;
+    const settings = getProjectSettings();
+    const pc = settings.apiConfig.providerConfigs || {};
+    if (!pc[instanceKey]) return;
+    if (!pc[instanceKey].modelParams) pc[instanceKey].modelParams = {};
+    const prev = pc[instanceKey].modelParams[modelId] || {};
+    pc[instanceKey].modelParams[modelId] = { ...prev, ...params };
+    // 清除值为 null 的字段（表示恢复默认）
+    const mp = pc[instanceKey].modelParams[modelId];
+    for (const k of Object.keys(mp)) {
+        if (mp[k] === null || mp[k] === undefined) delete mp[k];
+    }
+    if (Object.keys(mp).length === 0) delete pc[instanceKey].modelParams[modelId];
+    settings.apiConfig.providerConfigs = pc;
+    saveProjectSettings(settings);
+}
+
+/**
+ * 获取 providerType 对应的所有实例 key 列表
+ * @param {string} providerType - 供应商类型
+ * @returns {string[]} 实例 key 数组
+ */
+export function getProviderInstances(providerType) {
+    const settings = getProjectSettings();
+    const pc = settings.apiConfig?.providerConfigs || {};
+    return Object.keys(pc).filter(key => {
+        const cfg = pc[key];
+        return (cfg.providerType || key) === providerType;
+    });
 }
 
 // 添加角色
@@ -421,6 +574,7 @@ const WORK_SUB_CATEGORIES = [
         { name: '文风规范', icon: 'Palette' },
         { name: '禁忌/注意', icon: 'Flag' },
     ]},
+    { suffix: 'custom', name: '自定义设定', category: 'custom', type: 'folder', subFolders: [] },
 ];
 
 // 全局根分类（不属于任何作品）— 已废弃，所有规则均归属各作品
@@ -739,6 +893,26 @@ export async function getSettingsNodes(workId) {
         }
         // 修复 parentId 不匹配的根分类节点（数据损坏修复）
         const repaired = repairOrphanedRootFolders(nodes, wid);
+        // 为旧作品补充缺失的根分类文件夹（如新增的 custom 分类）
+        let rootFolderPatched = false;
+        const now2 = new Date().toISOString();
+        const existingRootOrder = nodes
+            .filter(n => n.parentId === wid && (n.type === 'folder' || n.type === 'special'))
+            .reduce((m, n) => Math.max(m, n.order || 0), -1);
+        WORK_SUB_CATEGORIES.forEach((cat, i) => {
+            const hasRoot = nodes.some(n =>
+                n.parentId === wid && n.category === cat.category && (n.type === 'folder' || n.type === 'special')
+            );
+            if (!hasRoot) {
+                const catId = `${wid}-${cat.suffix}`;
+                nodes.push({
+                    id: catId, name: cat.name, type: cat.type, category: cat.category,
+                    parentId: wid, order: existingRootOrder + 1 + i, icon: cat.icon || '',
+                    content: {}, collapsed: false, createdAt: now2, updatedAt: now2,
+                });
+                rootFolderPatched = true;
+            }
+        });
         // 为已有分类补充预设子文件夹
         const patched = ensurePresetSubFolders(nodes, wid);
         // 确保 bookInfo 节点存在（兼容老数据）
@@ -755,7 +929,7 @@ export async function getSettingsNodes(workId) {
             biPatched = true;
         }
 
-        if (repaired || patched || biPatched) {
+        if (repaired || patched || biPatched || rootFolderPatched) {
             await persistSet(getNodesKey(wid), nodes);
         }
         return nodes;

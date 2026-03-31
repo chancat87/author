@@ -11,7 +11,9 @@ export async function POST(request) {
         const proxyUrl = apiConfig?.proxyUrl || '';
 
         const isCustomEmbed = apiConfig?.useCustomEmbed;
-        const provider = isCustomEmbed ? apiConfig.embedProvider : (apiConfig?.provider || 'zhipu');
+        // 多实例架构下，apiConfig.provider 可能是实例 key，需回退到 providerType
+        const rawProvider = isCustomEmbed ? apiConfig.embedProvider : (apiConfig?.providerType || apiConfig?.provider || 'zhipu');
+        const provider = rawProvider;
         const apiKey = rotateKey(isCustomEmbed ? (apiConfig.embedApiKey || apiConfig?.apiKey) : apiConfig?.apiKey);
 
         // 自动识别默认填写或遗留的智谱URL并矫正为对应官方URL

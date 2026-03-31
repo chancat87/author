@@ -197,6 +197,7 @@
         "save": "Сохранить",
         "actionsApply": "Применить",
         "actionsApplied": "Применено",
+        "actionsDelete": "Удалить",
         "inputPlaceholder": "Введите сообщение... (Enter для отправки, Shift+Enter для новой строки)",
         "searchArchive": "Поиск по генерациям...",
         "emptyArchiveIcon": "",

@@ -242,6 +242,17 @@ export async function buildContext(activeChapterId, selectedText, selectedIds = 
         finalItemNodes = Array.from(new Set([...manualItemNodes, ...autoRetrievedNodes]));
     }
 
+    // ===== 构建设定索引（全量，供 AI 查询/查找/删除用） =====
+    const allItemNodes = nodes.filter(n => n.type === 'item');
+    const catLabel = { character: '角色', world: '世界观', location: '地点', object: '物品', plot: '大纲', rules: '规则', custom: '自定义' };
+    const settingsIndexLines = allItemNodes.map(n => {
+        const statusTag = n.enabled === false ? '[已禁用]' : '';
+        return `- ${catLabel[n.category] || n.category} | ${n.name}${statusTag}`;
+    });
+    const settingsIndex = settingsIndexLines.length > 0
+        ? settingsIndexLines.join('\n')
+        : '';
+
     const writingMode = getWritingMode();
 
     // 从当前作品的 bookInfo 特殊节点读取
@@ -272,6 +283,7 @@ export async function buildContext(activeChapterId, selectedText, selectedIds = 
     const context = {
         writingMode,
         ...budgetedModules,
+        settingsIndex,
         focusText: selectedText || '',
     };
 
@@ -457,6 +469,11 @@ export function compileSystemPrompt(context, mode) {
     }
     if (context.currentChapter) {
         sections.push(`【当前写作位置】\n${context.currentChapter}`);
+    }
+
+    // 在 chat 模式下注入设定索引，让 AI 知道所有条目
+    if (mode === 'chat' && context.settingsIndex) {
+        sections.push(`【设定集条目索引】\n以下是当前作品的全部设定条目列表（包括已禁用的），当用户询问"有哪些角色/设定"或要求查找、删除条目时，请参考此列表：\n${context.settingsIndex}`);
     }
 
     const modeInstruction = getModeInstruction(mode);
@@ -688,7 +705,8 @@ function getModeInstruction(mode) {
 {"action":"add","category":"character","name":"角色姓名","content":{"role":"主角","personality":"...","background":"..."}}
 [/SETTINGS_ACTION]
 
-可用的 action: "add"（新增）、"update"（更新，需提供 nodeId）、"delete"（删除，需提供 nodeId）
+可用的 action: "add"（新增）、"update"（更新）、"delete"（删除）
+更新和删除可以通过 name+category 定位，也可以通过 nodeId 定位。优先使用 name+category，因为用户通常用名称来交流。
 
 可用的 category 和对应 content 字段：
 - "character"：角色。content 可含：role, age, gender, appearance, personality, background, motivation, skills, speechStyle, relationships, arc, notes
@@ -704,8 +722,9 @@ function getModeInstruction(mode) {
 - 如果需要多个操作，使用多个 [SETTINGS_ACTION] 块
 - 操作块前后必须有正常的文字说明
 - 不要用代码围栏（\`\`\`）包裹操作块，直接使用 [SETTINGS_ACTION] 标签
-- update 示例：{"action":"update","nodeId":"具体id","name":"新名称","content":{...}}
-- delete 示例：{"action":"delete","nodeId":"具体id"}
+- update 示例：{"action":"update","category":"character","name":"角色姓名","content":{"personality":"新性格描述"}}
+- delete 示例：{"action":"delete","category":"character","name":"要删除的角色名"}
+- 当用户说"删除XX"时，必须输出 delete 操作，即使你认为不该删除，也要先执行用户的要求
 - 在正文中已有角色/设定出现时，如果用户要求，可以从正文分析内容并自动创建设定`;
 
         default:

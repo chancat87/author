@@ -787,15 +787,54 @@ export default function AiSidebar({ onInsertText }) {
         try {
             const nodes = await getSettingsNodes();
             const workId = getActiveWorkId() || 'work-default';
-            const catToSuffix = { character: 'characters', world: 'world', location: 'locations', object: 'objects', plot: 'plot', rules: 'rules', custom: 'rules' };
-            const suffix = catToSuffix[action.category] || 'rules';
-            let parentId = `${workId}-${suffix}`;
-            const parentNode = nodes.find(n => n.id === parentId);
-            if (!parentNode) parentId = nodes.find(n => n.parentId === workId && n.category === action.category)?.id || parentId;
 
+            // ===== 1. 归一化 category =====
+            // AI 可能输出中文分类名、别名或混写，统一映射到英文标准 key
+            const CATEGORY_ALIASES = {
+                character: 'character', world: 'world', location: 'location',
+                object: 'object', plot: 'plot', rules: 'rules', custom: 'custom',
+                '人物': 'character', '角色': 'character', '人物设定': 'character',
+                '世界': 'world', '世界观': 'world', '世界设定': 'world', '世界观设定': 'world',
+                '地点': 'location', '地点设定': 'location', '场所': 'location', '场景': 'location',
+                '空间': 'location', '地理': 'location',
+                '物品': 'object', '道具': 'object', '物品设定': 'object', '装备': 'object',
+                '大纲': 'plot', '情节': 'plot', '剧情': 'plot', '故事线': 'plot', '故事': 'plot',
+                '规则': 'rules', '写作规则': 'rules', '规范': 'rules',
+                '自定义': 'custom', '其他': 'custom', '补充': 'custom', '补充设定': 'custom',
+                'characters': 'character', 'char': 'character', 'npc': 'character', 'person': 'character',
+                'worlds': 'world', 'worldbuilding': 'world', 'setting': 'world', 'lore': 'world',
+                'locations': 'location', 'place': 'location', 'places': 'location', 'scene': 'location',
+                'objects': 'object', 'item': 'object', 'items': 'object', 'prop': 'object', 'props': 'object',
+                'outline': 'plot', 'story': 'plot', 'storyline': 'plot',
+                'rule': 'rules', 'writing_rules': 'rules',
+            };
+            const rawCat = (action.category || '').toLowerCase().trim();
+            const normalizedCat = CATEGORY_ALIASES[rawCat] || CATEGORY_ALIASES[action.category] || 'custom';
+            action.category = normalizedCat;
+
+            // ===== 2. 查找父文件夹 =====
+            // 优先通过 category 在节点树中搜索（最可靠，不依赖 ID 格式）
+            const catToSuffix = { character: 'characters', world: 'world', location: 'locations', object: 'objects', plot: 'plot', rules: 'rules', custom: 'custom' };
+            let parentNode = nodes.find(n =>
+                n.parentId === workId && n.category === normalizedCat && (n.type === 'folder' || n.type === 'special')
+            );
+            if (!parentNode) {
+                const suffix = catToSuffix[normalizedCat] || 'custom';
+                parentNode = nodes.find(n => n.id === `${workId}-${suffix}`);
+            }
+            if (!parentNode) {
+                parentNode = nodes.find(n => n.parentId === workId && n.category === 'custom' && n.type === 'folder');
+            }
+            const parentId = parentNode?.id || `${workId}-${catToSuffix[normalizedCat] || 'custom'}`;
+
+            // ===== 3. 去重查找 =====
             const resolveNode = () => {
                 if (action.nodeId) return nodes.find(n => n.id === action.nodeId);
-                if (action.name) return nodes.find(n => n.name === action.name && n.category === action.category && n.type === 'item');
+                if (action.name) {
+                    const exact = nodes.find(n => n.name === action.name && n.category === normalizedCat && n.type === 'item');
+                    if (exact) return exact;
+                    return nodes.find(n => n.name === action.name && n.type === 'item');
+                }
                 return null;
             };
 
@@ -805,7 +844,7 @@ export default function AiSidebar({ onInsertText }) {
                     const mergedContent = { ...(existing.content || {}), ...(action.content || {}) };
                     await updateSettingsNode(existing.id, { name: action.name || existing.name, content: mergedContent });
                 } else {
-                    await addSettingsNode({ name: action.name || '新条目', type: 'item', category: action.category || 'custom', parentId, content: action.content || {} });
+                    await addSettingsNode({ name: action.name || '新条目', type: 'item', category: normalizedCat, parentId, content: action.content || {} });
                 }
             } else if (action.action === 'update') {
                 const target = resolveNode();
@@ -815,11 +854,17 @@ export default function AiSidebar({ onInsertText }) {
                     if (action.content) updates.content = { ...(target.content || {}), ...action.content };
                     await updateSettingsNode(target.id, updates);
                 } else {
-                    await addSettingsNode({ name: action.name || '新条目', type: 'item', category: action.category || 'custom', parentId, content: action.content || {} });
+                    await addSettingsNode({ name: action.name || '新条目', type: 'item', category: normalizedCat, parentId, content: action.content || {} });
                 }
             } else if (action.action === 'delete') {
                 const target = resolveNode();
-                if (target) await deleteSettingsNode(target.id);
+                if (target) {
+                    const deletedName = target.name || action.name || '未命名条目';
+                    await deleteSettingsNode(target.id);
+                    showToast(`已删除「${deletedName}」`, 'success');
+                } else {
+                    showToast(`未找到要删除的条目「${action.name || action.nodeId || ''}」`, 'error');
+                }
             }
 
             const msgIdFromKey = actionKey.split('-action-')[0].replace(/-v\d+$/, '');
@@ -833,7 +878,7 @@ export default function AiSidebar({ onInsertText }) {
                 saveSessionStore(newStore);
                 return newStore;
             });
-            showToast('应用设定成功', 'success');
+            if (action.action !== 'delete') showToast('应用设定成功', 'success');
         } catch (err) {
             console.error('Settings action failed:', err);
             showToast('应用操作失败：' + err.message, 'error');
@@ -1458,7 +1503,7 @@ export default function AiSidebar({ onInsertText }) {
                                                                     >
                                                                         <span className="settings-action-badge">{t(`aiSidebar.actions.${action.action}`) || action.action}</span>
                                                                         <span className="settings-action-cat">{t(`aiSidebar.categories.${action.category}`) || action.category || ''}</span>
-                                                                        <span className="settings-action-name">{action.name || action.nodeId || ''}</span>
+                                                                        <span className="settings-action-name">{action.name || (action.nodeId && contextItems?.find(ci => ci._nodeId === action.nodeId)?.name) || ''}</span>
                                                                         <span style={{ marginLeft: 'auto', fontSize: '10px', color: 'var(--text-muted)' }}>{expandedActions.has(actionKey) ? '▲...' : '▼...'}</span>
                                                                     </div>
                                                                     {action.content && expandedActions.has(actionKey) && (
@@ -1471,13 +1516,29 @@ export default function AiSidebar({ onInsertText }) {
                                                                             ))}
                                                                         </div>
                                                                     )}
-                                                                    <button
-                                                                        className="btn-mini primary settings-action-apply"
-                                                                        onClick={() => onApplySettingsAction?.(action, actionKey)}
-                                                                        disabled={msg._appliedActions?.includes(actionKey)}
-                                                                    >
-                                                                        {msg._appliedActions?.includes(actionKey) ? t('aiSidebar.actionsApplied') : t('aiSidebar.actionsApply')}
-                                                                    </button>
+                                                                    <div className="settings-action-buttons" style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                                                                        <button
+                                                                            className="btn-mini primary settings-action-apply"
+                                                                            onClick={() => onApplySettingsAction?.(action, actionKey)}
+                                                                            disabled={msg._appliedActions?.includes(actionKey)}
+                                                                        >
+                                                                            {msg._appliedActions?.includes(actionKey) ? t('aiSidebar.actionsApplied') : t('aiSidebar.actionsApply')}
+                                                                        </button>
+                                                                        <button
+                                                                            className="btn-mini settings-action-delete"
+                                                                            onClick={() => onApplySettingsAction?.({ action: 'delete', category: action.category, name: action.name, nodeId: action.nodeId }, actionKey + '-del')}
+                                                                            title="删除此设定条目"
+                                                                            style={{
+                                                                                background: 'transparent',
+                                                                                border: '1px solid var(--border-color, rgba(200,200,200,0.3))',
+                                                                                color: 'var(--text-secondary)',
+                                                                                display: 'inline-flex', alignItems: 'center', gap: '3px',
+                                                                                cursor: 'pointer', borderRadius: '4px', padding: '3px 8px', fontSize: '11px',
+                                                                            }}
+                                                                        >
+                                                                            <Trash2 size={11} /> {t('aiSidebar.actionsDelete') || '删除'}
+                                                                        </button>
+                                                                    </div>
                                                                 </div>
                                                             );
                                                         }

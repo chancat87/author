@@ -142,40 +142,94 @@ export default function ModelPicker({ target = 'editor', onOpenSettings, classNa
         panel.style.top = top + 'px';
     });
 
-    // 构建供应商分组列表
+    // 构建供应商分组列表（支持多实例）
     const groups = useMemo(() => {
         if (!config) return [];
         const pc = config.providerConfigs;
         const configured = [];
         const unconfigured = [];
 
-        for (const p of PROVIDERS) {
-            const cfg = pc[p.key];
-            const hasKey = target === 'embed'
-                ? !!(cfg?.apiKey || (config.active?.provider === p.key && config.active?.apiKey) || config.mainApiKey)
-                : !!(cfg?.apiKey || (config.active?.provider === p.key && config.active?.apiKey) || (config.mainProvider === p.key && config.mainApiKey));
-            // 只显示用户在设置中勾选加入快切列表的模型
-            const userModels = cfg?.models || [];
+        // 统计每个 providerType 有几个实例，用于判断是否显示实例名
+        const typeInstanceCount = {};
+        const processedKeys = new Set();
 
-            // 搜索过滤
+        // 先遍历预设供应商列表
+        for (const p of PROVIDERS) {
+            // 找到所有使用该 providerType 的 key（含本体 + 用户实例）
+            const instanceKeys = Object.keys(pc).filter(k => {
+                const cfg = pc[k];
+                return (cfg.providerType || k) === p.key;
+            });
+            // 如果 providerConfigs 中存在原始 key，确保它在列表里
+            if (pc[p.key] && !instanceKeys.includes(p.key)) {
+                instanceKeys.unshift(p.key);
+            }
+            // 如果没有任何实例配置，也用原始 key
+            if (instanceKeys.length === 0) instanceKeys.push(p.key);
+            typeInstanceCount[p.key] = instanceKeys.length;
+
+            for (const instanceKey of instanceKeys) {
+                if (processedKeys.has(instanceKey)) continue;
+                processedKeys.add(instanceKey);
+                const cfg = pc[instanceKey];
+                const hasKey = target === 'embed'
+                    ? !!(cfg?.apiKey || (config.active?.provider === instanceKey && config.active?.apiKey) || config.mainApiKey)
+                    : !!(cfg?.apiKey || (config.active?.provider === instanceKey && config.active?.apiKey) || (config.mainProvider === instanceKey && config.mainApiKey));
+                const userModels = cfg?.models || [];
+
+                // 实例显示名：如果有多个实例，使用实例自定义名称
+                const instanceName = cfg?.instanceName || '';
+                const displayLabel = instanceKeys.length > 1 && instanceName
+                    ? `${p.label} — ${instanceName}`
+                    : p.label;
+
+                const q = search.toLowerCase();
+                const providerMatch = !q || displayLabel.toLowerCase().includes(q) || instanceKey.includes(q) || p.key.includes(q);
+                const filteredModels = q
+                    ? userModels.filter(m => m.toLowerCase().includes(q) || providerMatch)
+                    : userModels;
+
+                if (!providerMatch && filteredModels.length === 0) continue;
+
+                if (userModels.length === 0) {
+                    if (hasKey) {
+                        configured.push({ provider: { ...p, key: instanceKey, label: displayLabel }, hasKey, models: [], allModels: [], instanceKey });
+                    }
+                    continue;
+                }
+
+                const entry = { provider: { ...p, key: instanceKey, label: displayLabel }, hasKey, models: filteredModels, allModels: userModels, instanceKey };
+                configured.push(entry);
+            }
+        }
+
+        // 遍历 providerConfigs 中可能存在的、不对应任何预设供应商的自定义实例
+        for (const [key, cfg] of Object.entries(pc)) {
+            if (processedKeys.has(key)) continue;
+            processedKeys.add(key);
+            const provType = cfg.providerType || key;
+            const baseProv = PROVIDERS.find(pp => pp.key === provType);
+            const hasKey = !!(cfg.apiKey);
+            const userModels = cfg.models || [];
+            const displayLabel = cfg.instanceName || baseProv?.label || provType;
             const q = search.toLowerCase();
-            const providerMatch = !q || p.label.toLowerCase().includes(q) || p.key.includes(q);
+            const providerMatch = !q || displayLabel.toLowerCase().includes(q) || key.includes(q);
             const filteredModels = q
                 ? userModels.filter(m => m.toLowerCase().includes(q) || providerMatch)
                 : userModels;
-
             if (!providerMatch && filteredModels.length === 0) continue;
-            // 有勾选模型的供应商始终显示（无论是否有 key），没有勾选模型且有 key 的提示去设置
-            if (userModels.length === 0) {
-                if (hasKey) {
-                    // 有 key 但没勾选模型 — 显示在已配置区提示去设置
-                    configured.push({ provider: p, hasKey, models: [], allModels: [] });
-                }
-                continue;
+            const fakeProvider = {
+                key: key,
+                label: displayLabel,
+                baseUrl: cfg.baseUrl || baseProv?.baseUrl || '',
+                models: baseProv?.models || [],
+                apiFormat: cfg.apiFormat || baseProv?.apiFormat || '',
+            };
+            if (userModels.length === 0 && hasKey) {
+                configured.push({ provider: fakeProvider, hasKey, models: [], allModels: [], instanceKey: key });
+            } else if (filteredModels.length > 0) {
+                configured.push({ provider: fakeProvider, hasKey, models: filteredModels, allModels: userModels, instanceKey: key });
             }
-
-            const entry = { provider: p, hasKey, models: filteredModels, allModels: userModels };
-            configured.push(entry);
         }
 
         return [
@@ -218,7 +272,9 @@ export default function ModelPicker({ target = 'editor', onOpenSettings, classNa
 
         const pc = settings.apiConfig.providerConfigs || {};
         const providerCfg = pc[providerKey] || {};
-        const providerDef = PROVIDERS.find(p => p.key === providerKey);
+        // 对于实例 key（如 deepseek_abc），通过 providerType 查找预设定义
+        const providerType = providerCfg.providerType || providerKey;
+        const providerDef = PROVIDERS.find(p => p.key === providerKey) || PROVIDERS.find(p => p.key === providerType);
 
         // 构建目标 apiConfig 片段
         const newCfg = {
@@ -286,7 +342,8 @@ export default function ModelPicker({ target = 'editor', onOpenSettings, classNa
 
     const activeProvider = config.active?.provider || '';
     const activeModel = config.active?.model || '';
-    const providerDef = PROVIDERS.find(p => p.key === activeProvider);
+    const activeProviderType = config.providerConfigs?.[activeProvider]?.providerType || activeProvider;
+    const providerDef = PROVIDERS.find(p => p.key === activeProvider) || PROVIDERS.find(p => p.key === activeProviderType);
     const displayModel = activeModel.length > 28 ? activeModel.slice(0, 26) + '…' : activeModel;
     const targetLabel = target === 'chat'
         ? (t('modelPicker.chatModel') || '对话')

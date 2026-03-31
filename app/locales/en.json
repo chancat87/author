@@ -197,6 +197,7 @@
     "save": "Save",
     "actionsApply": "Apply",
     "actionsApplied": "Applied",
+    "actionsDelete": "Delete",
     "inputPlaceholder": "Type message... (Enter to send, Shift+Enter for newline)",
     "searchArchive": "Search generations...",
     "emptyArchiveIcon": "",

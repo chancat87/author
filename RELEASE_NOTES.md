@@ -1,25 +1,31 @@
 ## 📋 本次焕新简报 / Release Overview
 
-本次常规更新（v1.2.11）带来了底层坚若磐石般的稳定性提升。我们在 Electron 核心模块与 React 渲染层植入了双重“急救系统”，让你面对几百万字史诗级巨著的运算时，不再担心突发的内存溢出或进程卡死。此外，全面启用了更加具有代入感的「沉浸式写作引擎（Ghost Text）」等进阶术语体系。
+本次更新（v1.2.12）大幅增强了 AI 助手的设定集管理能力和 API 多实例配置体系。AI 现在可以通过对话直接查找、列出和按名称删除设定条目；API 配置支持同一供应商创建多个独立实例，每个实例可配置独立的 URL、Key、模型列表和高级参数；同时修复了 AI 将设定错误归类到"写作规则"的分类混乱 Bug。
 
 ### 🇨🇳 中文更新概览
 
-- 🛡️ **底层进程失去响应与灾难级抗毁保护**：深入 `electron/main.js` 重构，新增了针对高负荷运算 (`unresponsive` / `crashed`) 的原生级监听器。从现在起，如果你在超大设定集下开启深层 RAG 向量运算导致 CPU 吃紧或界面假死，系统将主动弹出挽救浮窗，允许你继续等待或者安全软重启，再也不必强行结束任务管理器了。
-- 🚨 **React 全局错误边界（Error Boundary）**：新增页面防爆错页面（`app/error.js`）。如果因插件冲突或某些罕见的异步时序遇到崩溃，现已能够优雅地显示错误日志与恢复按钮，而非直接白屏。
-- ⌨️ **输入法兼容度与回车防抖终极调优**：细节魔鬼！深度修复了 `AiSidebar` 等浮动侧边栏里中英文输入法结束瞬间（\`isComposing\`）与回车发送快捷键的键位冲突（防抖+回车屏蔽换行），彻底告别以前误触发送和意外换行的别扭体验。
-- 🌐 **多语言与底层安全链路全面无死角覆盖**：所有的帮助面板与中/英/俄/阿四国语言 README 均统一采用 **「沉浸式写作引擎（Ghost Text）」** 与 **「AI 全局记忆（Context Engine）」** 等专业级系统命名；此外也重构优化了一部分项目存档 IO 的防御能力（`project-io.js` / `storage.js`）。
+- 🧠 **AI 设定集全知全能**：AI 助手现在拥有当前作品的完整设定索引（包括已禁用的条目），用户可以直接问"有哪些角色"或"列出所有世界观设定"，AI 即刻列出完整条目清单。删除操作也从强制要求 nodeId 升级为按名称智能查找，直接说"删除李白这个角色"即可精准执行。
+- 🗂️ **AI 分类归一化引擎**：引入了 60+ 种中英文分类别名映射表（`CATEGORY_ALIASES`），彻底解决了 AI 输出"人物"被归档到"写作规则"、"世界观"进了"自定义"等分类混乱问题。所有 AI 生成的设定卡片现在都能精准落入正确的分类文件夹。
+- 🗑️ **AI 对话删除功能**：在设定操作卡片中新增了独立的「🗑 删除」按钮，支持一键删除对应条目。同时 AI 也可以通过对话直接生成删除指令。删除操作会显示真实条目名称（如"已删除「李白」"），不再暴露内部 ID。
+- 🔌 **同类型供应商多实例配置**：全面重构 API 配置架构，支持为同一类型供应商（如 OpenAI 兼容）创建多个独立实例。每个实例拥有独立的 URL、API Key、模型列表，解决了"url1 有 a1/a2/a3，url2 有 a1/b1/b2"时快切列表冲突的痛点。
+- ⚙️ **模型级高级参数覆盖**：高级模型参数（Temperature、Top P、最大输出 Token、推理强度等）现在支持按模型独立开关和覆盖——同一供应商下不同模型可以有不同的参数配置。
+- 🧹 **快切列表模型清理**：修复了快切列表中已配置模型无法清除的问题，用户可以自由管理每个实例的模型库。
+- 🔍 **跨类别去重保护**：AI 创建设定时新增跨类别同名检测，即使 AI 给出了不同的分类名，也不会重复创建同名条目。
 
-📦 全自动封装构建流程完毕，点击下方 `.exe` 图标即可立刻感受毫无波澜的顶级稳定。
+📦 点击下方 `.exe` 安装包即可体验完整升级。
 
 ---
 
 ### 🇺🇸 English Release Notes
 
-Version 1.2.11 brings rock-solid stability to the very core of this engine. We've implanted a double-tiered "first aid" rescue system across both the Electron main thread and the React rendering tree to combat intense resource-hogging edge cases, ensuring your creative momentum never crashes.
+Version 1.2.12 delivers a major evolution in AI settings management and API multi-instance configuration. The AI assistant now has full awareness of all settings entries and can search, list, and delete them by name through natural conversation. The API system now supports multiple independent instances per provider type, each with its own URL, Key, model list, and advanced parameters.
 
-- 🛡️ **Hardware-Level Unresponsive & Crash Guards:** A deep dive into \`electron/main.js\` introduces highly aggressive native listeners targeting \`unresponsive\` loops and renderer crashes. When dealing with colossal lore-books that bottleneck your CPU during heavy RAG vectorization, instead of a silent white screen freezing, you will now receive an elegant OS-level prompt to safely wait it out or cleanly force-restart the app.
-- 🚨 **Global React Error Boundaries:** Deployed a brand-new page-wide fallback module (\`app/error.js\`). Certain harsh async conflicts that previously might've blown up the view as a blank screen will now be elegantly trapped, presenting readable error logs and recovery buttons.
-- ⌨️ **IME Composition & Keystroke Finesse:** Ultimate detailing work inside the \`AiSidebar\` textarea handling! We finally eradicated those annoying bugs caused by Asian input method composition (\`isComposing\`) overlapping with Enter-to-Send events. Goodbye to misfires and unintended line breaks while chatting with the AI.
-- 🌐 **Terminology Unification & Omni-Lingual Refresh:** Upgraded our core branding to professional standards across internal tooltips and quad-language (EN/RU/AR/ZH) READMEs. Enjoy your interactions with the **"Immersive Writing Engine (Ghost Text)"** and **"Global AI Memory (Context Engine)"**.
+- 🧠 **AI Full Settings Awareness:** The AI assistant now receives a complete settings index (including disabled entries) for the current work. Users can ask "list all characters" or "what settings do I have?" and get instant, comprehensive answers. Deletion is upgraded from requiring nodeId to intelligent name-based matching — just say "delete Li Bai" and it's done.
+- 🗂️ **Category Normalization Engine:** Introduced a 60+ alias mapping table (`CATEGORY_ALIASES`) that resolves Chinese/English category name variants to their canonical form. This fixes the critical bug where AI-generated entries for "characters" or "worldbuilding" would be incorrectly filed under "writing rules".
+- 🗑️ **In-Chat Deletion:** Added a dedicated 🗑 Delete button to settings action cards, plus the AI can now generate delete commands through conversation. Deletion feedback shows real entry names (e.g., "Deleted 「Li Bai」") instead of raw internal IDs.
+- 🔌 **Multi-Instance Provider Configuration:** Completely refactored the API config architecture to support multiple independent instances per provider type. Each instance has its own URL, API Key, and model list — solving the model list conflict when using multiple endpoints of the same provider type.
+- ⚙️ **Per-Model Advanced Parameters:** Advanced model parameters (Temperature, Top P, Max Output Tokens, Reasoning Effort) now support per-model independent toggle and override within the same provider instance.
+- 🧹 **Model List Cleanup:** Fixed the issue where models in the quick-switch list couldn't be removed, giving users full control over each instance's model roster.
+- 🔍 **Cross-Category Deduplication:** AI-created settings now include cross-category name collision detection, preventing duplicate entries even when the AI uses different category names.
 
-📦 Simply grab the \`.exe\` installer right below and bask in top-tier application stability.
+📦 Grab the `.exe` installer below for the full upgrade experience.

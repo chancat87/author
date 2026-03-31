@@ -1030,9 +1030,10 @@ export default function BookInfoPanel() {
                                                     try {
                                                         const apiConfig = getChatApiConfig();
                                                         if (!apiConfig?.apiKey) { setAiEval({ _error: '请先在设置中配置AI API' }); return; }
-                                                        const apiEndpoint = ['gemini-native', 'custom-gemini'].includes(apiConfig?.provider) ? '/api/ai/gemini'
-                                                            : apiConfig?.provider === 'openai-responses' ? '/api/ai/responses'
-                                                                : (['claude', 'custom-claude'].includes(apiConfig?.provider) || apiConfig?.apiFormat === 'anthropic') ? '/api/ai/claude'
+                                                        const pType = apiConfig?.providerType || apiConfig?.provider;
+                                                        const apiEndpoint = ['gemini-native', 'custom-gemini'].includes(pType) ? '/api/ai/gemini'
+                                                            : pType === 'openai-responses' ? '/api/ai/responses'
+                                                                : (['claude', 'custom-claude'].includes(pType) || apiConfig?.apiFormat === 'anthropic') ? '/api/ai/claude'
                                                                     : '/api/ai';
                                                         const fields = [
                                                             { key: 'title', label: '作品名称', value: bookData.title },
