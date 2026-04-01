@@ -1,1 +1,1 @@
-AI 设定集全知全能 + 多实例 API 配置 | Full AI Settings Awareness & Multi-Instance API Config
+修复外置搜索自定义地址缺失 | Fix missing custom URL for external search tools
