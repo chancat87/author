@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useI18n } from '../lib/useI18n';
+import { REPO, LEGAL_LANGUAGES, legalDocUrl } from '../lib/constants';
 
 const HELP_SECTIONS = [
     {
@@ -495,7 +496,7 @@ Next.js + Tiptap 编辑器 + AI API（OpenAI 兼容 / Gemini）
 ### 开源项目
 Author 是一个开源项目，采用 **AGPL-3.0** 协议。
 
-🔗 **GitHub**: [github.com/YuanShiJiLoong/author](https://github.com/YuanShiJiLoong/author)
+🔗 **GitHub**: [github.com/YuanShiJiLoong/author](${REPO.github})
 
 欢迎 Star ⭐、提 Issue、贡献代码！
 
@@ -504,14 +505,10 @@ Author 是一个开源项目，采用 **AGPL-3.0** 协议。
 
 | 文档 | GitHub | Gitee 镜像（国内可达） |
 |------|--------|----------------------|
-| 隐私政策 🇨🇳 | [GitHub](https://github.com/YuanShiJiLoong/author/blob/main/PRIVACY.zh.md) | [Gitee](https://gitee.com/yuanshijilong/author/blob/main/PRIVACY.zh.md) |
-| 服务条款 🇨🇳 | [GitHub](https://github.com/YuanShiJiLoong/author/blob/main/TERMS.zh.md) | [Gitee](https://gitee.com/yuanshijilong/author/blob/main/TERMS.zh.md) |
-| Privacy Policy 🇬🇧 | [GitHub](https://github.com/YuanShiJiLoong/author/blob/main/PRIVACY.md) | [Gitee](https://gitee.com/yuanshijilong/author/blob/main/PRIVACY.md) |
-| Terms of Service 🇬🇧 | [GitHub](https://github.com/YuanShiJiLoong/author/blob/main/TERMS.md) | [Gitee](https://gitee.com/yuanshijilong/author/blob/main/TERMS.md) |
-| Политика конфиденциальности 🇷🇺 | [GitHub](https://github.com/YuanShiJiLoong/author/blob/main/PRIVACY.ru.md) | [Gitee](https://gitee.com/yuanshijilong/author/blob/main/PRIVACY.ru.md) |
-| Условия использования 🇷🇺 | [GitHub](https://github.com/YuanShiJiLoong/author/blob/main/TERMS.ru.md) | [Gitee](https://gitee.com/yuanshijilong/author/blob/main/TERMS.ru.md) |
-| سياسة الخصوصية 🇵🇸 | [GitHub](https://github.com/YuanShiJiLoong/author/blob/main/PRIVACY.ar.md) | [Gitee](https://gitee.com/yuanshijilong/author/blob/main/PRIVACY.ar.md) |
-| شروط الخدمة 🇵🇸 | [GitHub](https://github.com/YuanShiJiLoong/author/blob/main/TERMS.ar.md) | [Gitee](https://gitee.com/yuanshijilong/author/blob/main/TERMS.ar.md) |
+${LEGAL_LANGUAGES.map(l => [
+`| ${l.privacy} ${l.label.split(' ')[0]} | [GitHub](${legalDocUrl('github', 'PRIVACY', l.code)}) | [Gitee](${legalDocUrl('gitee', 'PRIVACY', l.code)}) |`,
+`| ${l.terms} ${l.label.split(' ')[0]} | [GitHub](${legalDocUrl('github', 'TERMS', l.code)}) | [Gitee](${legalDocUrl('gitee', 'TERMS', l.code)}) |`,
+].join('\n')).join('\n')}
 
 > 💡 如果 GitHub 访问受限，请使用 Gitee 镜像链接。法律文档也随桌面版安装包一同分发。
     `,

@@ -1,29 +1,27 @@
-## 📋 本次焕新简报 / Release Overview
+## v1.2.15 — 代码质量与可维护性重构 / Code Quality & Maintainability Refactor
 
-本次更新（v1.2.14）是一次安全合规与国际化的重要升级：新增多语言隐私政策与服务条款、升级 Firestore 安全规则、完成登录/注册模块国际化重构，并修复了桌面端退出无法取消的问题。
+### 🇨🇳 中文
 
-### 🇨🇳 中文更新概览
+#### 🔧 代码重构
+- **提取 GoogleIcon 共享组件**：消除 LoginModal 与 RegisterModal 中完全重复的 SVG 代码
+- **集中化仓库常量**：将 GitHub/Gitee 仓库地址和法律文档 URL 生成逻辑统一收拢到 `constants.js`
+- **提取 useAuthAction Hook**：将登录/注册的 4 个认证处理函数中重复的 loading/error/同步流程收拢为 1 个可复用 Hook
+- **动态生成法律文档表格**：HelpPanel 中的 8 行硬编码 Markdown 表格改为从语言配置数组循环生成
 
-- 📜 **隐私政策 & 服务条款**：新增中/英/俄/阿四语言版本的完整隐私政策和服务条款文档（共 8 个文件），文档顶部内置语言切换导航栏。
-- 🌐 **国内可达性**：所有法律文档链接同时提供 GitHub 和 Gitee 镜像地址，注册弹窗和帮助页均提供国内镜像入口，确保中国大陆用户无障碍访问。
-- 🔒 **Firestore 安全规则升级**：更新了云端数据库安全规则与项目绑定配置。
-- 🌍 **登录/注册国际化**：LoginModal 和 RegisterModal 完成国际化重构，移除硬编码文案，全面接入 i18n 翻译系统（中/英/俄三语）。
-- ❌ **退出取消功能**：修复桌面客户端退出同步弹窗无法取消的问题，新增「取消」按钮，重构 Electron IPC 通信逻辑。
-- 🖼️ **应用图标更新**：更新了应用图标。
-
-📦 点击下方 `.exe` 安装包即可体验完整升级。
+#### 📝 维护性改进
+- 新增语言版本时只需修改 `constants.js` 中的 `LEGAL_LANGUAGES` 数组，RegisterModal 和 HelpPanel 自动适配
+- 修改仓库地址时只需改 `REPO` 常量，全局生效
 
 ---
 
-### 🇺🇸 English Release Notes
+### 🇬🇧 English
 
-Version 1.2.14 is a major security, compliance, and internationalization upgrade: adds multi-language legal documents, upgrades Firestore security rules, fully internationalizes the login/register flow, and fixes the desktop exit dialog.
+#### 🔧 Code Refactoring
+- **Extract shared GoogleIcon component**: Eliminated duplicated SVG code between LoginModal and RegisterModal
+- **Centralize repository constants**: Unified GitHub/Gitee URLs and legal document URL generation into `constants.js`
+- **Extract useAuthAction Hook**: Consolidated 4 repeated auth handler patterns (loading/error/sync) into 1 reusable Hook
+- **Dynamic legal document table**: Replaced 8 hardcoded Markdown rows in HelpPanel with loop generation from language config array
 
-- 📜 **Privacy Policy & Terms of Service:** Added complete Privacy Policy and Terms of Service documents in 4 languages (English, Chinese, Russian, Arabic) — 8 new files total, each with a cross-language navigation bar.
-- 🌐 **China Accessibility:** All legal document links provide both GitHub and Gitee mirror URLs. The registration modal and help panel include domestic mirror entry points, ensuring barrier-free access for users in mainland China.
-- 🔒 **Firestore Security Rules Upgrade:** Updated cloud database security rules and project binding configuration.
-- 🌍 **Login/Register i18n:** LoginModal and RegisterModal fully refactored with i18n support, replacing all hardcoded text with translation keys (Chinese/English/Russian).
-- ❌ **Exit Cancel Feature:** Fixed the desktop client exit-sync dialog that couldn't be cancelled. Added a "Cancel" button and refactored Electron IPC communication logic.
-- 🖼️ **App Icon Update:** Updated the application icon.
-
-📦 Grab the `.exe` installer below for the full upgrade experience.
+#### 📝 Maintainability Improvements
+- Adding new language versions now only requires updating the `LEGAL_LANGUAGES` array in `constants.js`
+- Changing repository URLs only requires modifying the `REPO` constant

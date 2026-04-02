@@ -1,1 +1,1 @@
-安全合规与国际化升级：多语言法律文档、Firestore 安全规则、登录国际化、退出取消修复 | Security & i18n Upgrade: Multi-language Legal Docs, Firestore Rules, Login i18n, Exit Cancel Fix
+代码质量与可维护性重构 | Code Quality & Maintainability Refactor
