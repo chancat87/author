@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { X, Mail, Lock, CheckCircle2, XCircle } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
+import { useI18n } from '../lib/useI18n';
 
 /* Google G SVG — 官方配色，无背景 */
 const GoogleIcon = () => (
@@ -25,6 +26,7 @@ export default function RegisterModal() {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const { t } = useI18n();
 
     useEffect(() => {
         if (showRegisterModal) {
@@ -39,11 +41,11 @@ export default function RegisterModal() {
 
     const handleEmailRegister = async () => {
         if (password !== confirmPassword) {
-            setError('两次密码输入不一致');
+            setError(t('registerModal.passwordMismatch'));
             return;
         }
         if (password.length < 6) {
-            setError('密码至少需要 6 位');
+            setError(t('registerModal.passwordTooShort'));
             return;
         }
         setLoading(true);
@@ -56,7 +58,7 @@ export default function RegisterModal() {
             setShowRegisterModal(false);
             if (merged > 0) window.location.reload();
         } catch (err) {
-            setError(err.message || '注册失败');
+            setError(err.message || t('registerModal.registerFailed'));
         } finally {
             setLoading(false);
         }
@@ -73,7 +75,7 @@ export default function RegisterModal() {
             setShowRegisterModal(false);
             if (merged > 0) window.location.reload();
         } catch (err) {
-            setError(err.message || 'Google 注册失败');
+            setError(err.message || t('registerModal.googleRegisterFailed'));
         } finally {
             setLoading(false);
         }
@@ -87,7 +89,14 @@ export default function RegisterModal() {
     // 密码强度指示
     const pwStrength = password.length === 0 ? 0 : password.length < 6 ? 1 : password.length < 10 ? 2 : 3;
     const pwColors = ['', '#ef4444', '#f59e0b', '#22c55e'];
-    const pwLabels = ['', '太短', '一般', '强'];
+    const pwLabels = ['', t('registerModal.pwStrengthWeak'), t('registerModal.pwStrengthMedium'), t('registerModal.pwStrengthStrong')];
+
+    // 根据语言动态生成隐私政策和服务条款链接（GitHub + Gitee 双链接）
+    const legalDocSuffix = language === 'en' ? '' : `.${language}`;
+    const termsUrl = `https://github.com/YuanShiJiLoong/author/blob/main/TERMS${legalDocSuffix}.md`;
+    const privacyUrl = `https://github.com/YuanShiJiLoong/author/blob/main/PRIVACY${legalDocSuffix}.md`;
+    const termsUrlMirror = `https://gitee.com/yuanshijilong/author/blob/main/TERMS${legalDocSuffix}.md`;
+    const privacyUrlMirror = `https://gitee.com/yuanshijilong/author/blob/main/PRIVACY${legalDocSuffix}.md`;
 
     return (
         <div className="login-modal-overlay" onClick={() => setShowRegisterModal(false)}>
@@ -101,8 +110,8 @@ export default function RegisterModal() {
                     <div className="login-modal-icon">
                         <img src="/author-logo.png" alt="Author" className="login-modal-logo-img" />
                     </div>
-                    <h2 className="login-modal-title">创建账户</h2>
-                    <p className="login-modal-desc">注册后即可开启云同步，多设备无缝创作</p>
+                    <h2 className="login-modal-title">{t('registerModal.title')}</h2>
+                    <p className="login-modal-desc">{t('registerModal.desc')}</p>
                 </div>
 
                 {/* 邮箱注册表单 — 放在上面 */}
@@ -113,7 +122,7 @@ export default function RegisterModal() {
                             type="email"
                             value={email}
                             onChange={e => setEmail(e.target.value)}
-                            placeholder="邮箱地址"
+                            placeholder={t('registerModal.emailPlaceholder')}
                             autoComplete="email"
                             className="login-modal-input"
                         />
@@ -124,7 +133,7 @@ export default function RegisterModal() {
                             type="password"
                             value={password}
                             onChange={e => setPassword(e.target.value)}
-                            placeholder="设置密码（至少6位）"
+                            placeholder={t('registerModal.passwordPlaceholder')}
                             autoComplete="new-password"
                             className="login-modal-input"
                         />
@@ -144,7 +153,7 @@ export default function RegisterModal() {
                             type="password"
                             value={confirmPassword}
                             onChange={e => setConfirmPassword(e.target.value)}
-                            placeholder="确认密码"
+                            placeholder={t('registerModal.confirmPasswordPlaceholder')}
                             autoComplete="new-password"
                             onKeyDown={e => { if (e.key === 'Enter' && email && password && confirmPassword) handleEmailRegister(); }}
                             className="login-modal-input"
@@ -163,11 +172,11 @@ export default function RegisterModal() {
                     onClick={handleEmailRegister}
                     disabled={loading || !email || !password || !confirmPassword}
                 >
-                    {loading ? '注册中...' : '注册'}
+                    {loading ? t('registerModal.registering') : t('registerModal.registerBtn')}
                 </button>
 
                 {/* 分隔线 + Google 注册 — 放在下面 */}
-                <div className="login-modal-divider"><span>或</span></div>
+                <div className="login-modal-divider"><span>{t('registerModal.or')}</span></div>
 
                 <button
                     className="login-modal-google-btn"
@@ -175,11 +184,20 @@ export default function RegisterModal() {
                     disabled={loading}
                 >
                     <GoogleIcon />
-                    使用 Google 账号注册
+                    {t('registerModal.googleRegister')}
                 </button>
 
+                <p className="login-modal-terms">
+                    {t('registerModal.agreeTerms')}
+                    <a href={termsUrl} target="_blank" rel="noopener noreferrer">{t('registerModal.termsOfService')}</a>
+                    <span className="legal-mirror-link">(<a href={termsUrlMirror} target="_blank" rel="noopener noreferrer">{t('registerModal.mirrorLink')}</a>)</span>
+                    {t('registerModal.and')}
+                    <a href={privacyUrl} target="_blank" rel="noopener noreferrer">{t('registerModal.privacyPolicy')}</a>
+                    <span className="legal-mirror-link">(<a href={privacyUrlMirror} target="_blank" rel="noopener noreferrer">{t('registerModal.mirrorLink')}</a>)</span>
+                </p>
+
                 <div className="login-modal-switch">
-                    已有账号？<button onClick={switchToLogin}>返回登录</button>
+                    {t('registerModal.hasAccount')}<button onClick={switchToLogin}>{t('registerModal.backToLogin')}</button>
                 </div>
             </div>
         </div>

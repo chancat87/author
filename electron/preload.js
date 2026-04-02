@@ -27,5 +27,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     allowClose: () => {
         ipcRenderer.send('allow-close');
+    },
+    cancelClose: () => {
+        ipcRenderer.send('cancel-close');
     }
 });

@@ -1,11 +1,15 @@
 ## 📋 本次焕新简报 / Release Overview
 
-本次更新（v1.2.13）修复了外置搜索功能无法自定义 API 地址的问题，现在用户可以在设置面板中填入自定义的搜索 API 地址（如 Tavily/Exa 中转站），并在 API Key 输入框中使用逗号分隔多个 Key 实现号池轮询。
+本次更新（v1.2.14）是一次安全合规与国际化的重要升级：新增多语言隐私政策与服务条款、升级 Firestore 安全规则、完成登录/注册模块国际化重构，并修复了桌面端退出无法取消的问题。
 
 ### 🇨🇳 中文更新概览
 
-- 🔗 **外置搜索自定义地址**：修复了外置搜索（Tavily/Exa）配置区域缺少 API 地址输入框的问题。用户现在可以填入自建中转站或第三方代理地址，后端已支持但前端 UI 此前缺失，本版本补齐。
-- 🔄 **搜索 Key 号池提示**：API Key 输入框新增号池使用提示（"多个用逗号分隔可轮询"），引导用户充分利用已有的 Key 轮转负载均衡能力。
+- 📜 **隐私政策 & 服务条款**：新增中/英/俄/阿四语言版本的完整隐私政策和服务条款文档（共 8 个文件），文档顶部内置语言切换导航栏。
+- 🌐 **国内可达性**：所有法律文档链接同时提供 GitHub 和 Gitee 镜像地址，注册弹窗和帮助页均提供国内镜像入口，确保中国大陆用户无障碍访问。
+- 🔒 **Firestore 安全规则升级**：更新了云端数据库安全规则与项目绑定配置。
+- 🌍 **登录/注册国际化**：LoginModal 和 RegisterModal 完成国际化重构，移除硬编码文案，全面接入 i18n 翻译系统（中/英/俄三语）。
+- ❌ **退出取消功能**：修复桌面客户端退出同步弹窗无法取消的问题，新增「取消」按钮，重构 Electron IPC 通信逻辑。
+- 🖼️ **应用图标更新**：更新了应用图标。
 
 📦 点击下方 `.exe` 安装包即可体验完整升级。
 
@@ -13,9 +17,13 @@
 
 ### 🇺🇸 English Release Notes
 
-Version 1.2.13 fixes the external search tool configuration UI that was missing the Base URL input field. Users can now configure custom API endpoints (e.g., Tavily/Exa proxies or relay servers) directly from the settings panel.
+Version 1.2.14 is a major security, compliance, and internationalization upgrade: adds multi-language legal documents, upgrades Firestore security rules, fully internationalizes the login/register flow, and fixes the desktop exit dialog.
 
-- 🔗 **Custom Search API URL:** Fixed the missing Base URL input in the external search (Tavily/Exa) configuration section. Users can now enter custom relay or proxy endpoints — the backend already supported this field, but the frontend UI was missing it.
-- 🔄 **Key Pool Hint:** The API Key input now includes a placeholder hint about key pooling ("separate multiple keys with commas for round-robin rotation"), guiding users to leverage the existing key rotation feature.
+- 📜 **Privacy Policy & Terms of Service:** Added complete Privacy Policy and Terms of Service documents in 4 languages (English, Chinese, Russian, Arabic) — 8 new files total, each with a cross-language navigation bar.
+- 🌐 **China Accessibility:** All legal document links provide both GitHub and Gitee mirror URLs. The registration modal and help panel include domestic mirror entry points, ensuring barrier-free access for users in mainland China.
+- 🔒 **Firestore Security Rules Upgrade:** Updated cloud database security rules and project binding configuration.
+- 🌍 **Login/Register i18n:** LoginModal and RegisterModal fully refactored with i18n support, replacing all hardcoded text with translation keys (Chinese/English/Russian).
+- ❌ **Exit Cancel Feature:** Fixed the desktop client exit-sync dialog that couldn't be cancelled. Added a "Cancel" button and refactored Electron IPC communication logic.
+- 🖼️ **App Icon Update:** Updated the application icon.
 
 📦 Grab the `.exe` installer below for the full upgrade experience.

@@ -6897,6 +6897,36 @@ h5.chat-md-heading {
   color: var(--accent-hover);
 }
 
+.login-modal-terms {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 16px;
+  line-height: 1.6;
+}
+.login-modal-terms a {
+  color: var(--accent);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+.login-modal-terms a:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+.legal-mirror-link {
+  font-size: 10px;
+  opacity: 0.65;
+  margin-left: 2px;
+}
+.legal-mirror-link a {
+  color: var(--text-muted) !important;
+  font-size: 10px;
+}
+.legal-mirror-link a:hover {
+  color: var(--accent-hover) !important;
+  opacity: 1;
+}
+
 /* ==================== 独立账户弹窗 ==================== */
 
 .account-modal {

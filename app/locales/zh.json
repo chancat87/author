@@ -625,5 +625,52 @@
         "follow": "跟随",
         "followMain": "跟随主配置",
         "openSettings": "管理供应商"
+    },
+    "loginModal": {
+        "title": "登录 Author",
+        "desc": "登录后自动同步作品到云端，支持多设备访问",
+        "emailPlaceholder": "邮箱地址",
+        "passwordPlaceholder": "密码",
+        "loginBtn": "登录",
+        "loggingIn": "登录中...",
+        "loginFailed": "登录失败",
+        "googleLogin": "使用 Google 账号登录",
+        "googleLoginFailed": "Google 登录失败",
+        "or": "或",
+        "noAccount": "还没有账号？",
+        "registerNow": "立即注册"
+    },
+    "registerModal": {
+        "title": "创建账户",
+        "desc": "注册后即可开启云同步，多设备无缝创作",
+        "emailPlaceholder": "邮箱地址",
+        "passwordPlaceholder": "设置密码（至少6位）",
+        "confirmPasswordPlaceholder": "确认密码",
+        "registerBtn": "注册",
+        "registering": "注册中...",
+        "registerFailed": "注册失败",
+        "googleRegister": "使用 Google 账号注册",
+        "googleRegisterFailed": "Google 注册失败",
+        "or": "或",
+        "hasAccount": "已有账号？",
+        "backToLogin": "返回登录",
+        "agreeTerms": "注册即表示您同意我们的",
+        "termsOfService": "服务条款",
+        "and": "和",
+        "privacyPolicy": "隐私政策",
+        "passwordMismatch": "两次密码输入不一致",
+        "passwordTooShort": "密码至少需要 6 位",
+        "pwStrengthWeak": "太短",
+        "pwStrengthMedium": "一般",
+        "pwStrengthStrong": "强",
+        "mirrorLink": "国内镜像"
+    },
+    "exitSyncModal": {
+        "title": "退出确认",
+        "desc": "退出前，是否将本地的当前进度强制同步到云端？",
+        "syncAndExit": "是的，同步后退出",
+        "syncing": "同步中，请稍候...",
+        "exitDirectly": "否，直接退出",
+        "cancel": "取消，返回应用"
     }
 }

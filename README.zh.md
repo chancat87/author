@@ -557,6 +557,19 @@ Author 支持从多种格式导入设定集：**JSON / Markdown / TXT / DOCX / P
 
 ---
 
+## 📜 法律文档
+
+使用 Author 即表示您同意我们的 **隐私政策** 和 **服务条款**。这些文档提供多种语言版本：
+
+| 文档 | English | 中文 | Русский | العربية |
+|------|---------|------|---------|---------|
+| 隐私政策 | [PRIVACY.md](PRIVACY.md) | [PRIVACY.zh.md](PRIVACY.zh.md) | [PRIVACY.ru.md](PRIVACY.ru.md) | [PRIVACY.ar.md](PRIVACY.ar.md) |
+| 服务条款 | [TERMS.md](TERMS.md) | [TERMS.zh.md](TERMS.zh.md) | [TERMS.ru.md](TERMS.ru.md) | [TERMS.ar.md](TERMS.ar.md) |
+
+> 💡 **中国大陆用户提示**：如果 GitHub 访问受限，可通过 [Gitee 镜像](https://gitee.com/yuanshijilong/author) 查阅上述文档。法律文档也随桌面版安装包一同分发，可在应用内离线查看。
+
+---
+
 ## 🙏 致谢
 
 ### 🤖 AI 伙伴

@@ -498,6 +498,22 @@ Author 是一个开源项目，采用 **AGPL-3.0** 协议。
 🔗 **GitHub**: [github.com/YuanShiJiLoong/author](https://github.com/YuanShiJiLoong/author)
 
 欢迎 Star ⭐、提 Issue、贡献代码！
+
+### 📜 法律文档
+使用 Author 即表示您同意我们的隐私政策和服务条款：
+
+| 文档 | GitHub | Gitee 镜像（国内可达） |
+|------|--------|----------------------|
+| 隐私政策 🇨🇳 | [GitHub](https://github.com/YuanShiJiLoong/author/blob/main/PRIVACY.zh.md) | [Gitee](https://gitee.com/yuanshijilong/author/blob/main/PRIVACY.zh.md) |
+| 服务条款 🇨🇳 | [GitHub](https://github.com/YuanShiJiLoong/author/blob/main/TERMS.zh.md) | [Gitee](https://gitee.com/yuanshijilong/author/blob/main/TERMS.zh.md) |
+| Privacy Policy 🇬🇧 | [GitHub](https://github.com/YuanShiJiLoong/author/blob/main/PRIVACY.md) | [Gitee](https://gitee.com/yuanshijilong/author/blob/main/PRIVACY.md) |
+| Terms of Service 🇬🇧 | [GitHub](https://github.com/YuanShiJiLoong/author/blob/main/TERMS.md) | [Gitee](https://gitee.com/yuanshijilong/author/blob/main/TERMS.md) |
+| Политика конфиденциальности 🇷🇺 | [GitHub](https://github.com/YuanShiJiLoong/author/blob/main/PRIVACY.ru.md) | [Gitee](https://gitee.com/yuanshijilong/author/blob/main/PRIVACY.ru.md) |
+| Условия использования 🇷🇺 | [GitHub](https://github.com/YuanShiJiLoong/author/blob/main/TERMS.ru.md) | [Gitee](https://gitee.com/yuanshijilong/author/blob/main/TERMS.ru.md) |
+| سياسة الخصوصية 🇵🇸 | [GitHub](https://github.com/YuanShiJiLoong/author/blob/main/PRIVACY.ar.md) | [Gitee](https://gitee.com/yuanshijilong/author/blob/main/PRIVACY.ar.md) |
+| شروط الخدمة 🇵🇸 | [GitHub](https://github.com/YuanShiJiLoong/author/blob/main/TERMS.ar.md) | [Gitee](https://gitee.com/yuanshijilong/author/blob/main/TERMS.ar.md) |
+
+> 💡 如果 GitHub 访问受限，请使用 Gitee 镜像链接。法律文档也随桌面版安装包一同分发。
     `,
     },
     {

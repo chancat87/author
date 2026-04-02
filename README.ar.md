@@ -484,6 +484,19 @@ pm2 restart author
 
 ---
 
+## 📜 الوثائق القانونية (Legal Documents)
+
+باستخدامك لـ Author، فإنك توافق على **سياسة الخصوصية** و **شروط الخدمة** الخاصة بنا. هذه الوثائق متاحة بعدة لغات:
+
+| الوثيقة | English | 中文 | Русский | العربية |
+|---------|---------|------|---------|---------|
+| سياسة الخصوصية | [PRIVACY.md](PRIVACY.md) | [PRIVACY.zh.md](PRIVACY.zh.md) | [PRIVACY.ru.md](PRIVACY.ru.md) | [PRIVACY.ar.md](PRIVACY.ar.md) |
+| شروط الخدمة | [TERMS.md](TERMS.md) | [TERMS.zh.md](TERMS.zh.md) | [TERMS.ru.md](TERMS.ru.md) | [TERMS.ar.md](TERMS.ar.md) |
+
+> 💡 **للمستخدمين في الصين**: إذا تعذر الوصول إلى GitHub، يمكنكم الاطلاع على هذه الوثائق عبر [مرآة Gitee](https://gitee.com/yuanshijilong/author). كما أن الوثائق القانونية مضمنة في كل إصدار لسطح المكتب ويمكن الوصول إليها بدون اتصال بالإنترنت.
+
+---
+
 ## 🙏 شكر وتقدير لمطوري وملهمي ورفقاء الذكاء الاصطناعي (Acknowledgments)
 
 ### 🤖 أصحاب الذكاء الاصطناعي المُرافقين (AI Companions)

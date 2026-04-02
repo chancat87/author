@@ -185,11 +185,16 @@ function createWindow() {
         }
     });
 
-    ipcMain.once('allow-close', () => {
+    ipcMain.on('allow-close', () => {
         isForceClosing = true;
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.close();
         }
+    });
+
+    // 用户在退出弹窗点击"取消"时，重置状态，允许下次再弹窗
+    ipcMain.on('cancel-close', () => {
+        isForceClosing = false;
     });
 
     mainWindow.on('closed', () => {

@@ -484,6 +484,19 @@ This project is licensed under [AGPL-3.0](LICENSE).
 
 ---
 
+## 📜 Legal Documents
+
+By using Author, you agree to our **Privacy Policy** and **Terms of Service**. These documents are available in multiple languages:
+
+| Document | English | 中文 | Русский | العربية |
+|----------|---------|------|---------|---------|
+| Privacy Policy | [PRIVACY.md](PRIVACY.md) | [PRIVACY.zh.md](PRIVACY.zh.md) | [PRIVACY.ru.md](PRIVACY.ru.md) | [PRIVACY.ar.md](PRIVACY.ar.md) |
+| Terms of Service | [TERMS.md](TERMS.md) | [TERMS.zh.md](TERMS.zh.md) | [TERMS.ru.md](TERMS.ru.md) | [TERMS.ar.md](TERMS.ar.md) |
+
+> 💡 **For users in mainland China**: If GitHub is inaccessible, you can view these documents via the [Gitee mirror](https://gitee.com/yuanshijilong/author). The legal documents are also bundled with every desktop release and accessible offline within the application.
+
+---
+
 ## 🙏 Acknowledgments
 
 ### 🤖 AI Companions

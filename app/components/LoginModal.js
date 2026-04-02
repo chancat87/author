@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { X, Mail, Lock, XCircle } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
+import { useI18n } from '../lib/useI18n';
 
 /* Google G SVG — 官方配色，无背景 */
 const GoogleIcon = () => (
@@ -24,6 +25,7 @@ export default function LoginModal() {
     const [authPassword, setAuthPassword] = useState('');
     const [authLoading, setAuthLoading] = useState(false);
     const [authError, setAuthError] = useState('');
+    const { t } = useI18n();
 
     useEffect(() => {
         if (showLoginModal) {
@@ -46,7 +48,7 @@ export default function LoginModal() {
             setShowLoginModal(false);
             if (merged > 0) window.location.reload();
         } catch (err) {
-            setAuthError(err.message || '登录失败');
+            setAuthError(err.message || t('loginModal.loginFailed'));
         } finally {
             setAuthLoading(false);
         }
@@ -63,7 +65,7 @@ export default function LoginModal() {
             setShowLoginModal(false);
             if (merged > 0) window.location.reload();
         } catch (err) {
-            setAuthError(err.message || 'Google 登录失败');
+            setAuthError(err.message || t('loginModal.googleLoginFailed'));
         } finally {
             setAuthLoading(false);
         }
@@ -86,8 +88,8 @@ export default function LoginModal() {
                     <div className="login-modal-icon">
                         <img src="/author-logo.png" alt="Author" className="login-modal-logo-img" />
                     </div>
-                    <h2 className="login-modal-title">登录 Author</h2>
-                    <p className="login-modal-desc">登录后自动同步作品到云端，支持多设备访问</p>
+                    <h2 className="login-modal-title">{t('loginModal.title')}</h2>
+                    <p className="login-modal-desc">{t('loginModal.desc')}</p>
                 </div>
 
                 {/* 邮箱密码表单 — 放在上面 */}
@@ -98,7 +100,7 @@ export default function LoginModal() {
                             type="email"
                             value={authEmail}
                             onChange={e => setAuthEmail(e.target.value)}
-                            placeholder="邮箱地址"
+                            placeholder={t('loginModal.emailPlaceholder')}
                             autoComplete="email"
                             className="login-modal-input"
                         />
@@ -109,7 +111,7 @@ export default function LoginModal() {
                             type="password"
                             value={authPassword}
                             onChange={e => setAuthPassword(e.target.value)}
-                            placeholder="密码"
+                            placeholder={t('loginModal.passwordPlaceholder')}
                             autoComplete="current-password"
                             onKeyDown={e => { if (e.key === 'Enter' && authEmail && authPassword) handleEmailLogin(); }}
                             className="login-modal-input"
@@ -128,11 +130,11 @@ export default function LoginModal() {
                     onClick={handleEmailLogin}
                     disabled={authLoading || !authEmail || !authPassword}
                 >
-                    {authLoading ? '登录中...' : '登录'}
+                    {authLoading ? t('loginModal.loggingIn') : t('loginModal.loginBtn')}
                 </button>
 
                 {/* 分隔线 + Google 登录 — 放在下面 */}
-                <div className="login-modal-divider"><span>或</span></div>
+                <div className="login-modal-divider"><span>{t('loginModal.or')}</span></div>
 
                 <button
                     className="login-modal-google-btn"
@@ -140,11 +142,11 @@ export default function LoginModal() {
                     disabled={authLoading}
                 >
                     <GoogleIcon />
-                    使用 Google 账号登录
+                    {t('loginModal.googleLogin')}
                 </button>
 
                 <div className="login-modal-switch">
-                    还没有账号？<button onClick={switchToRegister}>立即注册</button>
+                    {t('loginModal.noAccount')}<button onClick={switchToRegister}>{t('loginModal.registerNow')}</button>
                 </div>
             </div>
         </div>

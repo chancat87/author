@@ -1,5 +1,7 @@
 {
-  "projects": {},
+  "projects": {
+    "default": "author-yuanshijiloong"
+  },
   "targets": {},
   "etags": {}
 }
