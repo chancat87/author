@@ -1,24 +1,29 @@
 /**
- * 项目导出/导入 — 将所有 localStorage 数据打包为 JSON 文件
- * 支持：章节、设定集、API 配置、聊天会话
+ * 项目导出/导入 — 通过持久化层完整打包项目数据
+ * 支持：按作品章节、设定集节点、API 配置、聊天会话、章节摘要
  */
 
-const PROJECT_FILE_VERSION = 1;
+import { persistGet, persistSet } from './persistence';
+import { getAllWorks, getSettingsNodes, getActiveWorkId } from './settings';
+import { getChapters } from './storage';
+import { loadSessionStore } from './chat-sessions';
 
-// 需要导出的所有 localStorage keys
-const STORAGE_KEYS = {
-    chapters: 'author-chapters',
-    settings: 'author-project-settings',
-    settingsNodes: 'author-settings-nodes',   // 旧 key（兼容导入）
-    worksIndex: 'author-works-index',          // 新作品索引
-    activeWork: 'author-active-work',
-    chatSessions: 'author-chat-sessions',
+const PROJECT_FILE_VERSION = 2;
+
+// localStorage 中直接读写的轻量配置 keys
+const LOCAL_ONLY_KEYS = {
+    settings:    'author-project-settings',
+    activeWork:  'author-active-work',
+    apiConfig:   'author-api-config',
+    apiProfiles: 'author-api-profiles',
+    tokenStats:  'author-token-stats',
+    theme:       'author-theme',
+    lang:        'author-lang',
+    visual:      'author-visual',
 };
 
 // 章节摘要前缀
 const SUMMARY_PREFIX = 'author-chapter-summary-';
-// 按作品存储的设定集前缀
-const SETTINGS_NODES_PREFIX = 'author-settings-nodes-';
 
 /**
  * 导出整个项目为 JSON 文件并下载
@@ -32,8 +37,8 @@ export async function exportProject() {
         _app: 'Author',
     };
 
-    // 收集所有主要数据
-    for (const [key, storageKey] of Object.entries(STORAGE_KEYS)) {
+    // 1. 收集 localStorage 中的轻量配置
+    for (const [key, storageKey] of Object.entries(LOCAL_ONLY_KEYS)) {
         try {
             const raw = localStorage.getItem(storageKey);
             data[key] = raw ? JSON.parse(raw) : null;
@@ -42,19 +47,35 @@ export async function exportProject() {
         }
     }
 
-    // 收集按作品存储的设定集节点
+    // 2. 收集作品索引 + 按作品收集章节和设定集节点
+    const works = await getAllWorks();
+    data.worksIndex = works;
+    const perWorkChapters = {};
     const perWorkSettings = {};
-    for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (k?.startsWith(SETTINGS_NODES_PREFIX) && k !== 'author-settings-nodes-backup') {
-            try {
-                perWorkSettings[k] = JSON.parse(localStorage.getItem(k));
-            } catch { /* skip */ }
+
+    for (const work of works) {
+        try {
+            perWorkChapters[work.id] = await getChapters(work.id);
+        } catch {
+            perWorkChapters[work.id] = [];
+        }
+        try {
+            perWorkSettings[work.id] = await getSettingsNodes(work.id);
+        } catch {
+            perWorkSettings[work.id] = [];
         }
     }
+    data.perWorkChapters = perWorkChapters;
     data.perWorkSettings = perWorkSettings;
 
-    // 收集章节摘要
+    // 3. 收集聊天会话（从 IndexedDB，仅本地存档用）
+    try {
+        data.chatSessions = await loadSessionStore();
+    } catch {
+        data.chatSessions = null;
+    }
+
+    // 4. 收集章节摘要（仍在 localStorage 中）
     const summaries = {};
     for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
@@ -94,21 +115,54 @@ export async function importProject(file) {
             return { success: false, message: '文件格式不正确，不是 Author 存档文件' };
         }
 
-        // 恢复主要数据
-        for (const [key, storageKey] of Object.entries(STORAGE_KEYS)) {
+        const isV2 = data._version >= 2;
+
+        // 1. 恢复 localStorage 轻量配置
+        for (const [key, storageKey] of Object.entries(LOCAL_ONLY_KEYS)) {
             if (data[key] !== undefined && data[key] !== null) {
                 localStorage.setItem(storageKey, JSON.stringify(data[key]));
             }
         }
 
-        // 恢复按作品存储的设定集节点
-        if (data.perWorkSettings && typeof data.perWorkSettings === 'object') {
-            for (const [k, v] of Object.entries(data.perWorkSettings)) {
-                if (v) localStorage.setItem(k, JSON.stringify(v));
-            }
+        // 2. 恢复作品索引
+        if (data.worksIndex) {
+            await persistSet('author-works-index', data.worksIndex);
         }
 
-        // 恢复章节摘要
+        // 3. 恢复按作品存储的章节（v2 格式）
+        if (isV2 && data.perWorkChapters && typeof data.perWorkChapters === 'object') {
+            for (const [workId, chapters] of Object.entries(data.perWorkChapters)) {
+                if (chapters) {
+                    await persistSet(`author-chapters-${workId}`, chapters);
+                }
+            }
+        } else if (data.chapters) {
+            // v1 兼容：旧格式的全局 chapters → 写入活跃作品
+            const workId = data.activeWork || 'work-default';
+            await persistSet(`author-chapters-${workId}`, data.chapters);
+        }
+
+        // 4. 恢复按作品存储的设定集节点
+        if (isV2 && data.perWorkSettings && typeof data.perWorkSettings === 'object') {
+            for (const [workId, nodes] of Object.entries(data.perWorkSettings)) {
+                if (nodes) {
+                    await persistSet(`author-settings-nodes-${workId}`, nodes);
+                }
+            }
+        } else if (data.perWorkSettings && typeof data.perWorkSettings === 'object') {
+            // v1 兼容：旧格式以 full key 为 key
+            for (const [k, v] of Object.entries(data.perWorkSettings)) {
+                if (v) await persistSet(k, v);
+            }
+        }
+        // v1 的 settingsNodes（旧全局 key），忽略——迁移逻辑会处理
+
+        // 5. 恢复聊天会话（通过持久化层写入 IndexedDB）
+        if (data.chatSessions) {
+            await persistSet('author-chat-sessions', data.chatSessions);
+        }
+
+        // 6. 恢复章节摘要
         if (data.chapterSummaries && typeof data.chapterSummaries === 'object') {
             for (const [chapterId, summary] of Object.entries(data.chapterSummaries)) {
                 if (summary) {

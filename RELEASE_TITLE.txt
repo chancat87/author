@@ -1,1 +1,1 @@
-代码质量与可维护性重构 | Code Quality & Maintainability Refactor
+修复存档/读档数据丢失，对话记录不再同步云端 | Fix save/load data loss, chat sessions now local-only

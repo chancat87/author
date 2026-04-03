@@ -1,27 +1,35 @@
-## v1.2.15 — 代码质量与可维护性重构 / Code Quality & Maintainability Refactor
+## v1.2.16 — 存档/读档功能修复 / Save & Load Fix
 
 ### 🇨🇳 中文
 
-#### 🔧 代码重构
-- **提取 GoogleIcon 共享组件**：消除 LoginModal 与 RegisterModal 中完全重复的 SVG 代码
-- **集中化仓库常量**：将 GitHub/Gitee 仓库地址和法律文档 URL 生成逻辑统一收拢到 `constants.js`
-- **提取 useAuthAction Hook**：将登录/注册的 4 个认证处理函数中重复的 loading/error/同步流程收拢为 1 个可复用 Hook
-- **动态生成法律文档表格**：HelpPanel 中的 8 行硬编码 Markdown 表格改为从语言配置数组循环生成
+#### 🐛 关键修复
+- **修复存档文件缺失章节和对话数据**：导出存档时改用持久化层读取 IndexedDB，不再依赖 localStorage（此前导出的章节和聊天会话可能为空）
+- **修复读档后数据不生效**：导入存档时改用持久化层写入 IndexedDB + 服务端，而非仅写 localStorage
+- **修复按作品存储的章节未被导出**：遍历作品索引，逐一收集每个作品的章节和设定集数据
 
-#### 📝 维护性改进
-- 新增语言版本时只需修改 `constants.js` 中的 `LEGAL_LANGUAGES` 数组，RegisterModal 和 HelpPanel 自动适配
-- 修改仓库地址时只需改 `REPO` 常量，全局生效
+#### 🔒 隐私与安全
+- **对话会话不再同步到云端**：聊天记录仅保存在本地 IndexedDB，不参与 Firebase 云同步（体积大 + 隐私敏感）
+- **API 配置保持本地存储**：API 密钥等敏感配置从未同步到云端（确认无变化）
+
+#### 📦 存档格式升级
+- 存档版本升至 v2，新增 `perWorkChapters` 按作品 ID 索引章节
+- 完全向后兼容：v1 旧存档文件仍可正常导入
+- 新增导出偏好设置（主题、语言、API 配置文件等）
 
 ---
 
 ### 🇬🇧 English
 
-#### 🔧 Code Refactoring
-- **Extract shared GoogleIcon component**: Eliminated duplicated SVG code between LoginModal and RegisterModal
-- **Centralize repository constants**: Unified GitHub/Gitee URLs and legal document URL generation into `constants.js`
-- **Extract useAuthAction Hook**: Consolidated 4 repeated auth handler patterns (loading/error/sync) into 1 reusable Hook
-- **Dynamic legal document table**: Replaced 8 hardcoded Markdown rows in HelpPanel with loop generation from language config array
+#### 🐛 Critical Fixes
+- **Fix exported saves missing chapters and chat data**: Export now reads from IndexedDB via persistence layer instead of localStorage (previously chapters and chat sessions could be empty)
+- **Fix imported saves not taking effect**: Import now writes through persistence layer to IndexedDB + server, instead of localStorage only
+- **Fix per-work chapters not exported**: Iterates works index to collect chapters and settings for each work
 
-#### 📝 Maintainability Improvements
-- Adding new language versions now only requires updating the `LEGAL_LANGUAGES` array in `constants.js`
-- Changing repository URLs only requires modifying the `REPO` constant
+#### 🔒 Privacy & Security
+- **Chat sessions no longer synced to cloud**: Chat history stays in local IndexedDB only, excluded from Firebase cloud sync (large size + privacy sensitive)
+- **API config remains local-only**: API keys and sensitive config never synced to cloud (confirmed unchanged)
+
+#### 📦 Save Format Upgrade
+- Save format bumped to v2, with new `perWorkChapters` indexed by work ID
+- Fully backward compatible: v1 save files can still be imported
+- Now exports user preferences (theme, language, API profiles, etc.)
