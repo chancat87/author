@@ -1,1 +1,1 @@
-修复存档/读档数据丢失，对话记录不再同步云端 | Fix save/load data loss, chat sessions now local-only
+交互体验与同步引擎升级 — 修复引导遮挡、智能合并多设备数据 | UX & Sync Engine — Fix tour clipping, smart multi-device merge

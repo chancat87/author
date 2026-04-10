@@ -1,5 +1,8 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
+# AI agent local config
+.gemini/
+
 # dependencies
 /node_modules
 /.pnp
@@ -57,8 +60,12 @@ mcp_config.json
 *草稿*/
 *draft*/
 
-# flutter mobile (private repo)
+# flutter mobile (private repo — NEVER commit)
 /mobile
+*.dart
+
+# mobile UI mockups & design artifacts (private)
+home_screen.html
 
 # firebase local cache
 .firebase/
@@ -68,3 +75,4 @@ firebase-debug.log
 firestore-debug.log
 ui-debug.log
 database-debug.log
+node_modules

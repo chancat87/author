@@ -688,8 +688,6 @@ export default function BookInfoPanel() {
         return { catCounts, customFolderLabels, orderedCatEntries, recentItems: recentItems.slice(0, 5), totalItems, totalWords, chapterCount, recentChapters };
     }, [nodes, selectedChapters]);
 
-    if (!showBookInfo) return null;
-
     const onClose = () => setShowBookInfo(false);
 
     // 时间展示
@@ -710,7 +708,7 @@ export default function BookInfoPanel() {
         <div
             style={{
                 position: 'fixed', inset: 0, zIndex: 9998,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                display: showBookInfo ? 'flex' : 'none', alignItems: 'center', justifyContent: 'center',
                 background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)',
             }}
             onMouseDown={e => { e.currentTarget._md = e.target; }}

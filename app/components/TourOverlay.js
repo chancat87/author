@@ -249,18 +249,26 @@ export default function TourOverlay({ onOpenHelp }) {
         }
     }
 
-    const tooltipHeightGuess = 200;
+    const tooltipHeightGuess = 300;
+    const tooltipWidthGuess = 340;
 
     if (tooltipStyle.top && typeof tooltipStyle.top === 'number') {
-        // Ensure tooltip doesn't go above viewport
-        if (tooltipStyle.top < tooltipHeightGuess / 2 + 20) {
+        let hasTranslateY = tooltipStyle.transform && tooltipStyle.transform.includes('translateY(-50%)');
+        let hasTranslateCenter = tooltipStyle.transform && tooltipStyle.transform.includes('translate(-50%, -50%)');
+        let isCenteredVertically = hasTranslateY || hasTranslateCenter;
+        
+        let topEdge = isCenteredVertically ? tooltipStyle.top - tooltipHeightGuess / 2 : tooltipStyle.top;
+        let bottomEdge = isCenteredVertically ? tooltipStyle.top + tooltipHeightGuess / 2 : tooltipStyle.top + tooltipHeightGuess;
+
+        if (topEdge < 20) {
             tooltipStyle.top = 20;
-            tooltipStyle.transform = tooltipStyle.transform?.replace('translateY(-50%)', '') || undefined;
-        }
-        // Ensure tooltip doesn't go below viewport
-        if (tooltipStyle.top > windowSize.h - tooltipHeightGuess / 2) {
-            tooltipStyle.top = Math.max(20, windowSize.h - tooltipHeightGuess - 20);
-            tooltipStyle.transform = tooltipStyle.transform?.replace('translateY(-50%)', '') || undefined;
+            if (hasTranslateY) tooltipStyle.transform = tooltipStyle.transform.replace('translateY(-50%)', '').trim();
+            if (hasTranslateCenter) tooltipStyle.transform = tooltipStyle.transform.replace('translate(-50%, -50%)', 'translateX(-50%)').trim();
+        } else if (bottomEdge > windowSize.h - 20) {
+            delete tooltipStyle.top;
+            tooltipStyle.bottom = 20;
+            if (hasTranslateY) tooltipStyle.transform = tooltipStyle.transform.replace('translateY(-50%)', '').trim();
+            if (hasTranslateCenter) tooltipStyle.transform = tooltipStyle.transform.replace('translate(-50%, -50%)', 'translateX(-50%)').trim();
         }
     }
 
@@ -270,18 +278,28 @@ export default function TourOverlay({ onOpenHelp }) {
         }
     }
 
-    // Ensure tooltip doesn't go off-screen horizontally (for top/bottom placements)
-    const tooltipWidthGuess = 280;
     if (tooltipStyle.left && typeof tooltipStyle.left === 'number') {
-        if (tooltipStyle.left < tooltipWidthGuess / 2 + 20) {
+        let hasTranslateX = tooltipStyle.transform && tooltipStyle.transform.includes('translateX(-50%)');
+        let hasTranslateCenter = tooltipStyle.transform && tooltipStyle.transform.includes('translate(-50%, -50%)');
+        let isCenteredHorizontally = hasTranslateX || hasTranslateCenter;
+
+        let leftEdge = isCenteredHorizontally ? tooltipStyle.left - tooltipWidthGuess / 2 : tooltipStyle.left;
+        let rightEdge = isCenteredHorizontally ? tooltipStyle.left + tooltipWidthGuess / 2 : tooltipStyle.left + tooltipWidthGuess;
+
+        if (leftEdge < 20) {
             tooltipStyle.left = 20;
-            tooltipStyle.transform = tooltipStyle.transform?.replace('translateX(-50%)', '') || undefined;
-        }
-        if (tooltipStyle.left > windowSize.w - tooltipWidthGuess / 2 - 20) {
-            tooltipStyle.left = undefined;
+            if (hasTranslateX) tooltipStyle.transform = tooltipStyle.transform.replace('translateX(-50%)', '').trim();
+            if (hasTranslateCenter) tooltipStyle.transform = tooltipStyle.transform.replace('translate(-50%, -50%)', 'translateY(-50%)').trim();
+        } else if (rightEdge > windowSize.w - 20) {
+            delete tooltipStyle.left;
             tooltipStyle.right = 20;
-            tooltipStyle.transform = tooltipStyle.transform?.replace('translateX(-50%)', '') || undefined;
+            if (hasTranslateX) tooltipStyle.transform = tooltipStyle.transform.replace('translateX(-50%)', '').trim();
+            if (hasTranslateCenter) tooltipStyle.transform = tooltipStyle.transform.replace('translate(-50%, -50%)', 'translateY(-50%)').trim();
         }
+    }
+    
+    if (tooltipStyle.transform === '') {
+        delete tooltipStyle.transform;
     }
 
     const validateStyle = { ...tooltipStyle };

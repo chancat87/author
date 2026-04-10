@@ -314,10 +314,42 @@ export async function pullAllFromCloud(localGet, localSet) {
             if (isLocalEmptyOrDefault(key, localData)) {
                 await localSet(key, cloudData.value);
                 merged++;
+            } else if (Array.isArray(localData) && Array.isArray(cloudData.value)) {
+                // 基于 id 和 updatedAt 的智能合并
+                let isIdBased = false;
+                const localMap = new Map();
+                for (const item of localData) {
+                    if (item && item.id) {
+                        isIdBased = true;
+                        localMap.set(item.id, { ...item });
+                    }
+                }
+                
+                if (isIdBased) {
+                    let hasDeltas = false;
+                    for (const item of cloudData.value) {
+                        if (item && item.id) {
+                            const localItem = localMap.get(item.id);
+                            if (!localItem) {
+                                localMap.set(item.id, { ...item });
+                                hasDeltas = true;
+                            } else {
+                                const localTime = new Date(localItem.updatedAt || 0).getTime();
+                                const cloudTime = new Date(item.updatedAt || 0).getTime();
+                                if (cloudTime > localTime) {
+                                    localMap.set(item.id, { ...item });
+                                    hasDeltas = true;
+                                }
+                            }
+                        }
+                    }
+                    if (hasDeltas) {
+                        await localSet(key, Array.from(localMap.values()));
+                        merged++;
+                    }
+                }
             } else if (cloudData.updatedAt) {
-                // 如果本地有数据，且云端带有时间戳，可以比较时间戳（尽力而为的合并）
-                // 目前由于本地数据结构不一（可能没有全局 updatedAt），非空状态下暂不直接强行覆盖
-                // 留待以后如果有基于时间戳的细粒度冲突解决再做扩展
+                // 原有逻辑保持（尽力而为）
             }
         }
 
