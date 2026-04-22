@@ -14,3 +14,12 @@ afterPack.js
 .antigravityignore
 .agents
 data
+docs
+mobile
+方案*
+计划*
+*草稿*
+*draft*
+.gemini
+.codex
+.firebase

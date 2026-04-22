@@ -56,7 +56,7 @@ export async function POST(request) {
         if (['gemini-native', 'custom-gemini'].includes(provider)) {
             const geminiModel = embedModelName || 'text-embedding-004';
             const url = `${baseUrl}/models/${geminiModel}:embedContent?key=${apiKey}`;
-            console.log('Fetching Gemini Embeddings:', url);
+            // API Key 已在 URL 中，不打印完整 URL 以防泄露
             const res = await proxyFetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
