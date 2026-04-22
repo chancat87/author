@@ -445,7 +445,8 @@
         "configFirebaseDesc": "适合源码部署 / Vercel 部署用户。",
         "viewGuide": "查看配置指南",
         "qqGroup": "遇到问题？加入 QQ 群 1087016949",
-        "notConfiguredCard": "你的部署未配置 Firebase，无法使用云同步。"
+        "notConfiguredCard": "你的部署未配置 Firebase，无法使用云同步。",
+        "chatLocalOnly": "注意：AI 对话记录仍只保存在当前设备，不会参与云同步。"
     },
     "tour": {
         "step1Title": "创建你的故事",
@@ -671,6 +672,11 @@
         "syncAndExit": "是的，同步后退出",
         "syncing": "同步中，请稍候...",
         "exitDirectly": "否，直接退出",
-        "cancel": "取消，返回应用"
+        "cancel": "取消，返回应用",
+        "syncFailed": "云同步失败，但当前内容已经安全保存到本机。你可以重试同步，或仅退出并保留本地内容。",
+        "retrySyncAndExit": "重试同步并退出",
+        "exitWithLocalSave": "仅退出（本地已保存）",
+        "localSaved": "本地内容已安全保存到当前设备。",
+        "errorPrefix": "同步失败："
     }
 }

@@ -2,9 +2,17 @@ import { persistGet, persistSet } from './persistence';
 import { getChapters, saveChapters } from './storage';
 import { getSettingsNodes, saveSettingsNodes, getActiveWorkId } from './settings';
 import { get, set } from 'idb-keyval';
+import { useAppStore } from '../store/useAppStore';
 
 const SNAPSHOTS_KEY = 'author-snapshots';
 const CLOUD_SNAPSHOT_KEY = 'author-snapshot-latest'; // 云端仅保留最新一次
+
+async function flushPendingEditorBeforeSnapshot() {
+    const flushPendingEditorSave = useAppStore.getState().flushPendingEditorSave;
+    if (typeof flushPendingEditorSave === 'function') {
+        await flushPendingEditorSave();
+    }
+}
 
 /**
  * 获取所有快照（从本地 IndexedDB 读取，不走云同步）
@@ -25,10 +33,13 @@ export async function getSnapshots() {
  * 创建新快照
  * @param {string} label - 快照标签描述
  * @param {string} type - 'auto' | 'manual'
+ * @param {{ syncLatestToCloud?: boolean }} options
  * @returns {Promise<object>}
  */
-export async function createSnapshot(label, type = 'auto') {
+export async function createSnapshot(label, type = 'auto', options = {}) {
     try {
+        const { syncLatestToCloud = true } = options;
+        await flushPendingEditorBeforeSnapshot();
         const chapters = await getChapters(getActiveWorkId());
         const settingsNodes = await getSettingsNodes();
 
@@ -64,17 +75,19 @@ export async function createSnapshot(label, type = 'auto') {
         await set(SNAPSHOTS_KEY, finalSnapshots);
 
         // 仅将最新一次快照同步到云端（轻量元数据 + 数据）
-        try {
-            await persistSet(CLOUD_SNAPSHOT_KEY, {
-                id: snapshot.id,
-                timestamp: snapshot.timestamp,
-                label: snapshot.label,
-                type: snapshot.type,
-                stats: snapshot.stats,
-                data: snapshot.data,
-            });
-        } catch {
-            // 云同步失败不影响本地
+        if (syncLatestToCloud) {
+            try {
+                await persistSet(CLOUD_SNAPSHOT_KEY, {
+                    id: snapshot.id,
+                    timestamp: snapshot.timestamp,
+                    label: snapshot.label,
+                    type: snapshot.type,
+                    stats: snapshot.stats,
+                    data: snapshot.data,
+                });
+            } catch {
+                // 云同步失败不影响本地
+            }
         }
 
         return snapshot;

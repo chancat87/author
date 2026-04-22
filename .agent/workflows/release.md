@@ -30,16 +30,18 @@ cat .gitignore
 确认以下类型均被忽略（如有遗漏需先补上）：
 - 环境变量文件（`.env*`，`.env.local` 等）
 - 日志文件（`*.log`，`firebase-debug.log` 等）
-- 内部文档目录（`docs/`，`方案和计划文件/` 等）
-- 密钥和凭证文件（`*secret*`，`*credential*`，`*.key`，`*.pem` 等）
+- 内部文档目录（至少 `docs/`；临时计划、草稿、内部说明统一放这里）
+- 密钥和凭证文件的明确类型（`*.key`，`*.pem` 等）
 - 构建产物（`dist/`，`.next/` 等）
+
+注意：`.gitignore` 保持保守，不要为了省事加入过宽的名字匹配（如 `*secret*`、`*credential*`），以免把本来应该提交的特殊文件也一起忽略。对于临时计划、草稿、内部说明，优先移动到 `docs/`，而不是扩大全局忽略规则。
 
 // turbo
 3. 全面扫描已追踪文件中是否有敏感文件：
 ```bash
 git ls-files | findstr /i "secret credential key\.pem env\.local plan 方案 计划 doc 草稿 draft private internal debug\.log"
 ```
-除 `.env.example`、`README` 类说明文档、源码中合理使用的文件外，不应有任何敏感文件。**发现可疑文件必须逐个核实。**
+除 `.env.example`、`README` 类说明文档、源码中合理使用的文件外，不应有任何敏感文件。**发现可疑文件必须逐个核实。** 如果是临时计划、草稿、内部说明，优先移入 `docs/`，不要临时往 `.gitignore` 里追加过宽规则。
 
 // turbo
 4. **【关键】移动端私有资产泄漏扫描**（此项目的移动端为闭源私有仓库，绝对不可泄露到本开源仓库）：
@@ -69,6 +71,7 @@ git status --short
 
 7. **【必须】向用户汇报安全检查结果**，包括：
    - `.gitignore` 是否完整覆盖敏感文件
+   - 临时计划/草稿/内部说明是否已统一放入 `docs/`
    - 是否有意外追踪的敏感文件
    - **移动端/Flutter 私有资产是否完全隔离（第 4 步结果）**
    - diff 中是否存在密钥泄露
@@ -150,7 +153,7 @@ git push origin main && git push origin vX.Y.Z -f
 ## 注意事项
 
 - **版本号来源**：安装包文件名读取 `package.json` 的 `version` 字段，不是 git tag。两者必须一致。
-- **敏感文件**：`docs/`、`方案和计划文件/`、`.env`、`firebase-debug.log` 均被 `.gitignore` 忽略，不会进入 git 仓库和 Release 的 Source code 包。
+- **敏感文件**：`docs/`、`.env`、`firebase-debug.log` 等均被 `.gitignore` 忽略，不会进入 git 仓库和 Release 的 Source code 包。临时计划、草稿、内部说明优先统一放入 `docs/`，不要依赖过宽的名字匹配规则（如 `*secret*`、`*credential*`）来兜底。
 - **移动端隔离**：`/mobile` 目录、`*.dart` 文件、`home_screen.html` 等移动端私有资产均被 `.gitignore` 忽略。每次发版前的第 4 步会强制扫描确认无泄漏。此项目的移动端为独立闭源仓库，绝不可混入开源代码。
 - **Docker 安全**：Docker 使用多阶段构建，最终镜像只含构建产物（`.next/standalone`），不含源码和配置文件。
 - **如果构建失败**：去 Actions 页面查看日志，修复后用 `git tag -f vX.Y.Z && git push origin vX.Y.Z -f` 强制更新 tag 重新触发。

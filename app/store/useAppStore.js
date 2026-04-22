@@ -141,6 +141,14 @@ const store = create((set, get) => ({
     settingsVersion: 0,
     incrementSettingsVersion: () => set((state) => ({ settingsVersion: state.settingsVersion + 1 })),
 
+    pendingEditorSaveFlusher: null,
+    setPendingEditorSaveFlusher: (flusher) => set({ pendingEditorSaveFlusher: typeof flusher === 'function' ? flusher : null }),
+    flushPendingEditorSave: async () => {
+        const flusher = get().pendingEditorSaveFlusher;
+        if (typeof flusher !== 'function') return { changed: false };
+        return await flusher();
+    },
+
     // --- AI Chat & Generation State ---
     sessionStore: { activeSessionId: null, sessions: [] },
     setSessionStore: (action) => set((state) => ({ sessionStore: typeof action === 'function' ? action(state.sessionStore) : action })),

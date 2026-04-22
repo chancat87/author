@@ -21,6 +21,7 @@ const COLLECTION_NAME = 'data';       // users/{uid}/data/{key}
 const _pendingWrites = new Map();    // key → { value, timestamp }
 let _syncTimer = null;
 let _isSyncing = false;
+let _activeFlushPromise = null;
 let _idleTimer = null;               // 空闲检测定时器
 let _lastDataChange = 0;             // 最后一次数据变化时间
 let _firstSyncAfterLogin = true;     // 登录后第一次同步标志（强制真实同步）
@@ -151,9 +152,24 @@ export async function firestoreDel(key) {
  * 将队列中的数据批量写入 Firestore
  * 由定时器自动调用，也可手动调用（如退出登录前）
  */
-export async function flushSync() {
+export async function flushSync(options = {}) {
+    const { throwOnError = false } = options;
     const user = getCurrentUser();
     if (!isFirebaseConfigured || !db || !user) return;
+
+    // 若已有同步正在进行，优先等待其完成，避免在队列已被取走时误判为“无待同步数据”
+    // 例如退出前点击“同步后退出”时，需要等当前 flush 真正落盘后再继续关闭流程
+    if (_isSyncing) {
+        if (_activeFlushPromise) {
+            try {
+                return await _activeFlushPromise;
+            } catch (err) {
+                if (throwOnError) throw err;
+                return;
+            }
+        }
+        return;
+    }
 
     // 登录后第一次同步 — 强制执行真实同步（即使队列为空）
     if (_firstSyncAfterLogin) {
@@ -171,7 +187,6 @@ export async function flushSync() {
         notifySyncStatus({ syncing: false, pending: 0, lastSync: Date.now() });
         return;
     }
-    if (_isSyncing) return; // 防止并发
 
     _isSyncing = true;
     notifySyncStatus({ syncing: true, pending: _pendingWrites.size });
@@ -180,7 +195,7 @@ export async function flushSync() {
     const entries = Array.from(_pendingWrites.entries());
     _pendingWrites.clear();
 
-    try {
+    _activeFlushPromise = (async () => {
         // Firestore 限制：每个 writeBatch 最多 500 个操作
         const BATCH_LIMIT = 450;
         for (let i = 0; i < entries.length; i += BATCH_LIMIT) {
@@ -236,17 +251,27 @@ export async function flushSync() {
 
         console.log(`[firestore] synced ${entries.length} items`);
         notifySyncStatus({ syncing: false, pending: 0, lastSync: Date.now() });
-    } catch (err) {
-        console.error('[firestore] batch sync failed:', err.message);
-        // 失败的写回队列，等下次重试
-        for (const [key, data] of entries) {
-            if (!_pendingWrites.has(key)) {
-                _pendingWrites.set(key, data);
+    })()
+        .catch((err) => {
+            console.error('[firestore] batch sync failed:', err.message);
+            // 失败的写回队列，等下次重试
+            for (const [key, data] of entries) {
+                if (!_pendingWrites.has(key)) {
+                    _pendingWrites.set(key, data);
+                }
             }
-        }
-        notifySyncStatus({ syncing: false, pending: _pendingWrites.size, error: err.message });
-    } finally {
-        _isSyncing = false;
+            notifySyncStatus({ syncing: false, pending: _pendingWrites.size, error: err.message });
+            throw err;
+        })
+        .finally(() => {
+            _isSyncing = false;
+            _activeFlushPromise = null;
+        });
+
+    try {
+        return await _activeFlushPromise;
+    } catch (err) {
+        if (throwOnError) throw err;
     }
 }
 

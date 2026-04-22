@@ -44,6 +44,9 @@ const PAGE_GAP = 24;      // 页间灰色间隙
 const Editor = forwardRef(function Editor({ content, chapterId, onUpdate, editable = true, onAiRequest, onArchiveGeneration, contextItems, contextSelection, setContextSelection }, ref) {
     const clipPathId = useId();
     const debounceRef = useRef(null);
+    const saveQueueRef = useRef(Promise.resolve({ changed: false }));
+    const queuedSaveKeyRef = useRef(null);
+    const lastCompletedSaveKeyRef = useRef(null);
     const isLoadingContentRef = useRef(false);
     const contentRef = useRef(null);
 
@@ -84,6 +87,57 @@ const Editor = forwardRef(function Editor({ content, chapterId, onUpdate, editab
     const slashExtension = useMemo(() => createSlashExtension((range) => {
         setSlashRange(range);
     }), []);
+
+    const buildSavePayload = useCallback((targetEditor) => {
+        if (!targetEditor) return null;
+        const html = targetEditor.getHTML();
+        const text = targetEditor.getText();
+        return {
+            chapterId,
+            html,
+            text,
+            wordCount: text.replace(/\s/g, '').length,
+        };
+    }, [chapterId]);
+
+    const queueSave = useCallback((payload) => {
+        if (!payload || !onUpdate) return Promise.resolve({ changed: false });
+
+        const saveKey = JSON.stringify({
+            chapterId: payload.chapterId || null,
+            html: payload.html || '',
+            wordCount: payload.wordCount || 0,
+        });
+
+        if (saveKey === lastCompletedSaveKeyRef.current) {
+            return Promise.resolve({ changed: false });
+        }
+
+        if (saveKey === queuedSaveKeyRef.current) {
+            return saveQueueRef.current;
+        }
+
+        queuedSaveKeyRef.current = saveKey;
+        const nextSave = saveQueueRef.current
+            .catch(() => ({ changed: false }))
+            .then(async () => {
+                if (saveKey === lastCompletedSaveKeyRef.current) {
+                    return { changed: false };
+                }
+
+                await Promise.resolve(onUpdate(payload));
+                lastCompletedSaveKeyRef.current = saveKey;
+                return { changed: true };
+            })
+            .finally(() => {
+                if (queuedSaveKeyRef.current === saveKey) {
+                    queuedSaveKeyRef.current = null;
+                }
+            });
+
+        saveQueueRef.current = nextSave;
+        return nextSave;
+    }, [onUpdate]);
 
     const editor = useEditor({
         immediatelyRender: false,
@@ -140,16 +194,31 @@ const Editor = forwardRef(function Editor({ content, chapterId, onUpdate, editab
             if (isLoadingContentRef.current) return;
             if (debounceRef.current) clearTimeout(debounceRef.current);
             debounceRef.current = setTimeout(() => {
-                const html = editor.getHTML();
-                const text = editor.getText();
-                onUpdate?.({
-                    html,
-                    text,
-                    wordCount: text.replace(/\s/g, '').length,
+                debounceRef.current = null;
+                queueSave(buildSavePayload(editor)).catch(err => {
+                    console.error('Editor autosave failed:', err);
                 });
             }, 500);
         },
     });
+
+    const flushPendingSave = useCallback(async () => {
+        if (!editor || isLoadingContentRef.current) return { changed: false };
+        if (debounceRef.current) {
+            clearTimeout(debounceRef.current);
+            debounceRef.current = null;
+        }
+
+        const payload = buildSavePayload(editor);
+        return await queueSave(payload);
+    }, [buildSavePayload, editor, queueSave]);
+
+    useEffect(() => () => {
+        if (debounceRef.current) {
+            clearTimeout(debounceRef.current);
+            debounceRef.current = null;
+        }
+    }, []);
 
     // 切换章节时重置编辑器内容（替代 key={chapterId} 强制重挂载，避免闪白）
     const prevChapterIdRef = useRef(chapterId);
@@ -216,6 +285,7 @@ const Editor = forwardRef(function Editor({ content, chapterId, onUpdate, editab
     // 通过 ref 暴露方法给父组件（侧栏存档插入 + 大纲读取用）
     useImperativeHandle(ref, () => ({
         getEditor: () => editor,
+        flushPendingSave,
         insertText: (text) => {
             if (!editor) return;
             // 规范化换行
@@ -231,7 +301,7 @@ const Editor = forwardRef(function Editor({ content, chapterId, onUpdate, editab
                 .join('');
             editor.chain().focus().insertContent(html).run();
         },
-    }), [editor]);
+    }), [editor, flushPendingSave]);
 
     // ===== 核心：ResizeObserver 监听内容高度，计算页数 =====
     const observerRef = useRef(null);

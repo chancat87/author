@@ -445,7 +445,8 @@
     "configFirebaseDesc": "Suitable for source code deployment / Vercel deployment users.",
     "viewGuide": "View Configuration Guide",
     "qqGroup": "Need help? Join QQ group 1087016949",
-    "notConfiguredCard": "Your deployment does not have Firebase configured, Cloud Sync is unavailable."
+    "notConfiguredCard": "Your deployment does not have Firebase configured, Cloud Sync is unavailable.",
+    "chatLocalOnly": "Note: AI chat history stays on this device only and is not included in cloud sync."
   },
   "tour": {
     "step1Title": "Create Your Story",
@@ -671,6 +672,11 @@
     "syncAndExit": "Yes, sync and exit",
     "syncing": "Syncing, please wait...",
     "exitDirectly": "No, exit directly",
-    "cancel": "Cancel, back to app"
+    "cancel": "Cancel, back to app",
+    "syncFailed": "Cloud sync failed, but your latest content is already saved on this device. You can retry syncing or exit with the local save.",
+    "retrySyncAndExit": "Retry Sync and Exit",
+    "exitWithLocalSave": "Exit with Local Save",
+    "localSaved": "Your latest content has been safely saved on this device.",
+    "errorPrefix": "Sync failed: "
   }
 }

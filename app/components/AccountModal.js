@@ -118,6 +118,7 @@ export default function AccountModal() {
     const handleSignOut = async () => {
         setSigningOut(true);
         try {
+            await useAppStore.getState().flushPendingEditorSave();
             const { stopCloudSync } = await import('../lib/persistence');
             await stopCloudSync();
             const auth = await import('../lib/auth');
@@ -125,6 +126,7 @@ export default function AccountModal() {
             setShowAccountModal(false);
         } catch (err) {
             console.error('Sign out error:', err);
+            setSaveMsg('退出前同步失败，请稍后重试');
         } finally {
             setSigningOut(false);
         }
@@ -133,11 +135,16 @@ export default function AccountModal() {
     const handleSwitchToAccount = async (account) => {
         // 先退出当前账号
         try {
+            await useAppStore.getState().flushPendingEditorSave();
             const { stopCloudSync } = await import('../lib/persistence');
             await stopCloudSync();
             const auth = await import('../lib/auth');
             await auth.signOut();
-        } catch { }
+        } catch (err) {
+            console.error('Switch account sync error:', err);
+            setSaveMsg('切换账号前同步失败，请稍后重试');
+            return;
+        }
         setShowAccountModal(false);
         // 延时打开登录弹窗（用户需要重新认证）
         setTimeout(() => setShowLoginModal(true), 300);
@@ -159,9 +166,15 @@ export default function AccountModal() {
 
     const handleManualSync = async () => {
         try {
+            setSaveMsg('');
+            await useAppStore.getState().flushPendingEditorSave();
             const { flushSync } = await import('../lib/firestore-sync');
-            await flushSync();
-        } catch { }
+            await flushSync({ throwOnError: true });
+            setSaveMsg('已保存并同步到云端');
+            setTimeout(() => setSaveMsg(''), 2000);
+        } catch (err) {
+            setSaveMsg('同步失败: ' + (err.message || '未知错误'));
+        }
     };
 
     const initial = (authUser.displayName || authUser.email || '?')[0].toUpperCase();
@@ -369,7 +382,7 @@ export default function AccountModal() {
                         </div>
 
                         <p className="account-modal-footer">
-                            退出后数据仅保存在本地，不再同步到云端
+                            退出后将停止云同步；AI 对话记录仍只保存在本机，不会参与云同步。
                         </p>
                     </>
                 )}

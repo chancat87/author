@@ -134,9 +134,12 @@ function SyncMenuPortal({ anchorRef, cloudinarySyncStatus, setShowSyncMenu, setS
                         onClick={async () => {
                             setShowSyncMenu(false);
                             try {
+                                await useAppStore.getState().flushPendingEditorSave();
                                 const { flushSync } = await import('../lib/firestore-sync');
-                                await flushSync();
-                            } catch {}
+                                await flushSync({ throwOnError: true });
+                            } catch (err) {
+                                showToast(`同步失败: ${err.message}`, 'error');
+                            }
                         }}
                         disabled={cloudinarySyncStatus?.syncing}
                     >
@@ -160,6 +163,9 @@ function SyncMenuPortal({ anchorRef, cloudinarySyncStatus, setShowSyncMenu, setS
                         <CloudDownload size={14} style={{ marginRight: 6 }} />
                         从云端同步
                     </button>
+                </div>
+                <div style={{ padding: '8px 12px 4px', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                    {t('cloudSync.chatLocalOnly')}
                 </div>
             </div>
         </>,
@@ -1223,23 +1229,32 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                     onClose={() => setShowSyncConfirmModal(false)} 
                     onConfirm={async () => {
                         try {
+                            await useAppStore.getState().flushPendingEditorSave();
                             const { forcePullFromCloud } = await import('../lib/firestore-sync');
                             const { persistSet } = await import('../lib/persistence');
+                            const { createSnapshot } = await import('../lib/snapshots');
+
+                            await createSnapshot('从云端同步前的备份', 'manual', { syncLatestToCloud: false });
                             
                             window._isAppForcePulling = true;
                             const localSet = async (key, value) => {
                                 window._isForcePullingBypass = true;
-                                await persistSet(key, value);
-                                window._isForcePullingBypass = false;
+                                try {
+                                    await persistSet(key, value);
+                                } finally {
+                                    window._isForcePullingBypass = false;
+                                }
                             };
                             
                             const count = await forcePullFromCloud(localSet);
+                            window._isAppForcePulling = false;
                             showToast(`成功覆盖了 ${count} 项本地数据，即将刷新以应用更改...`, 'success');
                             setTimeout(() => {
                                 window.location.reload();
                             }, 1500);
                         } catch (err) {
                             window._isAppForcePulling = false;
+                            window._isForcePullingBypass = false;
                             showToast(`拉取失败: ${err.message}`, 'error');
                         }
                     }}

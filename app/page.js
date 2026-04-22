@@ -64,6 +64,7 @@ export default function Home() {
     contextSelection, setContextSelection,
     contextItems, setContextItems,
     settingsVersion, incrementSettingsVersion,
+    setPendingEditorSaveFlusher,
     sessionStore, setSessionStore,
     generationArchive, setGenerationArchive,
     chatStreaming, setChatStreaming
@@ -72,6 +73,17 @@ export default function Home() {
   const { t } = useI18n();
   const [showHelp, setShowHelp] = useState(false);
   const editorRef = useRef(null);
+  const flushPendingEditorSave = useCallback(async () => {
+    if (!editorRef.current?.flushPendingSave) {
+      return { changed: false };
+    }
+    return await editorRef.current.flushPendingSave();
+  }, []);
+
+  useEffect(() => {
+    setPendingEditorSaveFlusher(flushPendingEditorSave);
+    return () => setPendingEditorSaveFlusher(null);
+  }, [flushPendingEditorSave, setPendingEditorSaveFlusher]);
 
   // ===== AI 助手按钮拖拽位置 =====
   const [aiTogglePos, setAiTogglePos] = useState(null);
@@ -305,14 +317,15 @@ export default function Home() {
   // 当前活跃章节
   const activeChapter = Array.isArray(chapters) ? chapters.find(ch => ch.id === activeChapterId) : null;
 
-  const handleEditorUpdate = useCallback(async ({ html, wordCount }) => {
-    if (!activeChapterId) return;
-    const updated = await updateChapter(activeChapterId, {
+  const handleEditorUpdate = useCallback(async ({ chapterId: targetChapterId, html, wordCount }) => {
+    const chapterIdToSave = targetChapterId || activeChapterId;
+    if (!chapterIdToSave) return;
+    const updated = await updateChapter(chapterIdToSave, {
       content: html,
       wordCount,
     }, activeWorkId);
     if (updated) {
-      updateChapterStore(activeChapterId, { content: html, wordCount });
+      updateChapterStore(chapterIdToSave, { content: html, wordCount });
     }
   }, [activeChapterId, activeWorkId, updateChapterStore]);
 

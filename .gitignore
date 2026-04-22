@@ -2,6 +2,7 @@
 
 # AI agent local config
 .gemini/
+.codex/
 
 # dependencies
 /node_modules
@@ -25,10 +26,12 @@
 
 # misc
 .DS_Store
+*.key
 *.pem
 .idea/
 
 # debug
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

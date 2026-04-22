@@ -1400,6 +1400,7 @@ function PreferencesForm() {
 
     const handleSignOut = async () => {
         try {
+            await useAppStore.getState().flushPendingEditorSave();
             const { stopCloudSync } = await import('../lib/persistence');
             await stopCloudSync();
             const auth = await import('../lib/auth');

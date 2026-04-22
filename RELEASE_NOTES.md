@@ -1,31 +1,35 @@
-## v1.2.17 — 交互体验与同步引擎升级 | UX & Sync Engine Improvements
+## v1.2.18 — 修复退出同步时最后内容丢失，并补充更清晰的保存提醒 | Fixed last-minute text loss on sync exit and added clearer save guidance
 
 ### 🇨🇳 中文
 
 #### 🐛 修复
-- **修复新手引导提示框被遮挡**：在小窗口/PC 端，引导工具提示可能溢出屏幕边界导致按钮不可见。现在采用精确的边界检测算法（考虑 CSS transform 偏移），确保提示框始终完整显示在视窗内
-- **修复作品信息面板闪烁**：关闭面板时不再卸载组件，改用 `display: none` 保持 DOM 状态，消除重新打开时的渲染闪烁
+- **修复“同步后退出”时最后输入内容可能丢失的问题**：如果刚写完一段内容就立刻退出，系统现在会先保存当前文字，再执行云同步，避免最后几百字没有被带上
+- **修复手动同步、创建快照时可能漏掉最新内容的问题**：这些关键操作现在都会先保存编辑器里正在写的内容，再继续执行
+- **修复同步失败后仍然直接退出的问题**：当云同步失败时，退出弹窗会明确提示原因，并允许你选择重试同步，或仅带着本地已保存内容退出
 
-#### 🔄 同步引擎改进
-- **云端拉取智能合并**：当本地和云端都有数据时，不再简单跳过。对基于 ID 的数组（章节、设定节点等），按 `id` + `updatedAt` 逐条比较，只合入云端更新的条目，保留本地新增内容
-- **解决多设备编辑数据丢失**：跨设备切换时，之前未同步的本地改动不再被忽略
+#### 💾 数据安全改进
+- **统一了关键操作前的保存方式**：退出、同步、创建快照等操作，现在都会先保存你眼前正在编辑的内容，减少因为操作太快导致的遗漏
+- **从云端覆盖本地内容前自动创建备份**：执行“从云端同步”前，会先生成一份本地快照，方便在误覆盖后恢复
+- **同步等待更可靠**：如果后台已经在同步，新的退出同步或手动同步会等当前同步完成，不会误以为已经同步结束
 
-#### 🔒 安全加固
-- **发版流程新增移动端泄漏扫描**：自动扫描已追踪文件和暂存区，防止私有移动端代码意外混入开源仓库
-- **`.gitignore` 补充规则**：新增 `.gemini/` 排除，避免 AI 工具本地配置被提交
+#### 📝 文档与说明
+- **帮助页已修正同步范围说明**：AI 对话记录仅保存在本地，快照历史默认保存在本地，云端只保留最近一次快照
+- **同步相关界面补充了更清楚的提示**：在退出弹窗、账号面板和同步菜单中补充说明，减少对同步范围的误解
 
 ---
 
 ### 🇬🇧 English
 
 #### 🐛 Fixes
-- **Fix onboarding tour tooltips clipped off-screen**: On small windows/PC, tour tooltips could overflow viewport boundaries, making navigation buttons invisible. Now uses precise boundary detection (accounting for CSS transform offsets) to keep tooltips fully visible
-- **Fix BookInfo panel flicker**: Panel now uses `display: none` instead of unmounting, eliminating re-render flash on reopen
+- **Fixed possible loss of the latest text when choosing “Sync and Exit”**: If you exited right after typing, the app now saves the current text first and only then runs cloud sync, preventing the last few hundred characters from being missed
+- **Fixed missing latest content during manual sync and snapshot creation**: These important actions now save the text currently being edited before continuing
+- **Fixed direct exit after sync failure**: When cloud sync fails, the exit modal now explains the problem clearly and lets you retry sync or exit with the already-saved local content
 
-#### 🔄 Sync Engine Improvements
-- **Smart merge on cloud pull**: When both local and cloud have data, ID-based arrays (chapters, setting nodes, etc.) are now merged item-by-item using `id` + `updatedAt` comparison. Only newer cloud entries are merged in, preserving local additions
-- **Fix data loss on multi-device editing**: Previously unsynced local changes are no longer silently skipped when pulling from cloud
+#### 💾 Data Safety Improvements
+- **Unified saving before critical actions**: Exit, sync, and snapshot actions now save what you are currently editing first, reducing the chance of missing recent changes
+- **Create a backup before cloud overwrite**: Before “Sync from Cloud” replaces local content, the app now creates a local snapshot for recovery
+- **More reliable sync waiting**: If a sync is already running, exit-sync and manual-sync actions now wait for it to finish instead of incorrectly assuming sync is done
 
-#### 🔒 Security Hardening
-- **Release workflow now includes mobile asset leak scan**: Automatically scans tracked files and staging area to prevent private mobile code from accidentally entering the open-source repository
-- **`.gitignore` updates**: Added `.gemini/` exclusion to prevent AI tool local config from being committed
+#### 📝 Docs and UX Copy
+- **Corrected help-page wording about sync scope**: AI chat history is local-only, while snapshot history stays local by default and only the latest snapshot is kept in cloud sync
+- **Added clearer messaging in sync-related UI**: The exit modal, account panel, and sync menu now explain the actual sync scope more clearly

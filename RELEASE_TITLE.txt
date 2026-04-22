@@ -1,1 +1,1 @@
-交互体验与同步引擎升级 — 修复引导遮挡、智能合并多设备数据 | UX & Sync Engine — Fix tour clipping, smart multi-device merge
+修复退出同步时最后内容丢失，并补充更清晰的保存提醒 | Fixed last-minute text loss on sync exit and added clearer save guidance
