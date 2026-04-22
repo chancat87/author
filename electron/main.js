@@ -611,6 +611,44 @@ function closeSplashWindow() {
     }
 }
 
+function cleanupBundledNonRuntimeFiles() {
+    if (!app.isPackaged) return;
+
+    const standaloneDir = path.join(process.resourcesPath, 'standalone');
+    const removableEntries = [
+        'docs',
+        '.agent',
+    ];
+
+    try {
+        if (!fs.existsSync(standaloneDir)) {
+            log(`[Cleanup] standalone dir not found, skip: ${standaloneDir}`);
+            return;
+        }
+
+        for (const entry of removableEntries) {
+            const targetPath = path.join(standaloneDir, entry);
+            if (fs.existsSync(targetPath)) {
+                fs.rmSync(targetPath, { recursive: true, force: true });
+                log(`[Cleanup] Removed stale bundled path: ${targetPath}`);
+            }
+        }
+
+        const topLevelEntries = fs.readdirSync(standaloneDir, { withFileTypes: true });
+        const staleDirPatterns = [/^方案/i, /^计划/i, /草稿/i, /draft/i];
+        for (const entry of topLevelEntries) {
+            if (!entry.isDirectory()) continue;
+            if (!staleDirPatterns.some((pattern) => pattern.test(entry.name))) continue;
+
+            const targetPath = path.join(standaloneDir, entry.name);
+            fs.rmSync(targetPath, { recursive: true, force: true });
+            log(`[Cleanup] Removed stale bundled path: ${targetPath}`);
+        }
+    } catch (err) {
+        log(`[Cleanup] Failed to remove stale bundled files: ${err.message}`);
+    }
+}
+
 app.whenReady().then(async () => {
     log('=== Author Desktop Starting ===');
     log(`Electron version: ${process.versions.electron}`);
@@ -618,6 +656,8 @@ app.whenReady().then(async () => {
     log(`Platform: ${process.platform} ${process.arch}`);
     log(`App path: ${app.getAppPath()}`);
     log(`Exe path: ${process.execPath}`);
+
+    cleanupBundledNonRuntimeFiles();
 
     // 立即显示启动窗口，让用户知道程序在运行
     if (!isDev) {
