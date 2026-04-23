@@ -33,6 +33,8 @@ exports.default = async function afterPack(context) {
     const appOutDir = context.appOutDir; // e.g. dist/win-unpacked
     const standaloneNodeModules = path.join(__dirname, '.next', 'standalone', 'node_modules');
     const targetNodeModules = path.join(appOutDir, 'resources', 'standalone', 'node_modules');
+    const sourceNextServerRuntime = path.join(__dirname, 'node_modules', 'next', 'dist', 'compiled', 'next-server');
+    const targetNextServerRuntime = path.join(targetNodeModules, 'next', 'dist', 'compiled', 'next-server');
 
     console.log(`[afterPack] Copying node_modules from ${standaloneNodeModules}`);
     console.log(`[afterPack] To ${targetNodeModules}`);
@@ -44,4 +46,12 @@ exports.default = async function afterPack(context) {
 
     copyDirSync(standaloneNodeModules, targetNodeModules);
     console.log('[afterPack] node_modules copied successfully');
+
+    if (fs.existsSync(sourceNextServerRuntime)) {
+        console.log(`[afterPack] Ensuring Next.js route runtimes from ${sourceNextServerRuntime}`);
+        copyDirSync(sourceNextServerRuntime, targetNextServerRuntime);
+        console.log('[afterPack] Next.js route runtimes copied successfully');
+    } else {
+        console.warn(`[afterPack] WARNING: Next.js route runtime dir not found: ${sourceNextServerRuntime}`);
+    }
 };

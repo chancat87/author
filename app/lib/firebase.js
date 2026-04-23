@@ -21,6 +21,7 @@ const firebaseConfig = {
     storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
     messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
     appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+    measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
 // 防止热更新时重复初始化
@@ -32,8 +33,55 @@ export const isFirebaseConfigured = Boolean(firebaseConfig.apiKey && firebaseCon
 export const auth = isFirebaseConfigured ? getAuth(app) : null;
 export const db = isFirebaseConfigured ? getFirestore(app) : null;
 
+export const isFirebaseAnalyticsConfigured = Boolean(isFirebaseConfigured && firebaseConfig.measurementId);
+
+let analyticsPromise = null;
+
+export async function getFirebaseAnalytics() {
+    if (!isFirebaseAnalyticsConfigured) return null;
+    if (typeof window === 'undefined' || window.electronAPI) return null;
+
+    if (!analyticsPromise) {
+        analyticsPromise = (async () => {
+            const { initializeAnalytics, getAnalytics, isSupported } = await import('firebase/analytics');
+            const supported = await isSupported();
+            if (!supported) return null;
+
+            try {
+                return initializeAnalytics(app, {
+                    config: {
+                        send_page_view: false,
+                    },
+                });
+            } catch (err) {
+                if (err?.code === 'analytics/already-exists') {
+                    return getAnalytics(app);
+                }
+                throw err;
+            }
+        })().catch((err) => {
+            console.warn('[Firebase Analytics] 初始化失败:', err);
+            return null;
+        });
+    }
+
+    return analyticsPromise;
+}
+
+export async function logFirebasePageView({ pageTitle, pageLocation, pagePath } = {}) {
+    const analytics = await getFirebaseAnalytics();
+    if (!analytics) return false;
+
+    const { logEvent } = await import('firebase/analytics');
+    logEvent(analytics, 'page_view', {
+        page_title: pageTitle || document.title,
+        page_location: pageLocation || window.location.href,
+        page_path: pagePath || `${window.location.pathname}${window.location.search}`,
+    });
+    return true;
+}
+
 // ⬇️ 阶段4（生态）升级预留
 // export const vertexAI = isFirebaseConfigured ? getVertexAI(app) : null;
-// export const analytics = isFirebaseConfigured ? getAnalytics(app) : null;
 
 export default app;

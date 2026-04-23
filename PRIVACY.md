@@ -4,13 +4,13 @@
 
 # Author — Privacy Policy
 
-**Last updated: April 2, 2026**
+**Last updated: April 23, 2026**
 
 ## 1. Introduction
 
-This Privacy Policy explains how the Author project ("we", "us", "our") handles your data when you use the cloud synchronization service. We are committed to respecting your privacy and being transparent about our data practices.
+This Privacy Policy explains how the Author project ("we", "us", "our") handles your data when you use the cloud synchronization service and the official web version. We are committed to respecting your privacy and being transparent about our data practices.
 
-**In short: We don't read your creative works, we don't sell your data, and we collect only what's necessary to provide the sync service.**
+**In short: We don't read your creative works, we don't sell your data, and we collect only what's necessary to provide sync and basic web usage statistics.**
 
 ## 2. Data We Collect
 
@@ -26,10 +26,13 @@ When you use cloud sync, the following data is stored:
 - Application settings and preferences
 - AI conversation history (if cloud sync is enabled for it)
 
-### 2.3 What We Do NOT Collect
+### 2.3 Web Usage Statistics
+On the official web version, we may collect basic aggregate usage statistics through Firebase Analytics and Vercel Analytics, such as page views, approximate device/browser information, and referrer information. We do not use these statistics to read your creative content, API keys, AI conversations, or synced documents.
+
+### 2.4 What We Do NOT Collect
 - Device hardware identifiers
 - IP address logs (beyond what Firebase automatically processes)
-- Usage analytics or behavioral tracking
+- Detailed behavioral tracking unrelated to aggregate web usage statistics
 - Keystroke or input telemetry
 
 ## 3. How We Use Your Data
@@ -43,7 +46,7 @@ We do **NOT** use your data for:
 - Training AI models
 - Advertising or marketing
 - Selling to third parties
-- User profiling or behavioral analysis
+- Individual user profiling or advertising-oriented behavioral analysis
 
 ## 4. Data Storage & Security
 
@@ -71,6 +74,7 @@ We do **NOT** use your data for:
 The Author application may interact with the following third-party services:
 - **Firebase Authentication** (Google) — for account management
 - **Cloud Firestore** (Google) — for data storage
+- **Firebase Analytics / Vercel Analytics** — for aggregate web usage statistics on the official web version
 - **AI API providers** (OpenAI, Anthropic, Google, etc.) — for AI-powered writing features
 
 When you use AI features, your prompts and context are sent to the selected AI provider according to **their** privacy policies. We encourage you to review the privacy policies of the AI providers you use.

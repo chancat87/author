@@ -35,10 +35,9 @@ export async function POST(request) {
         return await testOpenAICompat(apiKey, baseUrl, model, proxyUrl);
 
     } catch (error) {
-        console.error('API测试错误:', error);
+        console.warn('API测试连接失败:', error?.message || error);
         return NextResponse.json(
-            { success: false, error: '网络连接失败，请检查 API 地址' },
-            { status: 500 }
+            { success: false, error: '网络连接失败，请检查 API 地址或代理设置' }
         );
     }
 }

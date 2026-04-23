@@ -1,1 +1,1 @@
-修复退出同步时最后内容丢失，并补充更清晰的保存提醒 | Fixed last-minute text loss on sync exit and added clearer save guidance
+修复桌面客户端模型连接测试失败 | Fixed desktop model connection test failures
