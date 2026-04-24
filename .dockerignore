@@ -12,7 +12,7 @@ afterPack.js
 .vscode
 .idea
 .antigravityignore
-.agents
+.agent
 data
 docs
 mobile
@@ -23,3 +23,8 @@ mobile
 .gemini
 .codex
 .firebase
+mcp_config.json
+*.key
+*.pem
+home_screen.html
+stitch*

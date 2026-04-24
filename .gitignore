@@ -69,6 +69,7 @@ mcp_config.json
 
 # mobile UI mockups & design artifacts (private)
 home_screen.html
+stitch*
 
 # firebase local cache
 .firebase/
