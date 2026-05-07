@@ -51,6 +51,7 @@ I watched the versatility of these models being gutted. I don't want us to live 
 - **Tree-structured** management for characters, locations, items, outlines, and writing rules
 - Three writing modes: **Web Novel** / **Literary Fiction** / **Screenplay**, each with dedicated fields
 - Color-coded categories with glassmorphism design
+- Rename top-level categories per work from the full settings panel or the sidebar category popover edit mode
 - Settings automatically injected into AI context
 
 ### 💾 Data Management

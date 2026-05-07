@@ -1,49 +1,39 @@
-## v1.2.23 — 正文备注批注与失效模型清理 | Inline remarks and stale model cleanup
+## v1.2.24 — 顶层设定分类重命名 | Rename top-level setting categories
 
 ### 🇨🇳 中文
 
-#### 📝 正文备注 / 批注
-- **新增正文备注格式**：选中一句话或一段文字后，可从工具栏或选区气泡菜单添加备注；正文会显示虚线标记，并在宽屏纸页右侧显示侧注卡片
-- **备注不混入正文**：备注内容以独立标记保存，正文统计、正文导出和普通阅读不会被备注文字污染
-- **支持编辑与删除备注**：再次选中已有备注可修改；在编辑备注时留空即可删除该备注
+#### 📚 设定集分类管理
+- **新增顶层分类重命名**：完整设定集面板的分类卡片现在会在悬停时显示铅笔按钮，可直接重命名顶层分类
+- **左侧分类弹窗同步支持**：点击左侧设定集入口，在编辑导航栏模式中也可以通过铅笔按钮重命名分类
+- **按作品独立保存**：分类名称写入当前作品的分类根节点，不同作品可以使用不同的分类命名
+- **覆盖内置与自定义分类**：人物、地点、世界观、大纲等内置分类，以及用户新建的顶层分类都可以改名
 
-#### 📤 导出正文 / 批注版
-- **导出更多新增内容版本选择**：可选择“正文”或“批注版”
-- **正文版自动剥离备注**：TXT、Markdown、DOCX、EPUB、PDF 的正文版都不会带出备注内容
-- **DOCX 批注版使用 Word 原生批注**：导出的 DOCX 会写入 `comments.xml` 和批注锚点，Word / WPS / Google Docs 可识别为右侧批注气泡
-- **其他格式保留可读批注**：TXT、Markdown、EPUB、PDF 的批注版会以内联 `〔批注：...〕` 方式保留备注内容
-
-#### 🤖 模型列表管理
-- **已保存但未返回的模型不再“消失”**：从 API 拉取模型列表时，已加入快切或当前使用的模型会继续显示
-- **新增“未返回”标识和清理按钮**：供应商不再返回的模型会标记为“未返回”，可在模型选择弹窗中一键清理
-- **覆盖主模型与 Embedding 模型**：对话模型和独立向量模型选择器都支持该清理逻辑
-- **DeepSeek 旧模型提示保留**：`deepseek-chat` / `deepseek-reasoner` 继续显示 2026-07-24 停用提醒
+#### 🧭 显示一致性
+- **分类详情页标题同步更新**：改名后打开分类详情页会显示新的分类名称
+- **侧边栏快捷入口同步更新**：已固定到左侧导航栏的分类会使用新名称作为按钮提示和展开文字
+- **作品信息概览同步更新**：作品信息页里的分类统计卡片会读取当前作品的自定义名称
+- **导入/导出文案同步更新**：分类导出文件名、导入成功提示等会使用改名后的分类名称
 
 #### 📚 文档同步
-- **更新帮助页**：补充备注 / 批注、导出正文/批注版、未返回模型清理说明
-- **同步多语言 README**：中、英、俄、阿 README 均补充备注批注、DOCX 原生批注导出和模型清理能力
+- **更新帮助页**：补充顶层分类重命名入口说明
+- **同步多语言 README**：中、英、俄、阿 README 均补充顶层分类可按作品重命名的说明
 
 ---
 
 ### 🇬🇧 English
 
-#### 📝 Inline Remarks / Comments
-- **Added an inline remark format**: Select a sentence or text range and add a remark from the toolbar or selection bubble menu; the body text shows a dashed marker and wide layouts render side notes outside the page
-- **Remarks do not pollute body text**: Remark content is stored as separate markup, so word counts, body-only exports, and normal reading stay clean
-- **Edit and remove remarks**: Select an existing remark to edit it; leave the prompt empty to remove that remark
+#### 📚 Setting Category Management
+- **Added top-level category renaming**: Category cards in the full settings panel now show a pencil action on hover, letting users rename top-level categories directly
+- **Sidebar category popover support**: The sidebar settings popover also supports category renaming from its edit mode
+- **Saved per work**: Category names are stored on the current work's category root node, so each work can use its own naming
+- **Built-in and custom categories are covered**: Built-in categories such as characters, locations, worldbuilding, and outlines, plus user-created top-level categories, can all be renamed
 
-#### 📤 Body-only and Annotated Exports
-- **Export More now supports content variants**: Choose either “Body” or “Annotated”
-- **Body exports strip remarks automatically**: TXT, Markdown, DOCX, EPUB, and PDF body exports do not include remark content
-- **DOCX annotated exports use native Word comments**: Generated DOCX files include `comments.xml` and comment anchors, so Word / WPS / Google Docs can render them as real side comments
-- **Other formats keep readable annotations**: TXT, Markdown, EPUB, and PDF annotated exports preserve remarks inline as `〔批注：...〕`
-
-#### 🤖 Model List Management
-- **Saved models no longer disappear when providers stop returning them**: Models already in quick switch lists or currently selected remain visible after fetching the provider model list
-- **Added “Not returned” badges and cleanup actions**: Stale provider models are marked and can be removed from the model picker
-- **Covers chat and embedding models**: The cleanup logic applies to both primary AI models and dedicated embedding models
-- **DeepSeek deprecation hints remain visible**: `deepseek-chat` and `deepseek-reasoner` continue to show the 2026-07-24 retirement notice
+#### 🧭 Consistent Display
+- **Category detail titles stay in sync**: Opening a renamed category shows the new name in the detail view
+- **Sidebar shortcuts stay in sync**: Pinned category shortcuts use the renamed label for tooltips and expanded labels
+- **Book info overview stays in sync**: Category statistic cards in the book info panel read the current work's custom labels
+- **Import/export labels stay in sync**: Category export filenames and import success messages use the renamed category label
 
 #### 📚 Documentation
-- **Updated the Help panel**: Added guidance for remarks/comments, body vs annotated exports, and stale model cleanup
-- **Updated multilingual READMEs**: Chinese, English, Russian, and Arabic READMEs now mention remarks, native DOCX comments, and model cleanup
+- **Updated the Help panel**: Added guidance for top-level category renaming
+- **Updated multilingual READMEs**: Chinese, English, Russian, and Arabic READMEs now mention per-work top-level category renaming

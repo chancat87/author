@@ -619,6 +619,12 @@ export default function BookInfoPanel() {
         // 预填所有内置分类为 0，确保即使没有条目也在概览中显示
         ['character', 'location', 'world', 'object', 'plot', 'rules'].forEach(cat => { catCounts[cat] = 0; });
         const customFolderLabels = {}; // custom__id → folder name
+        const builtInFolderLabels = {}; // category → renamed root folder name
+        nodes.forEach(n => {
+            if ((n.type === 'folder' || n.type === 'special') && n.parentId === workId && builtInCats.has(n.category) && n.name) {
+                builtInFolderLabels[n.category] = n.name;
+            }
+        });
         customFolders.forEach(f => {
             const key = `custom__${f.id}`;
             catCounts[key] = 0;
@@ -685,7 +691,7 @@ export default function BookInfoPanel() {
             const key = `custom__${f.id}`;
             orderedCatEntries.push({ key, count: catCounts[key] || 0 });
         });
-        return { catCounts, customFolderLabels, orderedCatEntries, recentItems: recentItems.slice(0, 5), totalItems, totalWords, chapterCount, recentChapters };
+        return { catCounts, customFolderLabels, builtInFolderLabels, orderedCatEntries, recentItems: recentItems.slice(0, 5), totalItems, totalWords, chapterCount, recentChapters };
     }, [nodes, selectedChapters]);
 
     const onClose = () => setShowBookInfo(false);
@@ -1177,7 +1183,7 @@ export default function BookInfoPanel() {
                                 const Icon = isCustomFolder ? SettingsIcon : (CAT_ICONS[cat] || SettingsIcon);
                                 const c = isCustomFolder ? CAT_COLORS.custom : (CAT_COLORS[cat] || CAT_COLORS.custom);
                                 const builtInLabels = { character: '人物', location: '地点', world: '世界观', object: '物品', plot: '大纲', rules: '规则', custom: '自定义', bookInfo: '作品信息' };
-                                const label = isCustomFolder ? (stats.customFolderLabels[cat] || '自定义') : (builtInLabels[cat] || cat);
+                                const label = isCustomFolder ? (stats.customFolderLabels[cat] || '自定义') : (stats.builtInFolderLabels?.[cat] || builtInLabels[cat] || cat);
                                 const handleClick = () => {
                                     setShowBookInfo(false);
                                     setTimeout(() => {

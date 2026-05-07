@@ -1,1 +1,1 @@
-新增正文备注批注与失效模型清理 | Added inline remarks and stale model cleanup
+新增顶层设定分类重命名 | Added top-level setting category renaming

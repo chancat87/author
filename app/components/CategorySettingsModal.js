@@ -1232,7 +1232,7 @@ export default function CategorySettingsModal() {
         const catItems = nodes.filter(n => n.category === category && n.type === 'item');
         if (catItems.length === 0) { alert('当前分类没有可导出的条目'); return; }
         setShowExportMenu(false);
-        const baseName = meta.label + '-设定';
+        const baseName = categoryLabel + '-设定';
 
         if (format === 'txt') {
             const txt = exportNodesToTxt(catItems);
@@ -1251,7 +1251,7 @@ export default function CategorySettingsModal() {
                 type: 'author-category-export',
                 version: 1,
                 category,
-                categoryLabel: meta.label,
+                categoryLabel,
                 exportedAt: new Date().toISOString(),
                 items: catItems.map(({ embedding, ...rest }) => rest),
             };
@@ -1302,7 +1302,7 @@ export default function CategorySettingsModal() {
                 }
                 await saveSettingsNodes(updatedNodes, workId);
                 setNodes(updatedNodes);
-                alert(`成功导入 ${count} 个${meta.label}条目`);
+                alert(`成功导入 ${count} 个${categoryLabel}条目`);
                 return;
             }
 
@@ -1356,7 +1356,7 @@ export default function CategorySettingsModal() {
             }
             await saveSettingsNodes(updatedNodes, workId);
             setNodes(updatedNodes);
-            alert(`成功导入 ${count} 个${meta.label}条目`);
+            alert(`成功导入 ${count} 个${categoryLabel}条目`);
         } catch (err) {
             alert('导入失败: ' + err.message);
         }
@@ -1409,6 +1409,7 @@ export default function CategorySettingsModal() {
 
     // 使用 rootFolder 的图标，与缩略图弹窗和完整面板保持一致
     const CatIcon = (rootFolder?.icon && getIconComponent(rootFolder.icon)) || meta.icon;
+    const categoryLabel = rootFolder?.name || meta.label;
 
     const categoryNodes = useMemo(() => {
         if (!rootFolder) return [];
@@ -1532,7 +1533,7 @@ export default function CategorySettingsModal() {
                             <CatIcon size={22} />
                         </span>
                         <div>
-                            <h2 style={S.headerTitle}>{meta.label}</h2>
+                            <h2 style={S.headerTitle}>{categoryLabel}</h2>
                         </div>
                         <div style={{ display: 'flex', gap: 10, marginLeft: 12 }}>
                             <button
@@ -1625,7 +1626,7 @@ export default function CategorySettingsModal() {
                     <div style={{ marginLeft: 'auto', display: 'flex', gap: 2, alignItems: 'center', position: 'relative' }}>
                         <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                             <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted, #9ca3af)', padding: '4px 6px', borderRadius: 6, transition: 'all 0.15s', display: 'flex', alignItems: 'center' }}
-                                onClick={() => setShowExportMenu(!showExportMenu)} title={'导出' + meta.label}
+                                onClick={() => setShowExportMenu(!showExportMenu)} title={'导出' + categoryLabel}
                                 onMouseEnter={e => { e.currentTarget.style.color = meta.color; e.currentTarget.style.background = `${meta.color}10`; }}
                                 onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted, #9ca3af)'; e.currentTarget.style.background = 'none'; }}
                             ><Upload size={13} /></button>
@@ -1642,7 +1643,7 @@ export default function CategorySettingsModal() {
                             )}
                         </div>
                         <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted, #9ca3af)', padding: '4px 6px', borderRadius: 6, transition: 'all 0.15s', display: 'flex', alignItems: 'center' }}
-                            onClick={() => importInputRef.current?.click()} title={'导入' + meta.label}
+                            onClick={() => importInputRef.current?.click()} title={'导入' + categoryLabel}
                             onMouseEnter={e => { e.currentTarget.style.color = meta.color; e.currentTarget.style.background = `${meta.color}10`; }}
                             onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted, #9ca3af)'; e.currentTarget.style.background = 'none'; }}
                         ><Download size={13} /></button>
@@ -1658,7 +1659,7 @@ export default function CategorySettingsModal() {
                             </div>
                         ) : (
                             <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted, #9ca3af)', padding: '4px 6px', borderRadius: 6, transition: 'all 0.15s' }}
-                                onClick={() => setShowClearConfirm(true)} title={'清空' + meta.label}
+                                onClick={() => setShowClearConfirm(true)} title={'清空' + categoryLabel}
                                 onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = 'rgba(239,68,68,0.08)'; }}
                                 onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted, #9ca3af)'; e.currentTarget.style.background = 'none'; }}
                             ><Trash2 size={13} /></button>

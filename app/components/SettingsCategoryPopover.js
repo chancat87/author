@@ -9,7 +9,7 @@ import {
     Search,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
-import { getSettingsNodes, getActiveWorkId, deleteSettingsNode, saveSettingsNodes, addSettingsNode } from '../lib/settings';
+import { getSettingsNodes, getActiveWorkId, deleteSettingsNode, saveSettingsNodes, addSettingsNode, updateSettingsNode } from '../lib/settings';
 import { useI18n } from '../lib/useI18n';
 import { getIconByName } from './SettingsCategoryPanel';
 
@@ -163,7 +163,7 @@ export function savePinnedCategories(list) {
  */
 export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCategory, onAddCategory }) {
     const { t } = useI18n();
-    const { setOpenCategoryModal } = useAppStore();
+    const { setOpenCategoryModal, incrementSettingsVersion } = useAppStore();
     const popoverRef = useRef(null);
     const [mounted, setMounted] = useState(false);
     const [editMode, setEditMode] = useState(false);
@@ -176,6 +176,8 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
     const newInputRef = useRef(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [allNodes, setAllNodes] = useState([]);
+    const [renamingCategoryId, setRenamingCategoryId] = useState(null);
+    const [renamingCategoryName, setRenamingCategoryName] = useState('');
 
     // 共享刷新逻辑：从 nodes 重建分类列表（含虚拟内置分类）
     const refreshCategoriesFromNodes = (nodes, workId) => {
@@ -293,6 +295,41 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
         onClose?.();
     }, [editMode, onOpenCategory, onClose]);
 
+    const startRenameCategory = (e, cat) => {
+        e.stopPropagation();
+        setRenamingCategoryId(cat.id);
+        setRenamingCategoryName(cat.name || '');
+    };
+
+    const cancelRenameCategory = () => {
+        setRenamingCategoryId(null);
+        setRenamingCategoryName('');
+    };
+
+    const finishRenameCategory = async (cat) => {
+        const nextName = renamingCategoryName.trim();
+        setRenamingCategoryId(null);
+        if (!nextName || nextName === cat.name) return;
+
+        const workId = getActiveWorkId();
+        if (!workId) return;
+        if (cat.id?.startsWith('__virtual__')) {
+            await addSettingsNode({
+                name: nextName,
+                type: 'folder',
+                category: cat.category,
+                parentId: workId,
+                icon: 'FolderOpen',
+            });
+        } else {
+            await updateSettingsNode(cat.id, { name: nextName }, undefined, workId);
+        }
+        const refreshed = await getSettingsNodes(workId);
+        setAllNodes(refreshed);
+        refreshCategoriesFromNodes(refreshed, workId);
+        incrementSettingsVersion();
+    };
+
     // 删除分类
     const handleDeleteCategory = useCallback(async (e, cat) => {
         e.stopPropagation();
@@ -354,7 +391,7 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
                 </div>
 
                 {editMode && (
-                    <div style={styles.hint}>勾选显示在导航栏，点 × 删除分类</div>
+                    <div style={styles.hint}>勾选显示在导航栏，点铅笔重命名，点 × 删除分类</div>
                 )}
 
                 {/* 搜索框 */}
@@ -474,7 +511,35 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
                                     <span style={{ ...styles.iconWrap, color: colors.color, background: colors.bg }}>
                                         <Icon size={20} />
                                     </span>
-                                    <span style={styles.label}>{cat.name}</span>
+                                    {renamingCategoryId === cat.id ? (
+                                        <input
+                                            value={renamingCategoryName}
+                                            onChange={e => setRenamingCategoryName(e.target.value)}
+                                            onClick={e => e.stopPropagation()}
+                                            onMouseDown={e => e.stopPropagation()}
+                                            onFocus={e => e.currentTarget.select()}
+                                            onBlur={() => finishRenameCategory(cat)}
+                                            onKeyDown={e => {
+                                                if (e.key === 'Enter' && !e.isComposing) finishRenameCategory(cat);
+                                                if (e.key === 'Escape') cancelRenameCategory();
+                                            }}
+                                            autoFocus
+                                            style={{
+                                                width: '100%',
+                                                border: `1.5px solid ${colors.color}`,
+                                                borderRadius: 7,
+                                                padding: '3px 5px',
+                                                background: 'var(--bg-primary, #fff)',
+                                                color: 'var(--text-primary, #1f2937)',
+                                                fontSize: 11,
+                                                fontWeight: 600,
+                                                textAlign: 'center',
+                                                outline: 'none',
+                                            }}
+                                        />
+                                    ) : (
+                                        <span style={styles.label}>{cat.name}</span>
+                                    )}
                                     {editMode ? (
                                         <>
                                             <span style={{
@@ -483,6 +548,22 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
                                                 top: 5, left: 5, right: 'auto',
                                             }}>
                                                 {pinnedList.includes(cat.category) && <Check size={10} />}
+                                            </span>
+                                            <span
+                                                onClick={e => startRenameCategory(e, cat)}
+                                                title="重命名分类"
+                                                style={{
+                                                    position: 'absolute', top: 3, right: 25,
+                                                    width: 20, height: 20, borderRadius: 6,
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                    color: 'var(--text-muted, #9ca3af)',
+                                                    cursor: 'pointer', transition: 'all 0.15s',
+                                                    background: 'transparent',
+                                                }}
+                                                onMouseEnter={e => { e.currentTarget.style.color = colors.color; e.currentTarget.style.background = colors.bg; }}
+                                                onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted, #9ca3af)'; e.currentTarget.style.background = 'transparent'; }}
+                                            >
+                                                <Pencil size={12} />
                                             </span>
                                             <span
                                                 onClick={e => handleDeleteCategory(e, cat)}

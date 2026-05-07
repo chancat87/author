@@ -147,6 +147,8 @@ export default function SettingsPanel() {
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [iconPickerCat, setIconPickerCat] = useState(null); // 当前打开图标选择器的分类
     const [iconPickerRect, setIconPickerRect] = useState(null);
+    const [renamingCategoryId, setRenamingCategoryId] = useState(null);
+    const [renamingCategoryName, setRenamingCategoryName] = useState('');
 
     // 删除确认弹窗状态
     const [deleteConfirm, setDeleteConfirm] = useState(null); // { message, onConfirm }
@@ -206,7 +208,7 @@ export default function SettingsPanel() {
             return {
                 category: cat,
                 count: items.filter(n => n.category === cat).length,
-                label: t(`settings.categories.${cat}`),
+                label: rf?.name || t(`settings.categories.${cat}`),
                 customIcon: rf?.icon || null,
                 rootFolderId: rf?.id || null,
                 ...style,
@@ -248,6 +250,51 @@ export default function SettingsPanel() {
         await updateSettingsNode(catStat.rootFolderId, { icon: iconName });
         setNodes(prev => prev.map(n => n.id === catStat.rootFolderId ? { ...n, icon: iconName } : n));
         setIconPickerCat(null);
+    };
+
+    const startRenameCategory = (e, cat) => {
+        e.stopPropagation();
+        setRenamingCategoryId(cat.category);
+        setRenamingCategoryName(cat.label || '');
+        setTimeout(() => {
+            const input = document.querySelector(`[data-category-rename-input="${cat.category}"]`);
+            input?.focus();
+            input?.select();
+        }, 0);
+    };
+
+    const finishRenameCategory = async (cat) => {
+        const nextName = renamingCategoryName.trim();
+        setRenamingCategoryId(null);
+        if (!nextName || nextName === cat.label) return;
+
+        let rootFolderId = cat.rootFolderId;
+        let createdNode = null;
+        if (!rootFolderId) {
+            const workId = activeWorkId || getActiveWorkId();
+            if (!workId) return;
+            createdNode = await addSettingsNode({
+                name: nextName,
+                type: 'folder',
+                category: cat.realCategory || cat.category,
+                parentId: workId,
+                icon: cat.customIcon || '',
+            });
+            rootFolderId = createdNode.id;
+        } else {
+            await updateSettingsNode(rootFolderId, { name: nextName });
+        }
+
+        setNodes(prev => {
+            if (createdNode && !prev.some(n => n.id === createdNode.id)) return [...prev, createdNode];
+            return prev.map(n => n.id === rootFolderId ? { ...n, name: nextName, updatedAt: new Date().toISOString() } : n);
+        });
+        incrementSettingsVersion();
+    };
+
+    const cancelRenameCategory = () => {
+        setRenamingCategoryId(null);
+        setRenamingCategoryName('');
     };
 
     const handleSwitchWork = async (workId) => {
@@ -1002,8 +1049,12 @@ export default function SettingsPanel() {
                                     box-shadow: 0 12px 32px color-mix(in srgb, var(--cat-color) 10%, transparent), 0 0 0 1px color-mix(in srgb, var(--cat-color) 20%, transparent);
                                     border-color: color-mix(in srgb, var(--cat-color) 30%, transparent) !important;
                                 }
-                                .settings-cat-card [data-delete-btn] { opacity: 0; transition: all 0.15s; }
-                                .settings-cat-card:hover [data-delete-btn] { opacity: 1 !important; }
+                                .settings-cat-card [data-delete-btn],
+                                .settings-cat-card [data-rename-btn] { opacity: 0; transition: all 0.15s; }
+                                .settings-cat-card:hover [data-delete-btn],
+                                .settings-cat-card:hover [data-rename-btn],
+                                .settings-cat-card:focus-within [data-delete-btn],
+                                .settings-cat-card:focus-within [data-rename-btn] { opacity: 1 !important; }
                             `}</style>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16, maxWidth: 880, margin: '0 auto' }}>
                                 {stats.map(cat => {
@@ -1087,7 +1138,9 @@ export default function SettingsPanel() {
 
                                     return (
                                         <div key={cat.category} style={{ position: 'relative' }}>
-                                        <button
+                                        <div
+                                            role="button"
+                                            tabIndex={0}
                                             className="settings-cat-card"
                                             style={{
                                             position: 'relative', display: 'flex', flexDirection: 'column',
@@ -1099,6 +1152,13 @@ export default function SettingsPanel() {
                                             '--cat-color': color,
                                         }}
                                             onClick={() => { onClose(); setTimeout(() => useAppStore.getState().setOpenCategoryModal(cat.realCategory || cat.category), 80); }}
+                                            onKeyDown={e => {
+                                                if (e.key === 'Enter' || e.key === ' ') {
+                                                    e.preventDefault();
+                                                    onClose();
+                                                    setTimeout(() => useAppStore.getState().setOpenCategoryModal(cat.realCategory || cat.category), 80);
+                                                }
+                                            }}
                                         >
                                             {/* 顶部：图标 + 计数 */}
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, width: '100%' }}>
@@ -1129,30 +1189,69 @@ export default function SettingsPanel() {
                                                     <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 2, fontWeight: 700, marginTop: 2 }}>
                                                         ITEMS
                                                     </div>
-                                                    {/* 删除按钮 */}
-                                                    <span
-                                                        data-delete-btn
-                                                        title={cat.isCustom ? '删除此分类' : '清空此分类'}
-                                                        onClick={handleDeleteCategory}
-                                                        style={{
-                                                            width: 28, height: 28, borderRadius: 8,
-                                                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                                            color: 'var(--text-muted)', background: 'transparent',
-                                                            cursor: 'pointer', transition: 'all 0.15s',
-                                                            opacity: 0, marginTop: 4, marginLeft: 'auto',
-                                                        }}
-                                                        onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; }}
-                                                        onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'transparent'; }}
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </span>
+                                                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 3, marginTop: 4 }}>
+                                                        <span
+                                                            data-rename-btn
+                                                            title="重命名分类"
+                                                            onClick={e => startRenameCategory(e, cat)}
+                                                            style={{
+                                                                width: 28, height: 28, borderRadius: 8,
+                                                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                                                color: 'var(--text-muted)', background: 'transparent',
+                                                                cursor: 'pointer', transition: 'all 0.15s',
+                                                                opacity: 0,
+                                                            }}
+                                                            onMouseEnter={e => { e.currentTarget.style.color = color; e.currentTarget.style.background = `${bg}`; }}
+                                                            onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'transparent'; }}
+                                                        >
+                                                            <Pencil size={15} />
+                                                        </span>
+                                                        <span
+                                                            data-delete-btn
+                                                            title={cat.isCustom ? '删除此分类' : '清空此分类'}
+                                                            onClick={handleDeleteCategory}
+                                                            style={{
+                                                                width: 28, height: 28, borderRadius: 8,
+                                                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                                                color: 'var(--text-muted)', background: 'transparent',
+                                                                cursor: 'pointer', transition: 'all 0.15s',
+                                                                opacity: 0,
+                                                            }}
+                                                            onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; }}
+                                                            onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'transparent'; }}
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </span>
+                                                    </div>
                                                 </div>
                                             </div>
 
                                             {/* 标题 */}
-                                            <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 10 }}>
-                                                {cat.label}
-                                            </div>
+                                            {renamingCategoryId === cat.category ? (
+                                                <input
+                                                    data-category-rename-input={cat.category}
+                                                    value={renamingCategoryName}
+                                                    onChange={e => setRenamingCategoryName(e.target.value)}
+                                                    onClick={e => e.stopPropagation()}
+                                                    onMouseDown={e => e.stopPropagation()}
+                                                    onBlur={() => finishRenameCategory(cat)}
+                                                    onKeyDown={e => {
+                                                        e.stopPropagation();
+                                                        if (e.key === 'Enter' && !e.isComposing) finishRenameCategory(cat);
+                                                        if (e.key === 'Escape') cancelRenameCategory();
+                                                    }}
+                                                    style={{
+                                                        width: '100%', marginBottom: 10, padding: '5px 8px',
+                                                        border: `1.5px solid ${color}`, borderRadius: 8,
+                                                        background: 'var(--bg-card)', color: 'var(--text-primary)',
+                                                        fontSize: 15, fontWeight: 600, outline: 'none',
+                                                    }}
+                                                />
+                                            ) : (
+                                                <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 10 }}>
+                                                    {cat.label}
+                                                </div>
+                                            )}
 
                                             {/* 预览条目 */}
                                             <div style={{ flex: 1, marginBottom: 12 }}>
@@ -1180,7 +1279,7 @@ export default function SettingsPanel() {
                                             <div style={{ position: 'absolute', bottom: 8, right: 8, opacity: 0.04, pointerEvents: 'none' }}>
                                                 <Icon size={64} />
                                             </div>
-                                        </button>
+                                        </div>
 
                                         {/* 图标选择器弹窗 */}
                                         {isPickerOpen && (

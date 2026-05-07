@@ -85,7 +85,7 @@ export default function SettingsCategoryPanel({ category }) {
     const [searchQuery, setSearchQuery] = useState('');
     const colors = getCategoryColor(category);
     const CatIcon = getCategoryIcon(category, rootFolder?.icon);
-    const label = getCategoryLabel(category, t);
+    const label = rootFolder?.name || getCategoryLabel(category, t);
 
     // 加载分类节点
     const loadNodes = useCallback(async () => {
