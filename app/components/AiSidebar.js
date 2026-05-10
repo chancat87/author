@@ -483,8 +483,6 @@ export default function AiSidebar({ onInsertText }) {
                         searchConfig: sc,
                     };
                 } else {
-                    // 未配置搜索 API Key，提醒用户
-                    console.warn('[AiSidebar] 已启用联网搜索但未配置搜索 API Key（Tavily/Exa），本次跳过搜索');
                     showToast?.('⚠️ 联网搜索需要配置 Tavily 或 Exa API Key，请在设置 → API配置 → 联网搜索 中填入', 'warning');
                 }
             }
@@ -696,17 +694,16 @@ export default function AiSidebar({ onInsertText }) {
 
     const onRegenerate = useCallback(async (aiMsgId) => {
         if (chatStreaming) return;
-        console.log('[Regenerate] Starting for msg:', aiMsgId);
 
         const msgs = chatHistory;
         const aiIdx = msgs.findIndex(m => m.id === aiMsgId);
-        if (aiIdx < 0) { console.log('[Regenerate] AI msg not found'); return; }
+        if (aiIdx < 0) return;
 
         let userMsgIdx = -1;
         for (let i = aiIdx - 1; i >= 0; i--) {
             if (msgs[i].role === 'user') { userMsgIdx = i; break; }
         }
-        if (userMsgIdx < 0) { console.log('[Regenerate] User msg not found'); return; }
+        if (userMsgIdx < 0) return;
 
         const userMsg = msgs[userMsgIdx];
         const priorHistory = msgs.slice(0, userMsgIdx);
@@ -1376,8 +1373,6 @@ export default function AiSidebar({ onInsertText }) {
                                                 checked={checkedHistory.has(msg.id)}
                                                 onChange={() => toggleCheck(msg.id)}
                                                 className="chat-check"
-                                            // TODO: Make this tooltip translate string and optional
-                                            // title="勾选以包含在下次请求中" 
                                             />
                                             <span className="chat-role">{msg.role === 'user' ? t('aiSidebar.roleYou') : msg.isSummary ? t('aiSidebar.roleSummary') : t('aiSidebar.roleAi')}</span>
                                             <span className="chat-time">

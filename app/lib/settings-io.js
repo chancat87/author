@@ -235,10 +235,6 @@ export function preprocessPdfText(text) {
         }
     }
 
-    console.log('[preprocessPdfText] mode:', hasMarkers ? 'markers' : 'heuristic');
-    console.log('[preprocessPdfText] categories:', [...categoryIndices].map(i => `L${i}: "${lines[i].trim()}"`));
-    console.log('[preprocessPdfText] entries:', [...entryIndices].map(i => `L${i}: "${lines[i].trim()}"`));
-
     // 生成结果：去掉 ■/◆ 前缀，加上 ##/### 标记，保留 ▸ 给 parseStructuredText 识别
     const result = [];
     for (let i = 0; i < lines.length; i++) {
@@ -912,8 +908,6 @@ export async function parsePmpxFile(file) {
         }
     });
 
-    console.log('[PMPX Import] Found', pobjFiles.length, 'material .pobj files');
-
     for (const entry of pobjFiles) {
         const text = await entry.async('text');
         let data;
@@ -977,7 +971,6 @@ export async function parsePmpxFile(file) {
 
         if (Object.keys(content).length > 0) {
             items.push({ name, category, content });
-            console.log('[PMPX Import] Parsed:', name, '→', category, 'fields:', Object.keys(content));
         }
     }
 

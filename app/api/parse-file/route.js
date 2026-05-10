@@ -29,7 +29,6 @@ export async function POST(request) {
             // PDF 解析 — 直接引用内部模块，避免 index.js 加载测试文件
             const pdfParse = (await import('pdf-parse/lib/pdf-parse.js')).default;
             const pdfData = await pdfParse(buffer);
-            console.log('[parse-file] PDF pages:', pdfData.numpages, 'text length:', (pdfData.text || '').length);
             text = pdfData.text || '';
         } else if (fileName.endsWith('.doc') && !fileName.endsWith('.docx')) {
             // DOC 解析（旧版 Word 二进制格式）

@@ -61,8 +61,8 @@ export async function firestoreGet(key) {
             return snap.data().value;
         }
         return undefined;
-    } catch (err) {
-        console.warn('[firestore] GET failed:', key, err.message);
+    } catch {
+        console.warn('[firestore] GET failed');
         return undefined;
     }
 }
@@ -95,7 +95,6 @@ export function firestoreEnqueue(key, value) {
 function ensureSyncTimer() {
     if (!_syncTimer) {
         _syncTimer = setInterval(flushSync, SYNC_INTERVAL);
-        console.log('[firestore] sync timer started');
     }
 }
 
@@ -106,7 +105,6 @@ function clearSyncTimer() {
     if (_syncTimer) {
         clearInterval(_syncTimer);
         _syncTimer = null;
-        console.log('[firestore] sync timer stopped (idle)');
     }
 }
 
@@ -126,7 +124,6 @@ function resetIdleTimer() {
                 lastSync: Date.now(),
                 idle: true,
             });
-            console.log('[firestore] auto-sync paused: no data changes for 5 minutes');
         });
     }, IDLE_TIMEOUT);
 }
@@ -214,7 +211,7 @@ export async function flushSync(options = {}) {
                     try {
                         batch.delete(ref);
                     } catch (batchErr) {
-                        console.error('[firestore] batch.delete failed for key:', key);
+                        console.error('[firestore] batch.delete failed');
                         throw batchErr;
                     }
                     continue;
@@ -243,10 +240,7 @@ export async function flushSync(options = {}) {
                 try {
                     batch.set(ref, payload);
                 } catch (batchErr) {
-                    console.error('[firestore] batch.set failed for key:', key);
-                    console.error('[firestore] payload:', JSON.stringify(payload, null, 2));
-                    console.error('[firestore] updatedAt type:', typeof payload.updatedAt);
-                    console.error('[firestore] is serverTimestamp undefined?', serverTimestamp() === undefined);
+                    console.error('[firestore] batch.set failed');
                     throw batchErr;
                 }
             }
@@ -254,7 +248,6 @@ export async function flushSync(options = {}) {
             await batch.commit();
         }
 
-        console.log(`[firestore] synced ${entries.length} items`);
         notifySyncStatus({ syncing: false, pending: 0, lastSync: Date.now() });
     })()
         .catch((err) => {
@@ -384,10 +377,9 @@ export async function pullAllFromCloud(localGet, localSet) {
             }
         }
 
-        console.log(`[firestore] pulled ${snapshot.size} items, merged ${merged}`);
         return merged;
-    } catch (err) {
-        console.warn('[firestore] pull failed:', err.message);
+    } catch {
+        console.warn('[firestore] pull failed');
         return 0;
     }
 }
@@ -416,29 +408,11 @@ export async function forcePullFromCloud(localSet) {
             
             // 无条件覆盖本地
             if (cloudData && cloudData.value !== undefined) {
-                // 数据完整性防御性日志
-                if (key.startsWith('author-settings-nodes')) {
-                    const nodes = cloudData.value;
-                    if (Array.isArray(nodes)) {
-                        const brokenItems = nodes.filter(n => n.type === 'item' && !n.parentId);
-                        if (brokenItems.length > 0) {
-                            console.warn(`[firestore] ⚠️ 发现 ${brokenItems.length} 个缺失 parentId 的游离设定条目:`, brokenItems.map(n => n.name));
-                        }
-                    } else if (nodes === null || typeof nodes !== 'object') {
-                        console.warn(`[firestore] ⚠️ 异常的设定数据结构:`, nodes);
-                    }
-                } else if (key.startsWith('author-chapters')) {
-                    if (!Array.isArray(cloudData.value) || cloudData.value.length === 0) {
-                         console.warn(`[firestore] ⚠️ 拉取到空章节数据:`, key);
-                    }
-                }
-
                 await localSet(key, cloudData.value);
                 pulledCount++;
             }
         }
         
-        console.log(`[firestore] force pulled ${snapshot.size} items, overwritten ${pulledCount} local items`);
         notifySyncStatus({ syncing: false, pending: 0, lastSync: Date.now() });
         return pulledCount;
     } catch (err) {

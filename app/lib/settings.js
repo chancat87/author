@@ -920,9 +920,6 @@ function repairOrphanedRootFolders(nodes, workId) {
         }
     }
 
-    if (changed) {
-        console.log(`[Settings] Repaired ${orphanRoots.length} orphaned root folders for work ${workId}`);
-    }
     return changed;
 }
 
@@ -1136,8 +1133,8 @@ export async function addSettingsNode({ name, type, category, parentId, icon, co
             try {
                 const textToEmbed = extractTextForEmbedding(node);
                 node.embedding = await getEmbedding(textToEmbed, apiConfig);
-            } catch (e) {
-                console.warn('[Settings] Embedding failed for new node, will retry later:', e.message);
+            } catch {
+                // Embedding failure is non-blocking; the node itself has already been saved.
             }
         }
     }
@@ -1191,8 +1188,8 @@ export async function updateSettingsNode(id, updates, currentNodes, workId) {
                     freshNodes[freshIdx] = { ...freshNodes[freshIdx], embedding };
                     await saveSettingsNodes(freshNodes, targetWorkId);
                 }
-            } catch (e) {
-                console.warn('[Settings] Deferred embedding failed for node', id, e);
+            } catch {
+                // Embedding failure is non-blocking; the latest node content stays saved.
             }
         }, 3000);
     }
@@ -1337,8 +1334,8 @@ async function migrateBookInfoToNodeLegacy(nodes) {
 
         settings.bookInfo = {};
         saveProjectSettings(settings);
-    } catch (e) {
-        console.warn('[Settings] bookInfo migration failed:', e);
+    } catch {
+        // Keep legacy data untouched if the migration cannot complete.
     }
     return nodes;
 }

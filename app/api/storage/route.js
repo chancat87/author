@@ -148,10 +148,8 @@ async function tryAdoptOrphanData(currentUserId) {
 
         // 重命名孤儿目录为当前用户目录
         await fs.rename(orphanDir, currentUserDir);
-        console.log(`[Storage] Auto-adopted data from user ${otherDirs[0]} → ${currentUserId}`);
         return true;
-    } catch (e) {
-        console.warn('[Storage] Auto-adopt failed:', e.message);
+    } catch {
         return false;
     }
 }

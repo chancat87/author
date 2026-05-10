@@ -30,8 +30,8 @@ export async function migrateGlobalChapters(workId) {
             await persistSet(getStorageKey(workId), globalData);
             await persistDel(LEGACY_STORAGE_KEY);
         }
-    } catch (e) {
-        console.warn('[迁移] 章节迁移失败：', e);
+    } catch {
+        // Keep the legacy global chapters untouched if migration fails.
     }
 }
 

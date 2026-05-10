@@ -176,9 +176,8 @@ async function fetchOpenAIModels(apiKey, baseUrl, embedOnly, provider, proxyUrl)
             const data = await response.json();
             rawModels = extractModelArray(data);
             if (rawModels.length > 0) break;
-        } catch (err) {
+        } catch {
             // 超时或网络错误，尝试下一个路径
-            console.warn(`模型拉取失败 ${url}:`, err.message);
             continue;
         }
     }
@@ -220,7 +219,6 @@ async function fetchOpenAIModels(apiKey, baseUrl, embedOnly, provider, proxyUrl)
                 return NextResponse.json({ models: knownModels });
             }
             // 其他供应商：回退显示全部模型让用户自行选择
-            console.log('[embedOnly] 过滤后无嵌入模型，回退全部:', rawModels.map(m => m.id || m.name).slice(0, 20));
         }
     }
 
@@ -267,8 +265,8 @@ async function fetchClaudeModels(apiKey, baseUrl, proxyUrl) {
             if (models.length > 0) {
                 return NextResponse.json({ models });
             }
-        } catch (err) {
-            console.warn('Claude native API failed:', err.message);
+        } catch {
+            // Fall back to the OpenAI-compatible models endpoint.
         }
 
         // 策略2: 尝试 OpenAI 兼容格式 /v1/models（很多中转用这种格式）
@@ -277,8 +275,8 @@ async function fetchClaudeModels(apiKey, baseUrl, proxyUrl) {
             if (models.length > 0) {
                 return NextResponse.json({ models });
             }
-        } catch (err) {
-            console.warn('Claude OpenAI-compat API failed:', err.message);
+        } catch {
+            // Fall back to the built-in Claude model list.
         }
     }
 

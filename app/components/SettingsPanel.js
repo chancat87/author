@@ -556,16 +556,11 @@ export default function SettingsPanel() {
         try {
             if (!activeWorkId) { alert(t('settings.importNoWork')); return; }
 
-            console.log('[Settings Import] activeWorkId:', activeWorkId);
-            console.log('[Settings Import] text length:', text?.length, 'first 500 chars:', text?.substring(0, 500));
-            console.log('[Settings Import] isStructured:', isStructuredText(text));
-
             // 解析文本为条目列表 [{name, category, content}]
             let importedItems = [];
 
             if (isStructuredText(text)) {
                 const parsedEntries = parseStructuredText(text);
-                console.log('[Settings Import] structured entries:', parsedEntries.length, parsedEntries.map(e => e.name));
                 for (const entry of parsedEntries) {
                     const mapped = mapFieldsToContent(entry.fields, entry.category);
                     const nodeName = mapped.name || entry.name || '导入条目';
@@ -574,7 +569,6 @@ export default function SettingsPanel() {
                 }
             } else {
                 const blocks = parseMultipleEntries(text);
-                console.log('[Settings Import] unstructured blocks:', blocks.length);
                 for (const block of blocks) {
                     const parsed = parseTextToFields(block);
                     if (Object.keys(parsed).length === 0) continue;
@@ -585,8 +579,6 @@ export default function SettingsPanel() {
                 }
             }
 
-            console.log('[Settings Import] importedItems:', importedItems.length, importedItems.map(i => i.name));
-
             if (importedItems.length === 0) {
                 alert(t('settings.importEmpty') || '未能从文件中解析出任何设定条目');
                 return;
@@ -594,9 +586,6 @@ export default function SettingsPanel() {
 
             // 检测冲突（同名 + 同分类）
             const existingItems = nodes.filter(n => n.type === 'item' && n.parentId);
-            console.log('[Settings Import] existingItems in activeWork:', existingItems.filter(n =>
-                nodes.find(p => p.id === n.parentId && (p.parentId === activeWorkId || p.id === activeWorkId))
-            ).map(n => `${n.name}(${n.category})`));
             const conflicts = [];
             const noConflicts = [];
 
@@ -605,7 +594,6 @@ export default function SettingsPanel() {
                     n.name === item.name && n.category === item.category &&
                     nodes.find(p => p.id === n.parentId && (p.parentId === activeWorkId || p.id === activeWorkId))
                 );
-                console.log('[Settings Import] checking:', item.name, 'cat:', item.category, '→', existing ? 'CONFLICT' : 'new');
                 if (existing) {
                     conflicts.push({ name: item.name, category: item.category, existing, imported: item });
                 } else {
@@ -613,13 +601,10 @@ export default function SettingsPanel() {
                 }
             }
 
-            console.log('[Settings Import] conflicts:', conflicts.length, 'noConflicts:', noConflicts.length);
-
             if (conflicts.length > 0) {
                 // 有冲突 → 显示冲突弹窗
-                console.log('[Settings Import] SHOWING CONFLICT MODAL with', conflicts.length, 'conflicts');
                 setConflictData({ conflicts, noConflicts });
-                return; // 不继续执行后续逻辑
+                return;
             } else {
                 // 无冲突 → 直接导入
                 await doImportItems(noConflicts, []);
