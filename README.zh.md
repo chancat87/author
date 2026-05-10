@@ -611,8 +611,11 @@ Author 支持从多种格式导入设定集：**JSON / Markdown / TXT / DOCX / P
 - [KaTeX](https://katex.org/) — 本地数学公式渲染
 
 ### 🌟 灵感参考
-- [Cherry Studio](https://github.com/CherryHQ/cherry-studio) — API 多供应商配置架构与对话管理参考
-- [RikkaHub](https://github.com/RikkaApps/RikkaHub) — Token 用量计算与统计展示参考
+Author 的多提供商 API 配置体验参考了 RikkaHub、Cherry Studio 等开源 AI 客户端在 Provider、模型、Base URL 与本地密钥管理上的产品思路。
+
+- Cherry Studio: [github.com/CherryHQ/cherry-studio](https://github.com/CherryHQ/cherry-studio)
+- RikkaHub: [github.com/RikkaApps/RikkaHub](https://github.com/RikkaApps/RikkaHub)
+- 本项目未包含 RikkaHub、Cherry Studio 的源码、素材或二进制文件；如未来直接引用其代码，应另行遵守 RikkaHub、Cherry Studio 当前许可证或取得相应授权。
 
 ### 🔤 字体鸣谢
 - [霞鹜文楷 (LXGW WenKai)](https://github.com/lxgw/LxgwWenKai) — 优雅的本地中文阅读字体

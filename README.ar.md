@@ -539,8 +539,11 @@ pm2 restart author
 - [KaTeX](https://katex.org/) — وحدة مُحكمة وتجهيزات لصقل وتشخيص وترسيم الملامح والمعطيات والتراكيب والتصيير للمعادلات الرياضية والهندسية
 
 ### 🌟 مصادر الإلهام والمراجع التقنية (Inspiration & Reference)
-- [Cherry Studio](https://github.com/CherryHQ/cherry-studio) — المرجع المعماري لبناء تكوينات الـ API المتعددة المزودين وإدارة المحادثات
-- [RikkaHub](https://github.com/RikkaApps/RikkaHub) — مرجع حساب استهلاك الرموز (Tokens) وعرض الإحصائيات
+تم استلهام تجربة تكوين API متعددة المزودين في Author من RikkaHub و Cherry Studio وغيرها من عملاء الذكاء الاصطناعي مفتوحة المصدر في نهج Provider والنماذج و Base URL وإدارة المفاتيح المحلية.
+
+- Cherry Studio: [github.com/CherryHQ/cherry-studio](https://github.com/CherryHQ/cherry-studio)
+- RikkaHub: [github.com/RikkaApps/RikkaHub](https://github.com/RikkaApps/RikkaHub)
+- لا يحتوي هذا المشروع على أي كود مصدري أو أصول أو ملفات ثنائية من RikkaHub أو Cherry Studio. في حال الاستشهاد المباشر بأكوادهم مستقبلاً، يجب الالتزام بتراخيصهم المعنية.
 
 ### 🔤 تقنيات الحروف ونمط وتجليات الخطوط الإحترافية للتصاميم اللغوية (Typography)
 - [LXGW WenKai (霞鹜文楷)](https://github.com/lxgw/LxgwWenKai) — نمط وخط مُخصص للقراءة والأناقة الرشيقة الصينية المحلية العريقة، يتميز بطابعه الأخّاذ

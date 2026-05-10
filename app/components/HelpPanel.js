@@ -531,10 +531,11 @@ Next.js + Tiptap 编辑器 + AI API（OpenAI 兼容 / Gemini）
 - [GitHub MCP](https://github.com/) — 仓库管理、自动化发布
 
 #### 🌟 灵感与参考
-Author 的多提供商 API 配置体验参考了以下开源项目的产品思路：
-- [Cherry Studio](https://github.com/CherryHQ/cherry-studio) — 多提供商 API 配置架构和会话管理参考
-- [RikkaHub](https://github.com/rikkahub/rikkahub) — Token 用量计算和统计展示参考
-- 本项目未包含以上项目的源码、素材或二进制文件
+Author 的多提供商 API 配置体验参考了 RikkaHub、Cherry Studio 等开源 AI 客户端在 Provider、模型、Base URL 与本地密钥管理上的产品思路。
+
+- Cherry Studio: [github.com/CherryHQ/cherry-studio](https://github.com/CherryHQ/cherry-studio)
+- RikkaHub: [github.com/rikkahub/rikkahub](https://github.com/rikkahub/rikkahub)
+- 本项目未包含 RikkaHub、Cherry Studio 的源码、素材或二进制文件；如未来直接引用其代码，应另行遵守 RikkaHub、Cherry Studio 当前许可证或取得相应授权。
 
 ### 开源项目
 Author 是一个开源项目，采用 **AGPL-3.0** 协议。

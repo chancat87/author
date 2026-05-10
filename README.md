@@ -539,8 +539,11 @@ By using Author, you agree to our **Privacy Policy** and **Terms of Service**. T
 - [KaTeX](https://katex.org/) — Math rendering
 
 ### 🌟 Inspiration & Reference
-- [Cherry Studio](https://github.com/CherryHQ/cherry-studio) — Multi-provider API configuration architecture and conversation management reference
-- [RikkaHub](https://github.com/RikkaApps/RikkaHub) — Token usage calculation and statistics display reference
+Author's multi-provider API configuration experience was inspired by RikkaHub, Cherry Studio and other open-source AI clients in their approach to Provider, model, Base URL, and local key management.
+
+- Cherry Studio: [github.com/CherryHQ/cherry-studio](https://github.com/CherryHQ/cherry-studio)
+- RikkaHub: [github.com/RikkaApps/RikkaHub](https://github.com/RikkaApps/RikkaHub)
+- This project does not contain any source code, assets, or binaries from RikkaHub or Cherry Studio. If their code is directly referenced in the future, their respective licenses must be observed.
 
 ### 🔤 Typography
 - [LXGW WenKai (霞鹜文楷)](https://github.com/lxgw/LxgwWenKai) — Elegant local Chinese reading font
