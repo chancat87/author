@@ -60,6 +60,11 @@ I watched the versatility of these models being gutted. I don't want us to live 
 - **Project import/export** — full project JSON backup
 - **Multi-format export** — one-click export current chapter or batch export (TXT / Markdown / DOCX / EPUB / PDF), with body-only or annotated versions
 
+### 📱 Mobile App
+- **Android app** — native Flutter app with Google Sign-In cloud sync
+- Read and write your novels on the go
+- Syncs with desktop client via the same cloud account
+
 ### 🌐 Internationalization
 - 🇨🇳 简体中文 / 🇺🇸 English / 🇷🇺 Русский
 
@@ -70,11 +75,12 @@ I watched the versatility of these models being gutted. I don't want us to live 
 
 ---
 
-## 💻 Desktop Client
+## 💻 Desktop & Mobile
 
 **No Node.js required!** Download the pre-built installer:
 
 - 📥 [Download Author Setup (Windows)](https://github.com/YuanShiJiLoong/author/releases/latest)
+- 📱 [Download Author APK (Android)](https://github.com/YuanShiJiLoong/author/releases/latest) — first Android release!
 
 Just install and start writing. All features work out of the box.
 

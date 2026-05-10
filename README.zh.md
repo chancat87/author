@@ -61,6 +61,11 @@
 - **项目导入导出** — 完整项目 JSON 备份
 - **多格式导出** — 导航栏一键导出本章或批量导出（TXT / Markdown / DOCX / EPUB / PDF），可选择正文版或批注版
 
+### 📱 移动端
+- **Android 应用** — 基于 Flutter 的原生应用，支持 Google 登录云同步
+- 随时随地在手机上阅读和编辑你的小说
+- 与桌面客户端共享同一云端账号，数据自动同步
+
 ### 🌐 国际化
 - 🇨🇳 简体中文 / 🇺🇸 English / 🇷🇺 Русский
 
@@ -71,11 +76,12 @@
 
 ---
 
-## 💻 桌面客户端
+## 💻 桌面 & 移动客户端
 
 **无需安装 Node.js！** 直接下载安装包：
 
 - 📥 [下载 Author 安装包（Windows）](https://github.com/YuanShiJiLoong/author/releases/latest)
+- 📱 [下载 Author APK（Android）](https://github.com/YuanShiJiLoong/author/releases/latest) — 首个 Android 版本！
 - 💬 无法访问 GitHub？[加入 QQ 交流群：1087016949](https://qm.qq.com/q/wjRDkotw0E)，群文件中下载
 
 安装即用，所有功能开箱即得。
