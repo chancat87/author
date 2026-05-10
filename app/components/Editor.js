@@ -19,6 +19,7 @@ import { MathInline, MathBlock, openMathEditor } from './MathExtension';
 import { PageBreakExtension } from './PageBreakExtension';
 import { SearchHighlightExtension } from './SearchHighlightExtension';
 import GhostMark from './GhostMark';
+import AiDiffDeleteMark from './AiDiffDeleteMark';
 import RemarkMark, { promptForRemark } from './RemarkMark';
 import EditorBubbleMenu from './EditorBubbleMenu';
 import { createSlashExtension, SlashCommandMenu } from './SlashCommands';
@@ -182,6 +183,7 @@ const Editor = forwardRef(function Editor({ content, chapterId, onUpdate, editab
             MathBlock,
             PageBreakExtension,
             GhostMark,
+            AiDiffDeleteMark,
             RemarkMark,
             slashExtension,
             SearchHighlightExtension,
@@ -1049,6 +1051,9 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
                 const ghostMark = state.schema.marks.ghostText.create();
                 const to = tr.selection.from;
                 const from = to - char.length;
+                if (state.schema.marks.aiDiffDelete) {
+                    tr.removeMark(from, to, state.schema.marks.aiDiffDelete);
+                }
                 tr.addMark(from, to, ghostMark);
                 // 故意不调用 tr.scrollIntoView() — 防止滚动跳回
                 editor.view.dispatch(tr);
@@ -1069,9 +1074,27 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
 
     // ========== Ghost 操作 ==========
 
-    // 接受：去掉 ghost mark，文本变成正式内容
+    // 接受：替换类 diff 会删除原文并把 AI 建议转正；续写类只去掉 ghost mark
     const acceptGhost = useCallback(() => {
-        editor?.commands.acceptAllGhost();
+        if (editor && originalRangeRef.current && currentModeRef.current !== 'continue') {
+            const { from, to } = originalRangeRef.current;
+            const { state, view } = editor;
+            let tr = state.tr.delete(from, to);
+            const ghostMarkType = state.schema.marks.ghostText;
+            const deleteMarkType = state.schema.marks.aiDiffDelete;
+            tr.doc.descendants((node, pos) => {
+                if (!node.isText) return;
+                if (ghostMarkType && node.marks.some(m => m.type === ghostMarkType)) {
+                    tr = tr.removeMark(pos, pos + node.nodeSize, ghostMarkType);
+                }
+                if (deleteMarkType && node.marks.some(m => m.type === deleteMarkType)) {
+                    tr = tr.removeMark(pos, pos + node.nodeSize, deleteMarkType);
+                }
+            });
+            view.dispatch(tr);
+        } else {
+            editor?.commands.acceptAllGhost();
+        }
         // 归档
         onArchiveGeneration?.({
             mode: currentModeRef.current,
@@ -1217,12 +1240,22 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
         // 保存生成前的文档快照（在任何修改之前）
         savedDocRef.current = editor.getJSON();
 
-        // 改写模式：备份原文
+        // 替换类模式：原文保留在原位并标成删除建议，AI 文本作为绿色建议插在后面
         if (selectedText && actualMode !== 'continue') {
             const { from, to } = editor.state.selection;
             originalTextRef.current = selectedText;
             originalRangeRef.current = { from, to };
-            editor?.chain().focus().deleteSelection().run();
+            const deleteMarkType = editor.state.schema.marks.aiDiffDelete;
+            if (deleteMarkType) {
+                const tr = editor.state.tr
+                    .addMark(from, to, deleteMarkType.create())
+                    .setSelection(TextSelection.create(editor.state.doc, to));
+                tr.removeStoredMark(deleteMarkType);
+                editor.view.dispatch(tr);
+            } else {
+                editor.commands.setTextSelection(to);
+            }
+            editor?.chain().focus().run();
         } else {
             originalTextRef.current = null;
             originalRangeRef.current = null;
@@ -1330,6 +1363,7 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
 
     // 待确认状态：在幽灵文本末尾内联显示操作栏（Cursor 风格）
     if (pendingGhost) {
+        const isReplacementDiff = Boolean(originalRangeRef.current && currentModeRef.current !== 'continue');
         // 获取光标位置（幽灵文本末尾）
         let ghostPos = { top: 0, left: 0 };
         try {
@@ -1348,10 +1382,10 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
                 style={{ top: Math.max(16, Math.min(ghostPos.top, window.innerHeight - 60)), left: ghostPos.left }}
             >
                 <button className="ghost-accept-btn" onClick={acceptGhost} title="接受 (Tab)">
-                    ✓ 接受
+                    {isReplacementDiff ? '✓ 采用 AI' : '✓ 接受'}
                 </button>
                 <button className="ghost-reject-btn" onClick={rejectGhost} title="拒绝 (Esc)">
-                    ✗ 拒绝
+                    {isReplacementDiff ? '✗ 保留原文' : '✗ 拒绝'}
                 </button>
                 <button className="ghost-regen-btn" onClick={regenerate} title="重新生成">
                     ⟳

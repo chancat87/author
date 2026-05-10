@@ -4117,6 +4117,15 @@ body.resizing .main-content {
   border-left: none;
 }
 
+.ai-diff-delete {
+  background: rgba(220, 80, 80, 0.12);
+  color: color-mix(in srgb, var(--error, #dc5050), var(--text-primary) 18%);
+  text-decoration: line-through;
+  text-decoration-color: var(--error, #dc5050);
+  text-decoration-thickness: 1.5px;
+  border-radius: 3px;
+}
+
 /* 内联操作栏 — Cursor 风格，定位在幽灵文本末尾 */
 .ghost-inline-bar {
   position: fixed;
