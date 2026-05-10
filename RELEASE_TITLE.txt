@@ -1,1 +1,1 @@
-新增顶层设定分类重命名 | Added top-level setting category renaming
+新增 AI 行内差异采纳与移动安装包 | Added inline AI diff acceptance and mobile installer

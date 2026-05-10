@@ -1,39 +1,39 @@
-## v1.2.24 — 顶层设定分类重命名 | Rename top-level setting categories
+## v1.2.25 — AI 行内差异采纳与移动安装包 | Inline AI diff acceptance and mobile installer
 
 ### 🇨🇳 中文
 
-#### 📚 设定集分类管理
-- **新增顶层分类重命名**：完整设定集面板的分类卡片现在会在悬停时显示铅笔按钮，可直接重命名顶层分类
-- **左侧分类弹窗同步支持**：点击左侧设定集入口，在编辑导航栏模式中也可以通过铅笔按钮重命名分类
-- **按作品独立保存**：分类名称写入当前作品的分类根节点，不同作品可以使用不同的分类命名
-- **覆盖内置与自定义分类**：人物、地点、世界观、大纲等内置分类，以及用户新建的顶层分类都可以改名
+#### ✍️ 编辑器 AI 工作流
+- **新增行内 AI 差异采纳**：AI 改写会直接在正文中展示差异，保留原文和建议内容的对照关系
+- **支持逐段接受/拒绝**：可一键采用 AI 建议，或拒绝后恢复当前正文，不再需要在聊天面板和编辑器之间来回复制
+- **键盘操作更顺手**：保留 `Tab` 接受、`Esc` 拒绝等快捷交互，适合连续审稿和快速改写
+- **续写与替换体验统一**：续写仍以幽灵文字方式预览，替换类改写则使用更明确的行内差异展示
 
-#### 🧭 显示一致性
-- **分类详情页标题同步更新**：改名后打开分类详情页会显示新的分类名称
-- **侧边栏快捷入口同步更新**：已固定到左侧导航栏的分类会使用新名称作为按钮提示和展开文字
-- **作品信息概览同步更新**：作品信息页里的分类统计卡片会读取当前作品的自定义名称
-- **导入/导出文案同步更新**：分类导出文件名、导入成功提示等会使用改名后的分类名称
+#### 🔐 隐私与发布安全
+- **新增提交前隐私防线**：根仓库加入 pre-commit 检查入口，提交前自动扫描方案文档、移动端私有资产、密钥形态和敏感调试文件
+- **清理敏感调试日志**：移除了设定导入、PDF/PMPX 解析、Firestore 同步、模型拉取等流程中的详细调试输出，避免正文片段、设定名、同步 key 或 payload 出现在日志中
+- **继续隔离移动端源码**：移动端仍保留在私有仓库；公开仓库只发布构建产物，不包含 Flutter 源码和私有路线图
 
-#### 📚 文档同步
-- **更新帮助页**：补充顶层分类重命名入口说明
-- **同步多语言 README**：中、英、俄、阿 README 均补充顶层分类可按作品重命名的说明
+#### 📦 安装包
+- **Windows 安装包继续自动发布**：推送 `v1.2.25` 标签后会自动构建桌面端安装包
+- **新增 Android APK 发布链路**：移动端私有仓库可构建签名 APK，并追加上传到本公开 Release
+- **附带校验文件**：Android APK 会同时上传 `.sha256` 校验文件，方便下载后核对完整性
 
 ---
 
 ### 🇬🇧 English
 
-#### 📚 Setting Category Management
-- **Added top-level category renaming**: Category cards in the full settings panel now show a pencil action on hover, letting users rename top-level categories directly
-- **Sidebar category popover support**: The sidebar settings popover also supports category renaming from its edit mode
-- **Saved per work**: Category names are stored on the current work's category root node, so each work can use its own naming
-- **Built-in and custom categories are covered**: Built-in categories such as characters, locations, worldbuilding, and outlines, plus user-created top-level categories, can all be renamed
+#### ✍️ Editor AI Workflow
+- **Added inline AI diff acceptance**: AI rewrites are now previewed directly in the editor with clear original-vs-suggested text
+- **Accept or reject in place**: Apply an AI suggestion with one action, or reject it and keep the current draft without copying text between the chat panel and editor
+- **Smoother keyboard flow**: `Tab` to accept and `Esc` to reject remain available for faster review and rewrite sessions
+- **Unified continuation and replacement behavior**: Continuations still use ghost text, while replacement rewrites now use explicit inline diff previews
 
-#### 🧭 Consistent Display
-- **Category detail titles stay in sync**: Opening a renamed category shows the new name in the detail view
-- **Sidebar shortcuts stay in sync**: Pinned category shortcuts use the renamed label for tooltips and expanded labels
-- **Book info overview stays in sync**: Category statistic cards in the book info panel read the current work's custom labels
-- **Import/export labels stay in sync**: Category export filenames and import success messages use the renamed category label
+#### 🔐 Privacy And Release Safety
+- **Added a pre-commit privacy guard**: The public repository now has a hook entry that runs release safety checks before commits, scanning for internal docs, mobile private assets, secret-looking values, and sensitive debug files
+- **Removed sensitive debug logging**: Detailed logs from settings import, PDF/PMPX parsing, Firestore sync, and model fetching were removed to keep draft text, setting names, sync keys, and payloads out of logs
+- **Mobile source remains private**: The mobile app stays in its private repository; the public repository only receives build artifacts, not Flutter source or private planning documents
 
-#### 📚 Documentation
-- **Updated the Help panel**: Added guidance for top-level category renaming
-- **Updated multilingual READMEs**: Chinese, English, Russian, and Arabic READMEs now mention per-work top-level category renaming
+#### 📦 Installers
+- **Windows installer continues to publish automatically**: Pushing the `v1.2.25` tag triggers the desktop installer build
+- **Added Android APK publishing flow**: The private mobile repository can build a signed APK and attach it to this public Release
+- **Checksum included**: The Android APK upload also includes a `.sha256` file for integrity checks
