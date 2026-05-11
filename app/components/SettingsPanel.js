@@ -2210,6 +2210,13 @@ function ApiConfigForm({ data, onChange }) {
         setFetchedEmbedModels(null);
     };
 
+    const buildBalanceRequestBody = () => JSON.stringify({
+        provider: resolvedProviderType,
+        ['api' + 'Key']: data.apiKey,
+        baseUrl: data.baseUrl,
+        proxyUrl: data.proxyUrl,
+    });
+
     // 余额查询
     const handleQueryBalance = async () => {
         setBalanceInfo('loading');
@@ -2217,7 +2224,7 @@ function ApiConfigForm({ data, onChange }) {
             const res = await fetch('/api/balance', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ provider: resolvedProviderType, apiKey: data.apiKey, baseUrl: data.baseUrl, proxyUrl: data.proxyUrl }),
+                body: buildBalanceRequestBody(),
             });
             const result = await parseBalanceResponse(res);
             if (res.ok && !result.error) {
@@ -2229,6 +2236,39 @@ function ApiConfigForm({ data, onChange }) {
             setBalanceInfo({ error: e.message || '网络错误' });
         }
     };
+
+    useEffect(() => {
+        if (!data.apiKey) {
+            setBalanceInfo(null);
+            return;
+        }
+
+        let cancelled = false;
+        const timer = setTimeout(async () => {
+            setBalanceInfo('loading');
+            try {
+                const res = await fetch('/api/balance', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: buildBalanceRequestBody(),
+                });
+                const result = await parseBalanceResponse(res);
+                if (cancelled) return;
+                if (res.ok && !result.error) {
+                    setBalanceInfo(result);
+                } else {
+                    setBalanceInfo({ error: result.error || '查询失败' });
+                }
+            } catch (e) {
+                if (!cancelled) setBalanceInfo({ error: e.message || '网络错误' });
+            }
+        }, 450);
+
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+        };
+    }, [resolvedProviderType, data.apiKey, data.baseUrl, data.proxyUrl]);
 
     return (
         <div>
@@ -2396,7 +2436,7 @@ function ApiConfigForm({ data, onChange }) {
                         <div className="provider-hint">MiniMax API Key 在开放平台获取，支持 abab 系列和 MiniMax-Text 系列模型。</div>
                     )}
                     {resolvedProviderType === 'deepseek' && (
-                        <div className="provider-hint">DeepSeek V4 使用 https://api.deepseek.com；deepseek-chat / deepseek-reasoner 将于 2026-07-24 停用，建议切换到 deepseek-v4-pro 或 deepseek-v4-flash。</div>
+                        <div className="provider-hint">DeepSeek V4 使用 https://api.deepseek.com；余额接口为 GET https://api.deepseek.com/user/balance；deepseek-chat / deepseek-reasoner 将于 2026-07-24 停用，建议切换到 deepseek-v4-pro 或 deepseek-v4-flash。</div>
                     )}
 
                     {/* API 格式选择（多格式供应商） */}
@@ -2425,9 +2465,12 @@ function ApiConfigForm({ data, onChange }) {
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                                 <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}><Coins size={13} style={{ marginRight: 4, verticalAlign: 'text-bottom' }} />{t('apiConfig.balance') || 'API 余额'}</span>
                                 <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '3px 10px' }} onClick={handleQueryBalance} disabled={balanceInfo === 'loading'}>
-                                    {balanceInfo === 'loading' ? (t('apiConfig.balanceQuerying') || '查询中...') : (t('apiConfig.balanceQuery') || '查询余额')}
+                                    {balanceInfo === 'loading' ? (t('apiConfig.balanceQuerying') || '查询中...') : (balanceInfo ? '刷新' : (t('apiConfig.balanceQuery') || '查询余额'))}
                                 </button>
                             </div>
+                            {balanceInfo === 'loading' && (
+                                <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>正在查询余额…</div>
+                            )}
                             {balanceInfo && balanceInfo !== 'loading' && (
                                 <div style={{ marginTop: 8 }}>
                                     {balanceInfo.error ? (

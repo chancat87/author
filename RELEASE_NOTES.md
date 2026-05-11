@@ -1,37 +1,55 @@
-## v1.2.25 — AI 行内差异对比 · 首个 Android 安装包 | Inline AI diff preview · First Android APK
+## v1.2.26 — 移动端自动更新与作品关联优化 | Mobile auto updates and work-linked chats
 
 ### 🇨🇳 中文
 
-#### ✍️ AI 行内差异对比
-- **改写结果直接在正文中展示**：AI 改写不再局限在聊天面板里，改写后的差异会以行内对比的形式直接嵌入正文，原文和建议内容一目了然
-- **逐段接受或拒绝**：每段改写建议都可以单独采纳或放弃，不需要在聊天面板和编辑器之间来回复制
-- **快捷键支持**：`Tab` 采纳当前建议，`Esc` 放弃并恢复原文，适合连续审稿和快速迭代
-- **续写与改写体验分离**：续写仍以幽灵文字预览，改写类操作使用更清晰的行内差异展示，不再混淆
+#### 📱 移动端启动、登录与更新
+- **启动体验重做**：新增更柔和的 Author Logo 启动动画，并接入首次引导流程
+- **离线优先进入**：移动端可以跳过登录直接进入工作台；登录只用于云同步，不再阻挡本机写作
+- **应用内更新流程**：新增版本检查、更新日志展示、APK 下载进度和安装器唤起，减少跳转浏览器下载的割裂感
+- **更新源增强**：GitHub Release 会读取 APK assets；Gitee Release 支持解析附件和正文里的 APK 下载链接
+- **强制更新机制**：Release 说明中加入约定标记后，移动端可禁用“稍后再说”，用于破坏性协议变更场景
 
-#### 📱 首个 Android 安装包
-- **Author 移动端正式发布**：本版本起，每次发布都会同时提供 Windows 桌面安装包和 Android APK
-- **正式签名**：APK 使用正式发布签名，后续版本可直接覆盖安装升级
-- **完整性校验**：附带 `.sha256` 校验文件，下载后可核对文件是否完整
+#### 🧠 AI 对话与作品上下文
+- **明确关联作品入口**：AI 对话顶部显示当前关联作品，未关联时可直接选择作品
+- **已有会话可补挂作品**：会话抽屉支持给历史对话关联、更换或取消关联作品
+- **流式体验修复**：修复流式生成期间不能自由滚动、轻微抖动以及异步 emit 越界导致的崩溃
+- **模型选择优化**：模型名显示更稳，思考等级和模型选择控件在窄屏下更不容易溢出
 
-#### 🔐 安全加固
-- **减少日志敏感输出**：设定导入、PDF/PMPX 解析、云端同步等流程不再在控制台输出详细数据，避免正文片段或设定名意外泄露
-- **提交前自动安全扫描**：新增代码提交前的自动检查机制，防止内部文档或密钥类文件被意外推送到公开仓库
+#### 🔌 API 配置与余额
+- **DeepSeek 余额接口修正**：默认余额查询地址改为官方 `GET https://api.deepseek.com/user/balance`
+- **余额自动展示**：配置有效 API Key 后会自动刷新余额，也可以手动点“刷新”
+- **提供商配置更稳定**：禁用 Gemini 等提供商后会正确持久化，不会退回页面后再次自动启用
+
+#### 🖥️ 桌面端同步优化
+- **DeepSeek 配置提示更新**：桌面端同步提示官方余额接口，避免继续使用旧路径
+- **余额卡片更即时**：桌面端 API 设置页也会自动展示余额状态，方便判断 Key 是否可用
+
+📦 Windows 安装包由本公开仓库自动构建；Android APK 会由私有移动仓库签名构建后上传到本 Release。
 
 ---
 
 ### 🇬🇧 English
 
-#### ✍️ Inline AI Diff Preview
-- **Rewrites appear directly in the editor**: AI suggestions are now displayed as inline diffs embedded in your draft, showing original and suggested text side by side
-- **Accept or reject per section**: Each rewrite suggestion can be individually accepted or dismissed — no more copying between the chat panel and the editor
-- **Keyboard shortcuts**: Press `Tab` to accept a suggestion, `Esc` to dismiss and restore the original text, ideal for continuous review
-- **Separated continuation and rewrite previews**: Continuations still use ghost text; rewrites now use a clearer inline diff view to avoid confusion
+#### 📱 Mobile startup, sign-in, and updates
+- **Redesigned startup flow**: Added a softer Author logo animation and first-run onboarding
+- **Offline-first entry**: The mobile app can now skip sign-in and go straight to the workspace; sign-in is only needed for cloud sync
+- **In-app update flow**: Added version checks, changelog display, APK download progress, and installer handoff to avoid browser-only downloads
+- **Better update sources**: GitHub Release APK assets are parsed directly; Gitee releases can resolve APK links from attachments or release bodies
+- **Forced update support**: Release body markers can disable “later” actions for breaking API or data migrations
 
-#### 📱 First Android APK
-- **Author mobile is officially available**: Starting from this release, both a Windows desktop installer and an Android APK are published together
-- **Production signed**: The APK is signed with the official release key, so future versions can be installed as direct upgrades
-- **Integrity check**: A `.sha256` checksum file is included alongside the APK for download verification
+#### 🧠 AI chats and work context
+- **Clear work-link entry point**: AI chat now shows the currently linked work at the top, with a direct selector when none is linked
+- **Link existing chats**: Historical sessions can now be linked to, switched between, or detached from works in the session drawer
+- **Streaming fixes**: Fixed scrolling during streamed replies, reduced visible jitter, and fixed async emit-after-completion crashes
+- **Model selector polish**: Model names, reasoning effort controls, and selector layouts are more stable on narrow screens
 
-#### 🔐 Security Hardening
-- **Reduced sensitive log output**: Settings import, PDF/PMPX parsing, and cloud sync no longer print detailed data to the console, preventing accidental exposure of draft content or setting names
-- **Pre-commit safety checks**: A new automated check runs before code commits to prevent internal documents or secret-like files from being pushed to the public repository
+#### 🔌 API configuration and balances
+- **DeepSeek balance endpoint fixed**: The default balance URL now uses the official `GET https://api.deepseek.com/user/balance`
+- **Balances are always visible**: Once a valid API key is configured, balance status refreshes automatically and can still be refreshed manually
+- **More reliable provider state**: Disabled providers such as Gemini now remain disabled after leaving and returning to settings
+
+#### 🖥️ Desktop parity updates
+- **DeepSeek hints updated**: Desktop settings now point to the official balance endpoint
+- **More immediate balance card**: Desktop API settings automatically surface balance status so users can tell whether a key is usable
+
+📦 The Windows installer is built from this public repository. The Android APK is signed in the private mobile repository and uploaded to this public Release afterward.
