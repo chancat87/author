@@ -1,55 +1,69 @@
-## v1.2.26 — 移动端自动更新与作品关联优化 | Mobile auto updates and work-linked chats
+## v1.2.26 — 应用内升级 · AI 关联作品 · 余额自动刷新
 
 ### 🇨🇳 中文
 
-#### 📱 移动端启动、登录与更新
-- **启动体验重做**：新增更柔和的 Author Logo 启动动画，并接入首次引导流程
-- **离线优先进入**：移动端可以跳过登录直接进入工作台；登录只用于云同步，不再阻挡本机写作
-- **应用内更新流程**：新增版本检查、更新日志展示、APK 下载进度和安装器唤起，减少跳转浏览器下载的割裂感
-- **更新源增强**：GitHub Release 会读取 APK assets；Gitee Release 支持解析附件和正文里的 APK 下载链接
-- **强制更新机制**：Release 说明中加入约定标记后，移动端可禁用“稍后再说”，用于破坏性协议变更场景
+#### 📱 应用内升级
 
-#### 🧠 AI 对话与作品上下文
-- **明确关联作品入口**：AI 对话顶部显示当前关联作品，未关联时可直接选择作品
-- **已有会话可补挂作品**：会话抽屉支持给历史对话关联、更换或取消关联作品
-- **流式体验修复**：修复流式生成期间不能自由滚动、轻微抖动以及异步 emit 越界导致的崩溃
-- **模型选择优化**：模型名显示更稳，思考等级和模型选择控件在窄屏下更不容易溢出
+以前发现新版本要跳浏览器下载、找文件管理器安装，体验比较割裂。现在更新流程在应用内完成：弹窗里能直接看到更新日志，点"下载并安装"后会显示下载进度，完成后自动唤起系统安装器。如果 GitHub 下载不了，也会自动尝试 Gitee 源。
 
-#### 🔌 API 配置与余额
-- **DeepSeek 余额接口修正**：默认余额查询地址改为官方 `GET https://api.deepseek.com/user/balance`
-- **余额自动展示**：配置有效 API Key 后会自动刷新余额，也可以手动点“刷新”
-- **提供商配置更稳定**：禁用 Gemini 等提供商后会正确持久化，不会退回页面后再次自动启用
+对于涉及数据格式变更的版本，Release 说明里加上 `[force-update]` 标记后，移动端会隐藏"稍后"按钮，确保用户升级到兼容版本。
 
-#### 🖥️ 桌面端同步优化
-- **DeepSeek 配置提示更新**：桌面端同步提示官方余额接口，避免继续使用旧路径
-- **余额卡片更即时**：桌面端 API 设置页也会自动展示余额状态，方便判断 Key 是否可用
+#### 🧠 AI 对话关联作品
 
-📦 Windows 安装包由本公开仓库自动构建；Android APK 会由私有移动仓库签名构建后上传到本 Release。
+- 顶部工具栏新增📖按钮，随时给当前对话关联或更换作品——关联后 AI 会自动读取作品设定作为上下文
+- 历史对话也能补挂作品，不用再为了挂作品专门新建会话
+- 会话列表里能按"关联作品"筛选，快速找到和某个作品相关的所有对话
+
+#### ⚡ 流式输出稳定性
+
+- 修复了流式生成期间切到后台会报错的问题（现在会自动暂停流，回来继续看已生成的内容）
+- 修复了自由滚动时被强制拉回底部的抖动
+
+#### 🔌 API 配置
+
+- 填好 API Key 后余额会自动查询，不用每次手动点"查询余额"了
+- 已有余额时按钮文案变成"刷新"，更直观
+- DeepSeek 余额接口修正为官方地址 `GET https://api.deepseek.com/user/balance`
+- 禁用某个 Provider 后不会再退回页面后偷偷重新启用
+
+#### 🚀 启动与登录
+
+- 全新启动动画 + 首次使用引导
+- 移动端可以跳过登录直接使用，登录只影响云同步
+
+📦 Windows 安装包由本仓库自动构建，Android APK 由私有移动仓库签名构建后上传至本 Release。
 
 ---
 
 ### 🇬🇧 English
 
-#### 📱 Mobile startup, sign-in, and updates
-- **Redesigned startup flow**: Added a softer Author logo animation and first-run onboarding
-- **Offline-first entry**: The mobile app can now skip sign-in and go straight to the workspace; sign-in is only needed for cloud sync
-- **In-app update flow**: Added version checks, changelog display, APK download progress, and installer handoff to avoid browser-only downloads
-- **Better update sources**: GitHub Release APK assets are parsed directly; Gitee releases can resolve APK links from attachments or release bodies
-- **Forced update support**: Release body markers can disable “later” actions for breaking API or data migrations
+#### 📱 In-app updates
 
-#### 🧠 AI chats and work context
-- **Clear work-link entry point**: AI chat now shows the currently linked work at the top, with a direct selector when none is linked
-- **Link existing chats**: Historical sessions can now be linked to, switched between, or detached from works in the session drawer
-- **Streaming fixes**: Fixed scrolling during streamed replies, reduced visible jitter, and fixed async emit-after-completion crashes
-- **Model selector polish**: Model names, reasoning effort controls, and selector layouts are more stable on narrow screens
+Previously, updating meant opening a browser, finding the download, and manually installing. Now the entire flow happens inside the app: a dialog shows the changelog, tapping "Download & Install" displays a progress bar, and the system installer opens automatically when done. If GitHub is unreachable, the app falls back to Gitee.
 
-#### 🔌 API configuration and balances
-- **DeepSeek balance endpoint fixed**: The default balance URL now uses the official `GET https://api.deepseek.com/user/balance`
-- **Balances are always visible**: Once a valid API key is configured, balance status refreshes automatically and can still be refreshed manually
-- **More reliable provider state**: Disabled providers such as Gemini now remain disabled after leaving and returning to settings
+For releases with breaking data changes, adding `[force-update]` to the release body hides the "Later" button and ensures users upgrade.
 
-#### 🖥️ Desktop parity updates
-- **DeepSeek hints updated**: Desktop settings now point to the official balance endpoint
-- **More immediate balance card**: Desktop API settings automatically surface balance status so users can tell whether a key is usable
+#### 🧠 AI chat ↔ work linking
 
-📦 The Windows installer is built from this public repository. The Android APK is signed in the private mobile repository and uploaded to this public Release afterward.
+- New 📖 button in the toolbar to link or change the associated work — AI will automatically use the work's lore as context
+- Existing conversations can be linked to a work retroactively
+- Session list can be filtered by "linked to work" for quick access
+
+#### ⚡ Streaming stability
+
+- Fixed crashes when switching to background during streamed responses (the stream now pauses gracefully)
+- Fixed forced scroll-to-bottom jitter while freely scrolling
+
+#### 🔌 API configuration
+
+- Balance auto-refreshes after entering an API key
+- Button label changes to "Refresh" when a balance is already shown
+- DeepSeek balance endpoint corrected to `GET https://api.deepseek.com/user/balance`
+- Disabled providers now stay disabled after navigating away
+
+#### 🚀 Startup & sign-in
+
+- New startup animation + first-run onboarding
+- Mobile app can be used without signing in — sign-in only enables cloud sync
+
+📦 Windows installer is built from this public repo. Android APK is signed in the private mobile repo and uploaded here.
