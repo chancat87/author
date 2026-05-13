@@ -26,6 +26,10 @@ export function initAuth() {
         _currentUser = user;
         // 记录登录过的账号到历史
         if (user) saveAccountToHistory(user);
+        // 发送每日活跃心跳（异步，不阻塞认证流程）
+        if (user) {
+            import('./heartbeat').then(m => m.sendDailyHeartbeat()).catch(() => {});
+        }
         _listeners.forEach(fn => {
             try { fn(user); } catch (e) { console.error('[auth] listener error:', e); }
         });

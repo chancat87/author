@@ -39,7 +39,7 @@ let analyticsPromise = null;
 
 export async function getFirebaseAnalytics() {
     if (!isFirebaseAnalyticsConfigured) return null;
-    if (typeof window === 'undefined' || window.electronAPI) return null;
+    if (typeof window === 'undefined') return null;
 
     if (!analyticsPromise) {
         analyticsPromise = (async () => {

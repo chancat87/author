@@ -9,7 +9,7 @@ function FirebaseAnalyticsTracker() {
     const searchParams = useSearchParams();
 
     useEffect(() => {
-        if (!pathname || typeof window === 'undefined' || window.electronAPI) return;
+        if (!pathname || typeof window === 'undefined') return;
 
         const query = searchParams?.toString();
         const pagePath = `${pathname}${query ? `?${query}` : ''}`;

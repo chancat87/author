@@ -42,6 +42,7 @@ const AiSidebar = dynamic(() => import('./components/AiSidebar'), { ssr: false }
 const SnapshotManager = dynamic(() => import('./components/SnapshotManager'), { ssr: false });
 const WelcomeModal = dynamic(() => import('./components/WelcomeModal'), { ssr: false });
 const UpdateBanner = dynamic(() => import('./components/UpdateBanner'), { ssr: false });
+const AndroidDownloadMenu = dynamic(() => import('./components/AndroidDownloadMenu'), { ssr: false });
 const BookInfoPanel = dynamic(() => import('./components/BookInfoPanel'), { ssr: false });
 const CloudSyncIndicator = dynamic(() => import('./components/CloudSyncIndicator'), { ssr: false });
 const LoginModal = dynamic(() => import('./components/LoginModal'), { ssr: false });
@@ -524,6 +525,7 @@ export default function Home() {
           </div>
         </div>
         <div className="top-header-right">
+          <AndroidDownloadMenu />
           <CloudSyncIndicator />
         </div>
       </header>

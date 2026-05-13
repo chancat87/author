@@ -455,6 +455,27 @@
         "notConfiguredCard": "你的部署未配置 Firebase，无法使用云同步。",
         "chatLocalOnly": "注意：AI 对话记录仍只保存在当前设备，不会参与云同步。"
     },
+    "mobileDownload": {
+        "trigger": "安卓端",
+        "open": "打开安卓端下载",
+        "close": "关闭安卓端下载",
+        "title": "下载 Android 移动端",
+        "subtitle": "扫码会直接下载最新版安卓 APK，也可以查看 Release。",
+        "scan": "手机扫码",
+        "scanDownload": "扫码直接下载",
+        "qrAlt": "Android 安卓端下载二维码",
+        "featureIntro": "安卓端支持云同步、离线使用、时间线和关系图谱功能。",
+        "featureSync": "云同步",
+        "featureOffline": "离线使用",
+        "featureTimeline": "时间线",
+        "featureRelationship": "关系图谱",
+        "downloadApk": "下载安卓 APK",
+        "releasePage": "查看 Release",
+        "qqGroup": "也可以加入 QQ 群获取安卓端 APK 和更新通知。",
+        "joinQqGroup": "加入 QQ 群",
+        "qqQrAlt": "QQ 群二维码",
+        "note": "安卓端 APK 来自公开 GitHub Release；二维码和下载按钮都会指向最新版本。"
+    },
     "tour": {
         "step1Title": "创建你的故事",
         "step1Content": "点击左侧边栏的「＋ 新建」可以创建新章节。所有内容都会实时保存在你的浏览器本地。",

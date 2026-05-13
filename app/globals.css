@@ -307,6 +307,7 @@ body {
 
 /* ===== 顶栏（Google Docs 风格）===== */
 .top-header-bar {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -314,7 +315,7 @@ body {
   background: var(--bg-sidebar);
   border-bottom: 1px solid var(--border-light);
   flex-shrink: 0;
-  z-index: 40;
+  z-index: 1000;
 }
 
 .top-header-left {
@@ -345,6 +346,333 @@ body {
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+}
+
+.mobile-download-menu {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.mobile-download-trigger {
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid rgba(34, 197, 94, 0.36);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, #22c55e 9%, var(--bg-card));
+  color: #15803d;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.mobile-download-trigger:hover,
+.mobile-download-trigger.active {
+  border-color: rgba(34, 197, 94, 0.68);
+  background: color-mix(in srgb, #22c55e 16%, var(--bg-card));
+  box-shadow: 0 3px 12px rgba(34, 197, 94, 0.16);
+}
+
+[data-theme="dark"] .mobile-download-trigger {
+  color: #86efac;
+}
+
+.mobile-download-trigger-label,
+.mobile-download-trigger-badge {
+  white-space: nowrap;
+}
+
+.mobile-download-trigger-badge {
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  border-radius: var(--radius-full);
+  background: rgba(34, 197, 94, 0.16);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.mobile-download-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 360px;
+  padding: 14px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: var(--bg-card);
+  box-shadow: 0 16px 42px rgba(15, 23, 42, 0.18);
+  z-index: 1001;
+  animation: mobileDownloadPopoverIn 0.18s ease-out;
+}
+
+[data-theme="dark"] .mobile-download-popover {
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
+}
+
+.mobile-download-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.mobile-download-close:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.mobile-download-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding-right: 28px;
+}
+
+.mobile-download-heading-icon {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: rgba(34, 197, 94, 0.12);
+  color: #16a34a;
+  flex-shrink: 0;
+}
+
+.mobile-download-heading h3 {
+  margin: 0 0 3px;
+  color: var(--text-primary);
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+.mobile-download-heading p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.mobile-download-feature-panel {
+  margin-top: 12px;
+  border: 1px solid rgba(34, 197, 94, 0.18);
+  border-radius: 8px;
+  padding: 10px;
+  background: color-mix(in srgb, #22c55e 7%, var(--bg-primary));
+}
+
+.mobile-download-feature-panel p {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.mobile-download-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.mobile-download-feature-grid span {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(34, 197, 94, 0.22);
+  border-radius: 8px;
+  padding: 4px 8px;
+  background: var(--bg-card);
+  color: #15803d;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+}
+
+[data-theme="dark"] .mobile-download-feature-grid span {
+  color: #86efac;
+}
+
+.mobile-download-body {
+  display: grid;
+  grid-template-columns: 132px 1fr;
+  gap: 14px;
+  margin-top: 14px;
+  align-items: stretch;
+}
+
+.mobile-download-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.mobile-download-qr img {
+  width: 112px;
+  height: 112px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: #fff;
+  padding: 6px;
+}
+
+.mobile-download-qr span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.mobile-download-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  justify-content: center;
+}
+
+.mobile-download-primary,
+.mobile-download-secondary {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: all var(--transition-fast);
+}
+
+.mobile-download-primary {
+  border: 1px solid #16a34a;
+  background: #16a34a;
+  color: #fff;
+}
+
+.mobile-download-primary:hover {
+  background: #15803d;
+  border-color: #15803d;
+}
+
+.mobile-download-secondary {
+  border: 1px solid var(--border-light);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.mobile-download-secondary:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.mobile-download-note {
+  margin: 12px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-light);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.mobile-download-community {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.mobile-download-community-text {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.mobile-download-community-text svg {
+  color: #16a34a;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.mobile-download-community-actions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.mobile-download-qq-link {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  padding: 7px 10px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: all var(--transition-fast);
+}
+
+.mobile-download-qq-link:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.mobile-download-community-actions img {
+  width: 74px;
+  height: 74px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: #fff;
+  padding: 5px;
+}
+
+@keyframes mobileDownloadPopoverIn {
+  from {
+    transform: translateY(-4px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 /* ===== 内容区（编辑器 + AI 侧栏）===== */
@@ -6521,6 +6849,44 @@ h5.chat-md-heading {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+@media (max-width: 720px) {
+  .mobile-download-trigger-label {
+    display: none;
+  }
+
+  .mobile-download-popover {
+    position: fixed;
+    top: 48px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .mobile-download-body {
+    grid-template-columns: 1fr;
+  }
+
+  .mobile-download-feature-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mobile-download-community-actions {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+
+  .mobile-download-qq-link {
+    width: 100%;
+  }
+
+  .mobile-download-qr img {
+    width: 128px;
+    height: 128px;
+  }
 }
 
 .cloud-sync-indicator {

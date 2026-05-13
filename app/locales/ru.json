@@ -447,6 +447,27 @@
         "notConfiguredCard": "В вашем развертывании не настроен Firebase, Cloud Sync недоступна.",
         "chatLocalOnly": "Примечание: история ИИ-чата хранится только на этом устройстве и не входит в облачную синхронизацию."
     },
+    "mobileDownload": {
+        "trigger": "Android",
+        "open": "Открыть загрузку Android",
+        "close": "Закрыть загрузку Android",
+        "title": "Скачать Android-приложение",
+        "subtitle": "Отсканируйте QR-код, чтобы скачать последнюю Android APK напрямую, или откройте Release.",
+        "scan": "Сканировать",
+        "scanDownload": "QR для загрузки",
+        "qrAlt": "QR-код для загрузки Android-приложения",
+        "featureIntro": "Android-приложение поддерживает Cloud Sync, офлайн-режим, таймлайн и граф связей.",
+        "featureSync": "Cloud sync",
+        "featureOffline": "Офлайн",
+        "featureTimeline": "Таймлайн",
+        "featureRelationship": "Граф связей",
+        "downloadApk": "Скачать Android APK",
+        "releasePage": "Открыть Release",
+        "qqGroup": "Также можно вступить в QQ-группу для APK Android и уведомлений об обновлениях.",
+        "joinQqGroup": "Вступить в QQ",
+        "qqQrAlt": "QR-код QQ-группы",
+        "note": "Android APK загружается из публичного GitHub Release. QR-код и кнопка загрузки ведут на последнюю версию."
+    },
     "tour": {
         "step1Title": "Создайте свою историю",
         "step1Content": "Нажмите кнопку «＋ Новая» на левой панели, чтобы создать новую главу. Всё содержимое сохраняется локально в вашем браузере в режиме реального времени.",

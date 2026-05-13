@@ -455,6 +455,27 @@
     "notConfiguredCard": "Your deployment does not have Firebase configured, Cloud Sync is unavailable.",
     "chatLocalOnly": "Note: AI chat history stays on this device only and is not included in cloud sync."
   },
+  "mobileDownload": {
+    "trigger": "Android",
+    "open": "Open Android download",
+    "close": "Close Android download",
+    "title": "Download Android App",
+    "subtitle": "Scan to download the latest Android APK directly, or view the Release page.",
+    "scan": "Scan with phone",
+    "scanDownload": "Scan to download",
+    "qrAlt": "Android app download QR code",
+    "featureIntro": "The Android app supports cloud sync, offline use, timeline, and relationship graph features.",
+    "featureSync": "Cloud sync",
+    "featureOffline": "Offline use",
+    "featureTimeline": "Timeline",
+    "featureRelationship": "Relationship graph",
+    "downloadApk": "Download Android APK",
+    "releasePage": "View Release",
+    "qqGroup": "You can also join the QQ group for Android APKs and update notices.",
+    "joinQqGroup": "Join QQ group",
+    "qqQrAlt": "QQ group QR code",
+    "note": "The Android APK is served from the public GitHub Release. The QR code and download button point to the latest version."
+  },
   "tour": {
     "step1Title": "Create Your Story",
     "step1Content": "Click the \"＋ New\" button in the left sidebar to create a new chapter. All content is saved locally in your browser in real time.",

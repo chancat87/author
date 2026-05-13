@@ -1,1 +1,1 @@
-移动端统计校准与同步状态修复 | Mobile stats calibration and sync status fixes
+增强安卓端下载入口与活跃统计 | Improved Android download entry and activity analytics
