@@ -1,1 +1,1 @@
-增强安卓端下载入口与活跃统计 | Improved Android download entry and activity analytics
+优化批注、诊断日志与 AI 配置体验 | Improved remarks, diagnostics, and AI configuration

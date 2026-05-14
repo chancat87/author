@@ -5,6 +5,41 @@ export const runtime = 'nodejs';
 import { proxyFetch } from '../../lib/proxy-fetch';
 import { rotateKey } from '../../lib/keyRotator';
 
+function readErrorDetail(errorText) {
+    try {
+        const parsed = JSON.parse(errorText);
+        const detail = parsed?.error?.message || parsed?.error || parsed?.message;
+        if (!detail) return errorText;
+        return typeof detail === 'string' ? detail : JSON.stringify(detail);
+    } catch {
+        return errorText;
+    }
+}
+
+async function embeddingErrorResponse(response, { provider, model }) {
+    const errorText = await response.text();
+    const detail = readErrorDetail(errorText);
+    let hint = '';
+
+    if (response.status === 401 || response.status === 403) {
+        hint = '请检查 Embedding API Key 是否正确，并确认该 Key 有调用当前嵌入模型的权限。';
+    } else if (response.status === 404) {
+        hint = '请检查 Embedding API 地址是否正确。OpenAI 兼容地址通常需要包含 /v1，最终会请求 /embeddings。';
+    } else if (response.status === 429) {
+        hint = '请求过于频繁或额度不足，请稍后重试，或降低重建频率。';
+    }
+
+    const prefix = `${provider || 'Embedding'} 模型 ${model || '未指定'} 调用失败 (${response.status})`;
+    const message = [prefix, detail, hint].filter(Boolean).join('：');
+    return new Response(JSON.stringify({ error: message }), { status: response.status });
+}
+
+function invalidEmbeddingResponse(provider, model) {
+    return new Response(JSON.stringify({
+        error: `${provider || 'Embedding'} 模型 ${model || '未指定'} 没有返回有效向量，请确认选择的是 Embedding 模型而不是对话模型。`,
+    }), { status: 502 });
+}
+
 export async function POST(request) {
     try {
         const { text, apiConfig } = await request.json();
@@ -67,33 +102,53 @@ export async function POST(request) {
             }, proxyUrl);
 
             if (!res.ok) {
-                const errText = await res.text();
-                throw new Error(`Gemini Embedding Error: ${errText}`);
+                return embeddingErrorResponse(res, { provider, model: geminiModel });
             }
             const data = await res.json();
-            embeddings = data.embedding.values;
+            embeddings = data?.embedding?.values;
+            if (!Array.isArray(embeddings) || embeddings.length === 0) {
+                return invalidEmbeddingResponse(provider, geminiModel);
+            }
         } else {
             // OpenAI 兼容格式
-            const url = `${baseUrl}/embeddings`;
+            const urls = baseUrl.endsWith('/v1') || baseUrl.endsWith('/v1beta')
+                ? [`${baseUrl}/embeddings`]
+                : [`${baseUrl}/embeddings`, `${baseUrl}/v1/embeddings`];
+            let lastErrorResponse = null;
 
-            const res = await proxyFetch(url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`
-                },
-                body: JSON.stringify({
-                    input: text,
-                    model: embedModelName
-                })
-            }, proxyUrl);
+            for (const url of urls) {
+                const res = await proxyFetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
+                    },
+                    body: JSON.stringify({
+                        input: text,
+                        model: embedModelName
+                    })
+                }, proxyUrl);
 
-            if (!res.ok) {
-                const errText = await res.text();
-                throw new Error(`Embedding API Error: ${errText}`);
+                if (!res.ok) {
+                    lastErrorResponse = res;
+                    if (res.status !== 404) break;
+                    continue;
+                }
+
+                const data = await res.json();
+                embeddings = data?.data?.[0]?.embedding;
+                if (!Array.isArray(embeddings) || embeddings.length === 0) {
+                    return invalidEmbeddingResponse(provider, embedModelName);
+                }
+                break;
             }
-            const data = await res.json();
-            embeddings = data.data[0].embedding;
+
+            if (!Array.isArray(embeddings) || embeddings.length === 0) {
+                if (lastErrorResponse) {
+                    return embeddingErrorResponse(lastErrorResponse, { provider, model: embedModelName });
+                }
+                return invalidEmbeddingResponse(provider, embedModelName);
+            }
         }
 
         return new Response(JSON.stringify({ embedding: embeddings }), {

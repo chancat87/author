@@ -9,15 +9,41 @@ const MIRRORED_BREADCRUMB_EVENTS = new Set([
     'app.diagnostics.ready',
     'page.lifecycle',
     'page.visibility',
+    'ui.blocked-pointer',
     'ui.click',
     'ui.dragstart',
     'ui.drop',
     'ui.keydown',
+    'ui.overlay.warning',
 ]);
+const OVERLAY_SELECTORS = [
+    '.modal-overlay',
+    '.settings-panel-overlay',
+    '.login-modal-overlay',
+    '.welcome-modal-overlay',
+    '.tour-portal',
+    '.tour-overlay-bg',
+    '.cloud-sync-menu-backdrop',
+    '.field-expand-overlay',
+    '.color-picker-popover',
+    '.typeset-popover',
+    '.inline-ai-popover',
+    '.mobile-download-popover',
+    '.category-popover-panel',
+    '.settings-category-popover',
+    '[data-blocking-overlay="true"]',
+];
+const HEARTBEAT_INTERVAL_MS = 60 * 1000;
+const OVERLAY_WARNING_COOLDOWN_MS = 30 * 1000;
+const FULLSCREEN_OVERLAY_RATIO = 0.55;
+const LONG_TASK_THRESHOLD_MS = 250;
 
 let installed = false;
 let originalConsole = null;
 let entriesCache = [];
+let healthTimer = null;
+let longTaskObserver = null;
+let lastOverlayWarningAt = 0;
 
 function nowIso() {
     return new Date().toISOString();
@@ -124,6 +150,123 @@ function describeElement(target) {
     return Object.fromEntries(Object.entries(attrs).filter(([, value]) => value));
 }
 
+function rectSnapshot(rect) {
+    if (!rect) return null;
+    return {
+        x: Math.round(rect.x),
+        y: Math.round(rect.y),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+        top: Math.round(rect.top),
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+        bottom: Math.round(rect.bottom),
+    };
+}
+
+function describeVisualElement(target) {
+    if (typeof window === 'undefined' || !target || target.nodeType !== 1) return null;
+    const rect = target.getBoundingClientRect?.();
+    const style = window.getComputedStyle?.(target);
+    const base = describeElement(target) || {};
+    const className = typeof target.className === 'string'
+        ? target.className.split(/\s+/).filter(Boolean).slice(0, 8).join('.')
+        : base.className;
+    return Object.fromEntries(Object.entries({
+        ...base,
+        tag: target.tagName?.toLowerCase() || base.tag,
+        id: target.id || base.id,
+        className: className || undefined,
+        position: style?.position,
+        zIndex: style?.zIndex,
+        pointerEvents: style?.pointerEvents,
+        display: style?.display,
+        visibility: style?.visibility,
+        opacity: style?.opacity,
+        rect: rectSnapshot(rect),
+    }).filter(([, value]) => value !== undefined && value !== ''));
+}
+
+function isVisibleElement(el) {
+    if (typeof window === 'undefined' || !el || el.nodeType !== 1) return false;
+    const style = window.getComputedStyle(el);
+    const rect = el.getBoundingClientRect();
+    const opacity = Number.parseFloat(style.opacity || '1');
+    return style.display !== 'none'
+        && style.visibility !== 'hidden'
+        && opacity > 0.01
+        && rect.width > 1
+        && rect.height > 1;
+}
+
+function getVisibleOverlaySnapshot(limit = 12) {
+    if (typeof document === 'undefined') return [];
+    const seen = new Set();
+    const elements = [];
+    for (const selector of OVERLAY_SELECTORS) {
+        document.querySelectorAll(selector).forEach((el) => {
+            if (!seen.has(el) && isVisibleElement(el)) {
+                seen.add(el);
+                elements.push(el);
+            }
+        });
+    }
+    return elements
+        .map((el) => describeVisualElement(el))
+        .filter(Boolean)
+        .sort((a, b) => {
+            const aIndex = Number.parseInt(a.zIndex, 10);
+            const bIndex = Number.parseInt(b.zIndex, 10);
+            return (Number.isFinite(bIndex) ? bIndex : 0) - (Number.isFinite(aIndex) ? aIndex : 0);
+        })
+        .slice(0, limit);
+}
+
+function getLargeBlockingOverlays(overlays) {
+    if (typeof window === 'undefined') return [];
+    const viewportArea = Math.max(1, window.innerWidth * window.innerHeight);
+    return overlays.filter((overlay) => {
+        const rect = overlay.rect || {};
+        const area = Math.max(0, rect.width || 0) * Math.max(0, rect.height || 0);
+        return overlay.pointerEvents !== 'none' && area / viewportArea >= FULLSCREEN_OVERLAY_RATIO;
+    });
+}
+
+function elementsSharePath(a, b) {
+    if (!a || !b || a.nodeType !== 1 || b.nodeType !== 1) return false;
+    return a === b || a.contains?.(b) || b.contains?.(a);
+}
+
+function getPointerDiagnostics(event) {
+    const topElementNode = document.elementFromPoint?.(event.clientX, event.clientY);
+    const overlays = getVisibleOverlaySnapshot();
+    return {
+        pointer: {
+            x: Math.round(event.clientX),
+            y: Math.round(event.clientY),
+            button: event.button,
+            buttons: event.buttons,
+            pointerType: event.pointerType,
+        },
+        target: describeElement(event.target),
+        topElement: describeVisualElement(topElementNode),
+        targetDiffersFromTopElement: !!topElementNode && !elementsSharePath(event.target, topElementNode),
+        overlays,
+        largeBlockingOverlays: getLargeBlockingOverlays(overlays),
+    };
+}
+
+function getMemorySnapshot() {
+    if (typeof performance === 'undefined') return null;
+    const memory = performance?.memory;
+    if (!memory) return null;
+    return {
+        usedJSHeapSize: memory.usedJSHeapSize,
+        totalJSHeapSize: memory.totalJSHeapSize,
+        jsHeapSizeLimit: memory.jsHeapSizeLimit,
+    };
+}
+
 function getEnvironmentSnapshot() {
     if (typeof window === 'undefined') return {};
     return {
@@ -134,6 +277,15 @@ function getEnvironmentSnapshot() {
         viewport: { width: window.innerWidth, height: window.innerHeight, devicePixelRatio: window.devicePixelRatio },
         online: navigator.onLine,
         electron: !!window.electronAPI?.isElectron,
+        document: {
+            readyState: document.readyState,
+            visibilityState: document.visibilityState,
+            hasFocus: document.hasFocus?.(),
+        },
+        bodyClassName: sanitizeText(document.body?.className || ''),
+        activeElement: describeElement(document.activeElement),
+        overlays: getVisibleOverlaySnapshot(8),
+        memory: getMemorySnapshot(),
         localTime: new Date().toString(),
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     };
@@ -212,8 +364,35 @@ function installGlobalErrorCapture() {
 
 function installInteractionBreadcrumbs() {
     const capture = { capture: true, passive: true };
+    document.addEventListener('pointerdown', (event) => {
+        const diagnostics = getPointerDiagnostics(event);
+        if (diagnostics.largeBlockingOverlays.length > 0 || diagnostics.targetDiffersFromTopElement) {
+            recordDiagnosticEvent('ui.blocked-pointer', 'Pointer down may be intercepted by an overlay or a different top element', diagnostics, 'warn');
+        } else {
+            recordDiagnosticEvent('ui.pointerdown', 'pointerdown', {
+                pointer: diagnostics.pointer,
+                target: diagnostics.target,
+                topElement: diagnostics.topElement,
+            }, 'debug');
+        }
+    }, capture);
+    document.addEventListener('pointerup', (event) => {
+        recordDiagnosticEvent('ui.pointerup', 'pointerup', {
+            target: describeElement(event.target),
+            pointer: {
+                x: Math.round(event.clientX),
+                y: Math.round(event.clientY),
+                button: event.button,
+                pointerType: event.pointerType,
+            },
+        }, 'debug');
+    }, capture);
     document.addEventListener('click', (event) => {
-        recordDiagnosticEvent('ui.click', 'click', { target: describeElement(event.target) }, 'debug');
+        const topElement = document.elementFromPoint?.(event.clientX, event.clientY);
+        recordDiagnosticEvent('ui.click', 'click', {
+            target: describeElement(event.target),
+            topElement: describeVisualElement(topElement),
+        }, 'debug');
     }, capture);
     document.addEventListener('dragstart', (event) => {
         recordDiagnosticEvent('ui.dragstart', 'dragstart', { target: describeElement(event.target) }, 'debug');
@@ -234,6 +413,50 @@ function installInteractionBreadcrumbs() {
     }, capture);
 }
 
+function installHealthMonitor() {
+    if (healthTimer) return;
+    healthTimer = window.setInterval(() => {
+        const overlays = getVisibleOverlaySnapshot(10);
+        const largeBlockingOverlays = getLargeBlockingOverlays(overlays);
+        const payload = {
+            readyState: document.readyState,
+            visibilityState: document.visibilityState,
+            hasFocus: document.hasFocus?.(),
+            activeElement: describeElement(document.activeElement),
+            bodyClassName: sanitizeText(document.body?.className || ''),
+            overlays,
+            largeBlockingOverlays,
+            memory: getMemorySnapshot(),
+        };
+        if (largeBlockingOverlays.length > 0) {
+            const now = Date.now();
+            if (now - lastOverlayWarningAt > OVERLAY_WARNING_COOLDOWN_MS) {
+                lastOverlayWarningAt = now;
+                recordDiagnosticEvent('ui.overlay.warning', 'Large pointer-enabled overlay is visible during heartbeat', payload, 'warn');
+            }
+            return;
+        }
+        recordDiagnosticEvent('app.health', 'heartbeat', payload, 'debug');
+    }, HEARTBEAT_INTERVAL_MS);
+}
+
+function installPerformanceDiagnostics() {
+    if (typeof PerformanceObserver === 'undefined' || longTaskObserver) return;
+    try {
+        longTaskObserver = new PerformanceObserver((list) => {
+            list.getEntries().forEach((entry) => {
+                if (entry.duration < LONG_TASK_THRESHOLD_MS) return;
+                recordDiagnosticEvent('app.longtask', 'Main thread long task detected', {
+                    name: entry.name,
+                    startTime: Math.round(entry.startTime),
+                    duration: Math.round(entry.duration),
+                }, entry.duration >= 1000 ? 'warn' : 'debug');
+            });
+        });
+        longTaskObserver.observe({ entryTypes: ['longtask'] });
+    } catch { }
+}
+
 export function initDiagnostics() {
     if (typeof window === 'undefined' || installed) return;
     installed = true;
@@ -241,6 +464,13 @@ export function initDiagnostics() {
     installConsoleCapture();
     installGlobalErrorCapture();
     installInteractionBreadcrumbs();
+    installHealthMonitor();
+    installPerformanceDiagnostics();
+    window.__authorDiagnostics = {
+        snapshot: getEnvironmentSnapshot,
+        export: downloadDiagnosticReport,
+        record: recordDiagnosticEvent,
+    };
     recordDiagnosticEvent('app.diagnostics.ready', 'Diagnostics initialized', getEnvironmentSnapshot(), 'info');
 }
 

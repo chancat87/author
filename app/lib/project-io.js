@@ -3,7 +3,7 @@
  * 隐私优先：新导出的项目不包含 API 配置、AI 会话、token 统计或 AI 摘要。
  */
 
-import { persistSet } from './persistence';
+import { persistGet, persistSet } from './persistence';
 import { getAllWorks, getSettingsNodes, getActiveWorkId } from './settings';
 import { getChapters } from './storage';
 
@@ -76,6 +76,8 @@ export async function exportProject() {
     data.worksIndex = works;
     const perWorkChapters = {};
     const perWorkSettings = {};
+    const perWorkInspirations = {};
+    const perWorkTimelineEvents = {};
 
     for (const work of works) {
         try {
@@ -88,9 +90,21 @@ export async function exportProject() {
         } catch {
             perWorkSettings[work.id] = [];
         }
+        try {
+            perWorkInspirations[work.id] = await persistGet(`author-inspirations-${work.id}`) || [];
+        } catch {
+            perWorkInspirations[work.id] = [];
+        }
+        try {
+            perWorkTimelineEvents[work.id] = await persistGet(`author-timeline-events-${work.id}`) || [];
+        } catch {
+            perWorkTimelineEvents[work.id] = [];
+        }
     }
     data.perWorkChapters = perWorkChapters;
     data.perWorkSettings = perWorkSettings;
+    data.perWorkInspirations = perWorkInspirations;
+    data.perWorkTimelineEvents = perWorkTimelineEvents;
 
     // 生成文件名
     const now = new Date();
@@ -166,12 +180,34 @@ export async function importProject(file) {
         }
         // v1 的 settingsNodes（旧全局 key），忽略——迁移逻辑会处理
 
-        // 5. 恢复聊天会话（通过持久化层写入 IndexedDB）
+        // 5. 恢复移动端/新版项目存档中的作品扩展数据
+        if (isV2 && data.perWorkInspirations && typeof data.perWorkInspirations === 'object') {
+            for (const [workId, inspirations] of Object.entries(data.perWorkInspirations)) {
+                if (inspirations) {
+                    const key = workId.startsWith('author-inspirations-')
+                        ? workId
+                        : `author-inspirations-${workId}`;
+                    await persistSet(key, inspirations);
+                }
+            }
+        }
+        if (isV2 && data.perWorkTimelineEvents && typeof data.perWorkTimelineEvents === 'object') {
+            for (const [workId, events] of Object.entries(data.perWorkTimelineEvents)) {
+                if (events) {
+                    const key = workId.startsWith('author-timeline-events-')
+                        ? workId
+                        : `author-timeline-events-${workId}`;
+                    await persistSet(key, events);
+                }
+            }
+        }
+
+        // 6. 恢复聊天会话（通过持久化层写入 IndexedDB）
         if (data.chatSessions) {
             await persistSet('author-chat-sessions', data.chatSessions);
         }
 
-        // 6. 恢复章节摘要
+        // 7. 恢复章节摘要
         if (data.chapterSummaries && typeof data.chapterSummaries === 'object') {
             for (const [chapterId, summary] of Object.entries(data.chapterSummaries)) {
                 if (summary) {
@@ -253,11 +289,23 @@ export async function importWork(file) {
 // ==================== 导入解析器 ====================
 
 // 章节标题正则 — 支持多种格式
-// 1. 第X章/回/节/卷（中文数字或阿拉伯数字）+ 可选标题
+// 1. 第 X 章/节/卷/部/篇/集/回（中文数字或阿拉伯数字）+ 可选标题
 // 2. Chapter X + 可选标题
 // 3. 纯阿拉伯数字行（如 "1"、"23"）
 // 4. 纯中文数字行（如 "一"、"三十三"）
-const CHAPTER_REGEX = /^(?:第[零一二三四五六七八九十百千万\d]+[章回节卷](?:\s+.*)?|Chapter\s+\d+(?:\s+.*)?|\d+|[零一二三四五六七八九十百千万]+)$/i;
+const CHAPTER_REGEX = /^(?:第\s*[零一二三四五六七八九十百千万两〇\d]+\s*[章节卷部篇集回].*|Chapter\s+\d+\b.*|\d+|[零一二三四五六七八九十百千万两〇]+)$/i;
+
+function looksLikeChapterHeading(line) {
+    const trimmed = String(line || '').trim();
+    if (!trimmed || trimmed.length > 80) return false;
+    return CHAPTER_REGEX.test(trimmed);
+}
+
+function chapterBoundaryTitle(chapter, index) {
+    const title = String(chapter?.title || '').trim();
+    if (looksLikeChapterHeading(title)) return title;
+    return `第${index + 1}章${title ? ` ${title}` : ''}`;
+}
 
 /**
  * TXT 解析 — 原有逻辑，完全保留
@@ -272,7 +320,7 @@ async function parseTxt(file) {
 
     for (let i = 0; i < lines.length; i++) {
         const trimmed = lines[i].trim();
-        if (CHAPTER_REGEX.test(trimmed)) {
+        if (looksLikeChapterHeading(trimmed)) {
             if (currentChapter) rawChapters.push(currentChapter);
             currentChapter = { title: trimmed, lines: [] };
         } else {
@@ -501,7 +549,7 @@ function splitTextToChapters(text) {
 
     for (let i = 0; i < lines.length; i++) {
         const trimmed = lines[i].trim();
-        if (CHAPTER_REGEX.test(trimmed)) {
+        if (looksLikeChapterHeading(trimmed)) {
             if (currentChapter) rawChapters.push(currentChapter);
             currentChapter = { title: trimmed, lines: [] };
         } else {
@@ -773,8 +821,8 @@ export async function downloadBlob(blob, fileName, mimeType) {
  */
 export async function exportWorkAsTxt(chapters, fileName, options = {}) {
     if (!chapters || chapters.length === 0) return;
-    const text = chapters.map(ch => {
-        const title = ch.title || '';
+    const text = chapters.map((ch, idx) => {
+        const title = chapterBoundaryTitle(ch, idx);
         const content = htmlToText(ch.content, options);
         // 每段前添加两个全角空格作为段落缩进
         const indented = content.split(/\n\n+/).map(p => {
@@ -1032,8 +1080,8 @@ ${navItems}
 export function exportWorkAsPdf(chapters, fileName, options = {}) {
     if (!chapters || chapters.length === 0) return;
 
-    const content = chapters.map(ch => {
-        const title = ch.title || '未命名章节';
+    const content = chapters.map((ch, idx) => {
+        const title = chapterBoundaryTitle(ch, idx);
         const text = htmlToText(ch.content, options);
         const paragraphs = text.split(/\n\n+/)
             .filter(p => p.trim())

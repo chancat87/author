@@ -211,6 +211,10 @@
     "emptyArchiveTitle": "No generations yet",
     "emptyArchiveHint": "AI generated content will be archived here automatically",
     "insertEditor": "↓ Insert into Editor",
+    "insertCodeBlock": "Insert Code Block Text",
+    "insertCodeBlockHint": "Insert only the body text inside the code block",
+    "insertPlainText": "Insert Plain Text",
+    "insertPlainTextHint": "Insert into the editor as plain text",
     "copy": "Copy",
     "tokenUsage": "Token Usage",
     "searchContext": "Search items...",
@@ -711,6 +715,7 @@
     "retrySyncAndExit": "Retry Sync and Exit",
     "exitWithLocalSave": "Exit with Local Save",
     "localSaved": "Your latest content has been safely saved on this device.",
-    "errorPrefix": "Sync failed: "
+    "errorPrefix": "Sync failed: ",
+    "snapshotTooLarge": "The automatic snapshot is larger than the cloud document limit. Your latest content is saved locally; this version keeps snapshots on this device and only syncs works, chapters, and settings."
   }
 }

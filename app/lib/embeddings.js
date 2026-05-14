@@ -4,18 +4,40 @@
 let _embedErrorUntil = 0;
 const EMBED_BACKOFF_MS = 60000;
 
+function describeEmbedError(status, bodyText) {
+    if (!bodyText) return `Embedding 请求失败 (${status})`;
+    try {
+        const parsed = JSON.parse(bodyText);
+        const detail = parsed?.error?.message || parsed?.error || parsed?.message;
+        if (detail) return `Embedding 请求失败 (${status}): ${detail}`;
+    } catch {
+        // Keep the original body when the API returns plain text or HTML.
+    }
+    return `Embedding 请求失败 (${status}): ${bodyText}`;
+}
+
 /**
  * 获取文本的向量化表示 (Embeddings)
  * @param {string} text 要向量化的文本
  * @param {object} apiConfig 从 getProjectSettings().apiConfig 传入的配置
  * @returns {Promise<number[]|null>} 浮点数数组形式的向量
  */
-export async function getEmbedding(text, apiConfig) {
+export async function getEmbedding(text, apiConfig, options = {}) {
+    const { throwOnError = false, ignoreBackoff = false } = options;
+    const fail = (message) => {
+        if (throwOnError) throw new Error(message);
+        return null;
+    };
+
     if (!text || text.trim() === '') return null;
     // 没有配置 Embedding Key 时静默跳过，不发请求
-    if (!apiConfig?.embeddingApiKey && !apiConfig?.apiKey) return null;
+    if (!apiConfig?.embedApiKey && !apiConfig?.embeddingApiKey && !apiConfig?.apiKey) {
+        return fail('未配置 Embedding API Key');
+    }
     // 如果上次失败的退避期还没过，直接跳过
-    if (Date.now() < _embedErrorUntil) return null;
+    if (!ignoreBackoff && Date.now() < _embedErrorUntil) {
+        return fail('Embedding API 处于短暂失败退避中，请稍后重试');
+    }
 
     try {
         const res = await fetch('/api/embed', {
@@ -25,22 +47,27 @@ export async function getEmbedding(text, apiConfig) {
         });
 
         if (!res.ok) {
-            console.error('getEmbedding HTTP error:', await res.text());
-            _embedErrorUntil = Date.now() + EMBED_BACKOFF_MS;
-            return null;
+            const errorText = await res.text();
+            console.error('getEmbedding HTTP error:', errorText);
+            if (!ignoreBackoff) _embedErrorUntil = Date.now() + EMBED_BACKOFF_MS;
+            return fail(describeEmbedError(res.status, errorText));
         }
 
         const data = await res.json();
         if (data.error) {
             console.error('getEmbedding API error:', data.error);
-            return null;
+            return fail(data.error);
+        }
+
+        if (!Array.isArray(data.embedding) || data.embedding.length === 0) {
+            return fail('Embedding API 未返回有效向量，请检查模型是否为 embedding 模型');
         }
 
         return data.embedding;
     } catch (err) {
         console.error('getEmbedding fetch error:', err);
-        _embedErrorUntil = Date.now() + EMBED_BACKOFF_MS;
-        return null;
+        if (!ignoreBackoff) _embedErrorUntil = Date.now() + EMBED_BACKOFF_MS;
+        return fail(err?.message || String(err));
     }
 }
 

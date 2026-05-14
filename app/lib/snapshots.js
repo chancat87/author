@@ -1,4 +1,3 @@
-import { persistGet, persistSet } from './persistence';
 import { getChapters, saveChapters } from './storage';
 import { getSettingsNodes, saveSettingsNodes, getActiveWorkId } from './settings';
 import { loadSessionStore, saveSessionStore } from './chat-sessions';
@@ -8,7 +7,6 @@ import { useAppStore } from '../store/useAppStore';
 const LEGACY_SNAPSHOTS_KEY = 'author-snapshots';
 const SNAPSHOT_INDEX_KEY = 'author-snapshots-index-v2';
 const SNAPSHOT_DATA_PREFIX = 'author-snapshot-data-v2:';
-const CLOUD_SNAPSHOT_KEY = 'author-snapshot-latest'; // 云端仅保留最新一次
 const MAX_AUTO_SNAPSHOTS = 50;
 const PREVIEW_CHAPTER_LIMIT = 10;
 
@@ -33,24 +31,6 @@ async function getChatSessionsForSnapshot() {
     return isValidSessionStore(persistedStore)
         ? persistedStore
         : { activeSessionId: null, sessions: [] };
-}
-
-function createCloudSnapshotPayload(snapshot) {
-    return {
-        id: snapshot.id,
-        timestamp: snapshot.timestamp,
-        label: snapshot.label,
-        type: snapshot.type,
-        stats: {
-            chapterCount: snapshot.stats?.chapterCount || 0,
-            totalWords: snapshot.stats?.totalWords || 0,
-            settingCount: snapshot.stats?.settingCount || 0,
-        },
-        data: {
-            chapters: snapshot.data?.chapters || [],
-            settingsNodes: snapshot.data?.settingsNodes || [],
-        },
-    };
 }
 
 function getSnapshotDataKey(snapshotId) {
@@ -161,12 +141,10 @@ export async function getSnapshots() {
  * 创建新快照
  * @param {string} label - 快照标签描述
  * @param {string} type - 'auto' | 'manual'
- * @param {{ syncLatestToCloud?: boolean }} options
  * @returns {Promise<object>}
  */
-export async function createSnapshot(label, type = 'auto', options = {}) {
+export async function createSnapshot(label, type = 'auto') {
     try {
-        const { syncLatestToCloud = true } = options;
         await flushPendingEditorBeforeSnapshot();
         const chapters = await getChapters(getActiveWorkId());
         const settingsNodes = await getSettingsNodes();
@@ -206,14 +184,8 @@ export async function createSnapshot(label, type = 'auto', options = {}) {
         await saveSnapshotIndex(kept);
         await Promise.all(removed.map(id => del(getSnapshotDataKey(id)).catch(() => { })));
 
-        // 仅将最新一次快照同步到云端（轻量元数据 + 数据）
-        if (syncLatestToCloud) {
-            try {
-                await persistSet(CLOUD_SNAPSHOT_KEY, createCloudSnapshotPayload(snapshot));
-            } catch {
-                // 云同步失败不影响本地
-            }
-        }
+        // 快照只保存在本机 IndexedDB。完整快照经常超过 Firestore 单文档 1MiB
+        // 限制；云同步只同步作品索引、章节和设定集节点。
 
         return snapshot;
     } catch (e) {

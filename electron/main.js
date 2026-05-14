@@ -210,6 +210,13 @@ process.on('unhandledRejection', (reason) => {
     writeCrashReport('main-unhandledRejection', { message, stack: reason?.stack });
 });
 
+app.on('child-process-gone', (event, details) => {
+    log(`[ChildProcessGone] type=${details.type || 'unknown'} reason=${details.reason || 'unknown'} exitCode=${details.exitCode ?? ''}`);
+    if (/gpu/i.test(String(details.type || ''))) {
+        writeCrashReport('gpu-process-gone', details);
+    }
+});
+
 ipcMain.handle('write-diagnostic-log', async (event, entry) => {
     const safeEntry = rememberRendererDiagnostic(entry, event.senderFrame?.url);
     if (shouldLogRendererDiagnostic(safeEntry)) {
@@ -300,6 +307,18 @@ function createWindow() {
         return { action: 'allow' };
     });
 
+    mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+        const levelNames = ['verbose', 'info', 'warning', 'error'];
+        const levelName = typeof level === 'number' ? (levelNames[level] || String(level)) : String(level || 'log');
+        if (!/warn|error|assert/i.test(levelName)) return;
+        log(`[RendererConsole:${levelName}] ${message} (${sourceId || 'unknown'}:${line || 0})`);
+    });
+
+    mainWindow.webContents.on('preload-error', (event, preloadPath, error) => {
+        log(`[PreloadError] ${preloadPath}: ${error?.message || error}`);
+        if (error?.stack) log(`[PreloadError] stack: ${error.stack}`);
+    });
+
     // 确保下载文件使用正确的文件名（而非 blob UUID）
     mainWindow.webContents.session.on('will-download', (event, item) => {
         const suggestedName = item.getFilename();
@@ -360,6 +379,10 @@ function createWindow() {
             app.relaunch();
             app.quit();
         }
+    });
+
+    mainWindow.webContents.on('responsive', () => {
+        log('[Health] Renderer process became responsive again.');
     });
 
     let isForceClosing = false;

@@ -1254,22 +1254,28 @@ export async function rebuildAllEmbeddings(onProgress) {
     const items = nodes.filter(n => n.type === 'item');
     let done = 0;
     let failed = 0;
+    let lastError = '';
 
     for (const item of items) {
         try {
             const textToEmbed = extractTextForEmbedding(item);
-            const embedding = await getEmbedding(textToEmbed, apiConfig);
+            const embedding = await getEmbedding(textToEmbed, apiConfig, {
+                throwOnError: true,
+                ignoreBackoff: true,
+            });
             const idx = nodes.findIndex(n => n.id === item.id);
             if (idx !== -1 && embedding) {
                 nodes[idx].embedding = embedding;
             } else if (!embedding) {
                 failed++;
+                lastError = 'Embedding API 未返回有效向量';
             }
-        } catch {
+        } catch (error) {
             failed++;
+            lastError = error?.message || String(error);
         }
         done++;
-        onProgress?.(done, items.length, failed);
+        onProgress?.(done, items.length, failed, lastError);
         // 请求间隔：避免超出 TPM / RPM 限制
         if (done < items.length) {
             await new Promise(r => setTimeout(r, 700));
@@ -1277,7 +1283,7 @@ export async function rebuildAllEmbeddings(onProgress) {
     }
 
     await saveSettingsNodes(nodes);
-    return { total: items.length, done, failed };
+    return { total: items.length, done, failed, errorMessage: lastError };
 }
 
 // 获取指定分类下的所有 item 节点（递归） (Async)

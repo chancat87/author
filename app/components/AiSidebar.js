@@ -326,6 +326,50 @@ function ProviderLogo({ provider, model, className = '' }) {
     return svg;
 }
 
+const SETTINGS_ACTION_PATTERN = /(?:```[^\n]*\n?)?\[SETTINGS_ACTION\][\s\S]*?\[\\?\/SETTINGS_ACTION\](?:\s*\n?```)?/g;
+
+function stripSettingsActionBlocks(content = '') {
+    return String(content)
+        .replace(SETTINGS_ACTION_PATTERN, '')
+        .replace(/\[SETTINGS_ACTION\][\s\S]*?\[SETTINGS_ACTION\]/g, '')
+        .trim();
+}
+
+function extractCodeBlockContent(content = '') {
+    const blocks = [];
+    const source = stripSettingsActionBlocks(content);
+    const fenceRe = /```[^\n`]*\n?([\s\S]*?)```/g;
+    let match;
+    while ((match = fenceRe.exec(source))) {
+        const block = (match[1] || '').trim();
+        if (block && !block.includes('[SETTINGS_ACTION]')) {
+            blocks.push(block);
+        }
+    }
+    if (blocks.length === 0) return '';
+    return blocks.sort((a, b) => b.length - a.length)[0];
+}
+
+function markdownToPlainText(content = '') {
+    return stripSettingsActionBlocks(content)
+        .replace(/```[^\n`]*\n?([\s\S]*?)```/g, '$1')
+        .replace(/^#{1,6}\s+/gm, '')
+        .replace(/\*\*([\s\S]*?)\*\*/g, '$1')
+        .replace(/__([\s\S]*?)__/g, '$1')
+        .replace(/\*([^*\n]+)\*/g, '$1')
+        .replace(/_([^_\n]+)_/g, '$1')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/^\s{0,3}>\s?/gm, '')
+        .replace(/^\s*[-*+]\s+/gm, '')
+        .replace(/^\s*\d+\.\s+/gm, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
+
+function getAssistantInsertText(content = '') {
+    return extractCodeBlockContent(content) || markdownToPlainText(content);
+}
+
 // ==================== AI 对话侧栏 ====================
 export default function AiSidebar({ onInsertText }) {
     const {
@@ -1364,6 +1408,9 @@ export default function AiSidebar({ onInsertText }) {
                                 const hasVariants = msg.variants && msg.variants.length > 1;
                                 const variantIdx = msg.activeVariant ?? 0;
                                 const variantTotal = msg.variants?.length || 1;
+                                const insertText = msg.role === 'assistant' ? getAssistantInsertText(msg.content || '') : '';
+                                const plainInsertText = msg.role === 'assistant' ? markdownToPlainText(msg.content || '') : '';
+                                const hasCodeBlockForInsert = msg.role === 'assistant' && !!extractCodeBlockContent(msg.content || '');
 
                                 return (
                                     <div key={msg.id} className={`chat-message ${msg.role}`}>
@@ -1575,26 +1622,26 @@ export default function AiSidebar({ onInsertText }) {
                                         )}
 
                                         {/* AI 消息：一键插入正文 */}
-                                        {msg.role === 'assistant' && !isStreaming && msg.content && (
+                                        {msg.role === 'assistant' && !isStreaming && insertText && (
                                             <div style={{ display: 'flex', gap: '6px', padding: '4px 0 2px' }}>
                                                 <button
                                                     className="btn-mini"
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                        // 提取正文：去掉系统块、markdown标记、编辑点评
-                                                        let text = (msg.content || '')
-                                                            .replace(/(?:```[^\n]*\n)?\[SETTINGS_ACTION\][\s\S]*?\[\\?\/SETTINGS_ACTION\](?:\n```)?/g, '')
-                                                            .replace(/\[SETTINGS_ACTION\][\s\S]*?\[SETTINGS_ACTION\]/g, '')
-                                                            .replace(/^#{1,6}\s+/gm, '')            // 去掉标题 #
-                                                            .replace(/\*\*(.+?)\*\*/g, '$1')         // **粗体** → 粗体
-                                                            .replace(/\*(.+?)\*/g, '$1')             // *斜体* → 斜体
-                                                            .replace(/`(.+?)`/g, '$1')               // `代码` → 代码
-                                                            .replace(/^[-*]\s+/gm, '')               // 去掉无序列表标记
-                                                            .replace(/^\d+\.\s+/gm, '')              // 去掉有序列表标记
-                                                            .trim();
-                                                        if (text) onInsertText?.(text);
+                                                        onInsertText?.(insertText);
                                                     }}
-                                                >{t('aiSidebar.insertEditor')}</button>
+                                                    title={hasCodeBlockForInsert ? (t('aiSidebar.insertCodeBlockHint') || '只插入代码块中的正文内容') : (t('aiSidebar.insertPlainTextHint') || '以纯文本插入编辑器')}
+                                                >{hasCodeBlockForInsert ? (t('aiSidebar.insertCodeBlock') || '插入代码块正文') : t('aiSidebar.insertEditor')}</button>
+                                                {hasCodeBlockForInsert && plainInsertText && plainInsertText !== insertText && (
+                                                    <button
+                                                        className="btn-mini"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            onInsertText?.(plainInsertText);
+                                                        }}
+                                                        title={t('aiSidebar.insertPlainTextHint') || '以纯文本插入编辑器'}
+                                                    >{t('aiSidebar.insertPlainText') || '插入纯文本'}</button>
+                                                )}
                                                 <button
                                                     className="btn-mini"
                                                     onClick={(e) => {

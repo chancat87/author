@@ -6,6 +6,19 @@ import { AlertCircle, LogOut, CheckCircle2, ArrowLeft } from 'lucide-react';
 import { useI18n } from '../lib/useI18n';
 import { useAppStore } from '../store/useAppStore';
 
+function formatSyncError(error, t) {
+    const message = String(error?.message || error || '').trim();
+    if (
+        message.includes('maximum allowed size') ||
+        message.includes('exceeds the maximum allowed size') ||
+        message.includes('author-snapshot-latest')
+    ) {
+        return t('exitSyncModal.snapshotTooLarge') ||
+            '自动快照超过云端单文档限制，当前内容已保存在本机。新版会把快照留在本机，仅同步作品、章节和设定。';
+    }
+    return message || t('exitSyncModal.errorPrefix');
+}
+
 /**
  * 退出前同步询问弹窗 (仅 Electron / 客户端有效)
  * 全局挂载，监听 onExitSyncRequest 事件
@@ -61,7 +74,7 @@ export default function ExitSyncModal() {
             }
         } catch (err) {
             console.error('Exit sync failed:', err);
-            setSyncError(err.message || t('exitSyncModal.errorPrefix'));
+            setSyncError(formatSyncError(err, t));
         } finally {
             setIsSyncing(false);
         }
@@ -100,6 +113,9 @@ export default function ExitSyncModal() {
                             fontSize: 12,
                             textAlign: 'left',
                             lineHeight: 1.5,
+                            maxWidth: '100%',
+                            overflowWrap: 'anywhere',
+                            wordBreak: 'break-word',
                         }}>
                             {(t('exitSyncModal.errorPrefix') || '同步失败：') + syncError}
                         </div>

@@ -1,24 +1,36 @@
-## v1.2.28 — 增强安卓端下载入口与活跃统计
+## v1.2.29 — 优化批注、诊断日志与 AI 配置体验
 
 ### 中文
 
-#### 安卓端下载入口
+#### 正文批注与 AI 插入
 
-- 在网页、Vercel 部署和桌面端顶栏新增醒目的“安卓端 APK”入口
-- 下载弹窗提供安卓 APK 二维码、直接下载按钮、Release 页面入口、QQ 群链接和 QQ 群二维码
-- 二维码会解析 GitHub 最新 Release 中真实的 Android APK 文件，避免跳到未部署接口导致 404
-- 弹窗明确标注安卓端支持云同步、离线使用、时间线和关系图谱功能
-- 调整顶栏弹窗层级，避免被编辑器工具栏遮挡
+- 备注现在保留正文标记，点击标记时才在附近弹出悬浮批注，避免持续遮挡正文阅读
+- AI 助手写正文时会优先把可插入内容放入代码块，编辑器插入时可直接取代码块内容
+- 插入到正文编辑区的 AI 文本会按纯文本转义，避免 Markdown 或 HTML 片段污染正文格式
 
-#### 发布与构建稳定性
+#### 桌面端诊断与稳定性
 
-- 移动端发布 workflow 增加 `author-mobile-latest.apk` 别名产物，后续可用于固定下载入口
-- Electron 打包排除 `dist-*` 临时构建目录，避免失败构建残留混入安装包
+- 诊断日志新增顶层元素、可疑遮罩、点击拦截、主线程长任务等线索，便于定位“界面突然不能点”的问题
+- 桌面端主进程会记录 renderer 控制台警告/错误、preload 错误、GPU 子进程异常和恢复响应事件
+- 帮助页补充诊断日志说明：可从“帮助 → 关于”导出诊断日志或打开桌面端日志目录
+- 移除 AI 悬浮入口的持续动画，降低桌面端空闲 GPU 占用
 
-#### 使用统计
+#### API 与向量重建
 
-- 登录后会发送每日活跃心跳，用于统计 Web / 桌面端活跃情况
-- Firebase Analytics 在桌面端也可初始化，便于统一统计多端访问
+- Embedding 重建失败时会展示更明确的中文失败原因
+- OpenAI 兼容 Embedding 支持自动尝试 `/embeddings` 与 `/v1/embeddings`，减少自定义接口 404
+- DeepSeek / OpenAI 兼容接口的错误提示更精准，便于区分 Key、地址、模型和限流问题
+
+#### 同步与存档
+
+- 退出同步弹窗更清楚地区分本地已保存与云同步失败，降低误解和误操作风险
+- 项目存档导出继续保持隐私优先，不包含 API 配置、AI 会话、token 统计或 AI 摘要
+
+#### Android 端
+
+- 移动端 AI 对话补充重发、重新生成、删除消息和分支入口
+- 移动端导入解析增强，提升电脑端导出内容在手机端按章节匹配的稳定性
+- 移动端 DeepSeek / OpenAI 兼容配置和错误提示同步优化
 
 本次发布包含 Windows 安装包；Android APK 由移动端私有仓库构建后上传到同一 GitHub Release。
 
@@ -26,22 +38,34 @@
 
 ### English
 
-#### Android Download Entry
+#### Inline Remarks And AI Insertion
 
-- Added a prominent Android APK entry to the web app, Vercel deployments, and the desktop client header
-- The download popover now includes an Android APK QR code, direct download button, Release link, QQ group link, and QQ group QR code
-- The QR code resolves the real Android APK asset from the latest GitHub Release, avoiding 404s caused by undeployed app routes
-- The popover now clearly states that the Android app supports cloud sync, offline use, timeline, and relationship graph features
-- Raised the popover layer so it is no longer covered by the editor toolbar
+- Remarks now keep an inline marker and only show the floating note after clicking the marker, avoiding persistent reading obstruction
+- AI writing responses now prefer putting insertable body text inside a code block, so the editor can insert only that content
+- AI text inserted into the editor is escaped as plain text to prevent Markdown or HTML fragments from affecting body formatting
 
-#### Release And Build Reliability
+#### Desktop Diagnostics And Stability
 
-- The mobile release workflow now also uploads an `author-mobile-latest.apk` alias for future fixed download links
-- Electron packaging excludes temporary `dist-*` build folders to keep failed build leftovers out of installers
+- Diagnostic logs now capture top elements, possible blocking overlays, intercepted clicks, and main-thread long tasks to help debug “nothing can be clicked” reports
+- The desktop main process now records renderer warnings/errors, preload errors, GPU child-process failures, and responsive recovery events
+- The Help page now explains where to export diagnostic logs and where to find the desktop log directory
+- Removed the continuous animation from the floating AI entry to reduce idle GPU usage in the desktop client
 
-#### Activity Analytics
+#### API And Embedding Rebuilds
 
-- Signed-in sessions now send a daily activity heartbeat for Web and desktop usage statistics
-- Firebase Analytics can initialize in the desktop client, improving multi-platform analytics coverage
+- Embedding rebuild failures now show clearer Chinese error messages
+- OpenAI-compatible embedding endpoints can automatically try both `/embeddings` and `/v1/embeddings`, reducing custom-endpoint 404s
+- DeepSeek / OpenAI-compatible API errors are clearer for key, endpoint, model, and rate-limit problems
+
+#### Sync And Archives
+
+- The exit sync dialog now more clearly distinguishes locally saved data from cloud sync failures
+- Project archives remain privacy-first and do not include API config, AI conversations, token stats, or AI summaries
+
+#### Android
+
+- Mobile AI chat now supports resending, regenerating, deleting messages, and creating branches
+- Mobile import parsing is improved so desktop-exported content maps to chapters more reliably
+- Mobile DeepSeek / OpenAI-compatible configuration and error reporting are also improved
 
 This release includes the Windows installer. The Android APK is built from the private mobile repository and uploaded to the same GitHub Release.

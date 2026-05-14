@@ -2160,14 +2160,14 @@ function ApiConfigForm({ data, onChange }) {
     const handleRebuildEmbeddings = async () => {
         setRebuildStatus({ done: 0, total: 0, failed: 0 });
         try {
-            const result = await rebuildAllEmbeddings((done, total, failed) => {
-                setRebuildStatus({ done, total, failed });
+            const result = await rebuildAllEmbeddings((done, total, failed, errorMessage) => {
+                setRebuildStatus({ done, total, failed, errorMessage });
             });
             setRebuildStatus({ ...result, finished: true });
-            setTimeout(() => setRebuildStatus(null), 5000);
-        } catch {
-            setRebuildStatus({ error: true });
-            setTimeout(() => setRebuildStatus(null), 3000);
+            setTimeout(() => setRebuildStatus(null), result.failed > 0 ? 15000 : 5000);
+        } catch (error) {
+            setRebuildStatus({ error: true, errorMessage: error?.message || String(error) });
+            setTimeout(() => setRebuildStatus(null), 15000);
         }
     };
 
@@ -3113,6 +3113,11 @@ function ApiConfigForm({ data, onChange }) {
                             )}
                             {rebuildStatus?.error && (
                                 <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--error)' }}>重建失败</span>
+                            )}
+                            {(rebuildStatus?.errorMessage && (rebuildStatus.failed > 0 || rebuildStatus.error)) && (
+                                <div style={{ fontSize: 11, color: rebuildStatus.error ? 'var(--error)' : 'var(--warning)', marginTop: 6, lineHeight: 1.5, wordBreak: 'break-word' }}>
+                                    失败原因：{rebuildStatus.errorMessage}
+                                </div>
                             )}
                             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>首次开启或更换嵌入模型后，需要重建向量才能使用 RAG 智能检索</div>
                         </div>
