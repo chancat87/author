@@ -120,6 +120,10 @@ let serverCrashed = false; // 追踪子进程是否已崩溃
 let latestCrashReportPath = null;
 let rendererBreadcrumbs = [];
 
+function getServerUrl(host = '127.0.0.1') {
+    return `http://${host}:${actualPort}`;
+}
+
 function rememberRendererDiagnostic(entry, senderUrl) {
     const safeEntry = {
         ts: sanitizeLogText(entry?.ts || new Date().toISOString(), 80),
@@ -233,6 +237,8 @@ ipcMain.handle('get-diagnostic-bundle', async () => {
     return buildMainDiagnosticBundle();
 });
 
+ipcMain.handle('get-app-version', async () => app.getVersion());
+
 ipcMain.handle('open-diagnostic-log-file', async () => {
     try {
         showLogFileInFolder(latestCrashReportPath || logFile);
@@ -258,7 +264,7 @@ function createWindow() {
         show: false,
     });
 
-    mainWindow.loadURL(`http://localhost:${actualPort}`);
+    mainWindow.loadURL(getServerUrl());
 
     mainWindow.once('ready-to-show', () => {
         mainWindow.show();
@@ -277,7 +283,7 @@ function createWindow() {
         if (loadRetries < MAX_LOAD_RETRIES) {
             setTimeout(() => {
                 if (mainWindow && !mainWindow.isDestroyed()) {
-                    mainWindow.loadURL(`http://localhost:${actualPort}`);
+                    mainWindow.loadURL(getServerUrl());
                 }
             }, 2000);
         } else {
@@ -293,14 +299,14 @@ function createWindow() {
     // 只有真正加载了 localhost 页面才重置重试计数器
     mainWindow.webContents.on('did-finish-load', () => {
         const url = mainWindow.webContents.getURL();
-        if (url.includes('localhost')) {
+        if (url.includes('localhost') || url.includes('127.0.0.1')) {
             log('Page loaded successfully: ' + url);
             loadRetries = 0;
         }
     });
 
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-        if (url.startsWith('http') && !url.includes('localhost')) {
+        if (url.startsWith('http') && !url.includes('localhost') && !url.includes('127.0.0.1')) {
             shell.openExternal(url);
             return { action: 'deny' };
         }
@@ -456,9 +462,26 @@ function tryKillPortProcess(port) {
     }
 }
 
+function checkTcpReady(host, port, timeout = 1000) {
+    return new Promise((resolve) => {
+        const socket = net.createConnection({ host, port });
+        let done = false;
+        const finish = (ready) => {
+            if (done) return;
+            done = true;
+            socket.destroy();
+            resolve(ready);
+        };
+        socket.on('connect', () => finish(true));
+        socket.on('error', () => finish(false));
+        socket.setTimeout(timeout, () => finish(false));
+    });
+}
+
 function waitForServer(port, maxRetries = 30) {
     return new Promise((resolve) => {
         let retries = 0;
+        const hosts = ['127.0.0.1', 'localhost'];
         const check = () => {
             // 如果子进程已经崩溃，立即返回失败
             if (serverCrashed) {
@@ -470,10 +493,12 @@ function waitForServer(port, maxRetries = 30) {
                 log(`[waitForServer] Still waiting for server... attempt ${retries}/${maxRetries}`);
                 updateSplashText(`正在启动服务... (${retries}/${maxRetries})`);
             }
-            const req = http.get(`http://localhost:${port}`, (res) => {
-                resolve(true);
-            });
-            req.on('error', () => {
+            let settled = false;
+            let failedHosts = 0;
+            const finishAttempt = () => {
+                if (settled) return;
+                failedHosts++;
+                if (failedHosts < hosts.length) return;
                 retries++;
                 if (retries >= maxRetries) {
                     log(`[waitForServer] Timed out after ${maxRetries} retries`);
@@ -481,17 +506,39 @@ function waitForServer(port, maxRetries = 30) {
                 } else {
                     setTimeout(check, 1000);
                 }
-            });
-            req.setTimeout(3000, () => {
-                req.destroy();
-                retries++;
-                if (retries >= maxRetries) {
-                    log(`[waitForServer] Timed out after ${maxRetries} retries`);
-                    resolve(false);
-                } else {
-                    setTimeout(check, 1000);
-                }
-            });
+            };
+
+            for (const host of hosts) {
+                checkTcpReady(host, port).then((ready) => {
+                    if (!ready || settled) return;
+                    settled = true;
+                    log(`[waitForServer] TCP ready on ${host}:${port}`);
+                    resolve(true);
+                });
+
+                let requestDone = false;
+                const failHost = () => {
+                    if (requestDone) return;
+                    requestDone = true;
+                    finishAttempt();
+                };
+                const req = http.get(`http://${host}:${port}`, (res) => {
+                    if (settled) {
+                        res.resume();
+                        return;
+                    }
+                    requestDone = true;
+                    settled = true;
+                    res.resume();
+                    log(`[waitForServer] HTTP ready on ${host}:${port} status=${res.statusCode}`);
+                    resolve(true);
+                });
+                req.on('error', failHost);
+                req.setTimeout(3000, () => {
+                    req.destroy();
+                    failHost();
+                });
+            }
         };
         check();
     });

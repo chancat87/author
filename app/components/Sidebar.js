@@ -852,12 +852,12 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                                         : cloudSyncStatus?.idle ? '自动同步已暂停'
                                         : cloudSyncStatus?.lastSync ? `已同步 · ${new Date(cloudSyncStatus.lastSync).toLocaleTimeString()}`
                                         : '云同步')
-                                    : (!firebaseAvailable && !(typeof window !== 'undefined' && window.electron) ? (t('settings.syncGuide') || '云同步指南') : '点击登录，开启云同步')}
+                                    : (!firebaseAvailable && !(typeof window !== 'undefined' && window.electronAPI?.isElectron) ? (t('settings.syncGuide') || '云同步指南') : '点击登录，开启云同步')}
                                 text={sidebarOpen ? '同步' : undefined}
                                 tooltipSide="right"
                                 onClick={async () => {
                                     if (!firebaseAvailable) {
-                                        const isElectron = typeof window !== 'undefined' && window.electron;
+                                        const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
                                         if (isElectron) {
                                             useAppStore.getState().setShowLoginModal(true);
                                         } else {

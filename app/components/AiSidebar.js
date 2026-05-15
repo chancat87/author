@@ -6,7 +6,7 @@ import { addTokenRecord, getTokenStats, clearTokenStats } from '../lib/token-sta
 import {
     saveSessionStore, createSession, deleteSession as deleteSessionFn,
     renameSession, switchSession, getActiveSession, addMessage, editMessage as editMsgFn,
-    deleteMessage as deleteMsgFn, createBranch, addVariant, switchVariant, replaceMessages
+    deleteMessage as deleteMsgFn, createBranch, switchVariant, replaceMessages
 } from '../lib/chat-sessions';
 import { getProjectSettings, getChatApiConfig, getActiveWorkId, getSettingsNodes, addSettingsNode, updateSettingsNode, deleteSettingsNode } from '../lib/settings';
 import { useAppStore } from '../store/useAppStore';
@@ -370,6 +370,124 @@ function getAssistantInsertText(content = '') {
     return extractCodeBlockContent(content) || markdownToPlainText(content);
 }
 
+const SETTINGS_CATEGORY_ALIASES = {
+    character: 'character', world: 'world', location: 'location',
+    object: 'object', plot: 'plot', rules: 'rules', custom: 'custom',
+    bookinfo: 'bookInfo', 'book-info': 'bookInfo', bookInfo: 'bookInfo',
+    '作品信息': 'bookInfo', '书籍信息': 'bookInfo', '书籍': 'bookInfo', '作品': 'bookInfo',
+    '人物': 'character', '角色': 'character', '人物设定': 'character',
+    '世界': 'world', '世界观': 'world', '世界设定': 'world', '世界观设定': 'world',
+    '地点': 'location', '地点设定': 'location', '场所': 'location', '场景': 'location',
+    '空间': 'location', '地理': 'location',
+    '物品': 'object', '道具': 'object', '物品设定': 'object', '装备': 'object',
+    '大纲': 'plot', '情节': 'plot', '剧情': 'plot', '故事线': 'plot', '故事': 'plot',
+    '规则': 'rules', '写作规则': 'rules', '规范': 'rules',
+    '自定义': 'custom', '其他': 'custom', '补充': 'custom', '补充设定': 'custom',
+    characters: 'character', char: 'character', npc: 'character', person: 'character',
+    worlds: 'world', worldbuilding: 'world', setting: 'world', lore: 'world',
+    locations: 'location', place: 'location', places: 'location', scene: 'location',
+    objects: 'object', item: 'object', items: 'object', prop: 'object', props: 'object',
+    outline: 'plot', story: 'plot', storyline: 'plot',
+    rule: 'rules', writing_rules: 'rules',
+};
+
+const SETTINGS_CATEGORY_SUFFIX = {
+    character: 'characters',
+    world: 'world',
+    location: 'locations',
+    object: 'objects',
+    plot: 'plot',
+    rules: 'rules',
+    custom: 'custom',
+    bookInfo: 'bookInfo',
+};
+
+const SETTINGS_CATEGORY_LABEL = {
+    character: '人物设定',
+    world: '世界观/设定',
+    location: '空间/地点',
+    object: '物品/道具',
+    plot: '大纲',
+    rules: '写作规则',
+    custom: '自定义设定',
+    bookInfo: '作品信息',
+};
+
+function normalizeCategoryInput(rawCategory = '') {
+    const text = String(rawCategory || '').trim();
+    const lower = text.toLowerCase();
+    return {
+        raw: text,
+        category: SETTINGS_CATEGORY_ALIASES[lower] || SETTINGS_CATEGORY_ALIASES[text] || 'custom',
+        matchedAlias: Boolean(SETTINGS_CATEGORY_ALIASES[lower] || SETTINGS_CATEGORY_ALIASES[text]),
+    };
+}
+
+function normalizeLookupText(value = '') {
+    return String(value || '').trim().toLowerCase().replace(/\s+/g, '');
+}
+
+function isNodeInWork(nodes, node, workId) {
+    if (!node || !workId) return false;
+    if (node.id === workId || node.parentId === workId) return true;
+    const seen = new Set([node.id]);
+    let parentId = node.parentId;
+    while (parentId) {
+        if (parentId === workId) return true;
+        if (seen.has(parentId)) return false;
+        seen.add(parentId);
+        const parent = nodes.find(n => n.id === parentId);
+        parentId = parent?.parentId;
+    }
+    return false;
+}
+
+function getActionPathNames(action, rawCategory) {
+    const rawPath = action.path || action.parentPath || action.folderPath;
+    if (Array.isArray(rawPath)) return rawPath.map(String).filter(Boolean);
+    if (typeof rawPath === 'string' && rawPath.trim()) {
+        return rawPath.split(/[/>｜|]/).map(part => part.trim()).filter(Boolean);
+    }
+    return [
+        action.parentName,
+        action.parent,
+        action.folderName,
+        action.folder,
+        action.subcategory,
+        action.subCategory,
+        rawCategory,
+    ].filter(Boolean).map(String);
+}
+
+function resolveActionParent(nodes, action, workId, category, rawCategory) {
+    const folderTypes = new Set(['folder', 'special']);
+    const candidates = nodes.filter(node =>
+        folderTypes.has(node.type) && isNodeInWork(nodes, node, workId)
+    );
+
+    if (action.parentId) {
+        const byParentId = candidates.find(node => node.id === action.parentId);
+        if (byParentId) return byParentId;
+    }
+
+    const pathNames = getActionPathNames(action, rawCategory);
+    for (const name of pathNames) {
+        const wanted = normalizeLookupText(name);
+        if (!wanted) continue;
+        const byName = candidates.find(node => normalizeLookupText(node.name) === wanted);
+        if (byName) return byName;
+    }
+
+    const root = candidates.find(node => node.parentId === workId && node.category === category);
+    if (root) return root;
+
+    const suffix = SETTINGS_CATEGORY_SUFFIX[category] || 'custom';
+    const byExpectedId = candidates.find(node => node.id === `${workId}-${suffix}`);
+    if (byExpectedId) return byExpectedId;
+
+    return candidates.find(node => node.parentId === workId && node.category === 'custom') || null;
+}
+
 // ==================== AI 对话侧栏 ====================
 export default function AiSidebar({ onInsertText }) {
     const {
@@ -400,7 +518,36 @@ export default function AiSidebar({ onInsertText }) {
 
     // 会话管理回调
     const setChatHistory = useCallback((newMessages) => setSessionStore(prev => replaceMessages(prev, newMessages)), [setSessionStore]);
-    const onNewSession = useCallback(() => setSessionStore(prev => createSession(prev)), [setSessionStore]);
+    const onNewSession = useCallback(() => {
+        const workId = getActiveWorkId() || 'work-default';
+        setSessionStore(prev => createSession(prev, { workId }));
+    }, [setSessionStore]);
+    const ensureActiveSessionForWork = useCallback(() => {
+        const fallbackWorkId = getActiveWorkId() || 'work-default';
+        let store = useAppStore.getState().sessionStore;
+        let session = getActiveSession(store);
+
+        if (!session) {
+            store = createSession(store, { workId: fallbackWorkId });
+            setSessionStore(store);
+            session = getActiveSession(store);
+        } else if (!session.workId) {
+            store = {
+                ...store,
+                sessions: store.sessions.map(s =>
+                    s.id === session.id ? { ...s, workId: fallbackWorkId, updatedAt: Date.now() } : s
+                ),
+            };
+            saveSessionStore(store);
+            setSessionStore(store);
+            session = { ...session, workId: fallbackWorkId };
+        }
+
+        return {
+            sessionId: session?.id || store.activeSessionId,
+            workId: session?.workId || fallbackWorkId,
+        };
+    }, [setSessionStore]);
     const onDeleteSession = useCallback((id) => setSessionStore(prev => deleteSessionFn(prev, id)), [setSessionStore]);
     const onRenameSession = useCallback((id, title) => setSessionStore(prev => renameSession(prev, id, title)), [setSessionStore]);
     const onSwitchSession = useCallback((id) => setSessionStore(prev => switchSession(prev, id)), [setSessionStore]);
@@ -632,6 +779,7 @@ export default function AiSidebar({ onInsertText }) {
     }, []);
 
     const onChatMessage = useCallback(async (text, selectedHistory) => {
+        const { sessionId: targetSessionId, workId: targetWorkId } = ensureActiveSessionForWork();
         const userMsg = { id: `msg-${Date.now()}-u`, role: 'user', content: text, timestamp: Date.now() };
         setSessionStore(prev => addMessage(prev, userMsg));
         setChatStreaming(true);
@@ -647,7 +795,7 @@ export default function AiSidebar({ onInsertText }) {
                     : (['claude', 'custom-claude'].includes(apiConfig?.provider) || apiConfig?.apiFormat === 'anthropic') ? '/api/ai/claude'
                         : '/api/ai';
 
-            const context = await buildContext(activeChapterId, text, contextSelection.size > 0 ? contextSelection : null);
+            const context = await buildContext(activeChapterId, text, contextSelection.size > 0 ? contextSelection : null, targetWorkId);
             const systemPrompt = compileSystemPrompt(context, 'chat');
             const historyForApi = selectedHistory.map(m => `${m.role === 'user' ? t('aiSidebar.roleYou') : t('aiSidebar.roleAi')}: ${m.content}`).join('\n');
             const userPrompt = historyForApi ? `${historyForApi}\n${t('aiSidebar.roleYou')}: ${text}` : text;
@@ -666,14 +814,14 @@ export default function AiSidebar({ onInsertText }) {
             if (context.currentChapter) contextSnapshot['当前章节'] = context.currentChapter;
             contextSnapshot['对话历史'] = userPrompt;
 
-            const aiPlaceholder = { id: aiMsgId, role: 'assistant', content: '', thinking: '', toolCalls: [], timestamp: Date.now(), _context: contextSnapshot, _rawRequest: null };
+            const aiPlaceholder = { id: aiMsgId, role: 'assistant', content: '', thinking: '', toolCalls: [], timestamp: Date.now(), _context: contextSnapshot, _rawRequest: null, _workId: targetWorkId };
             setSessionStore(prev => addMessage(prev, aiPlaceholder));
 
             const returnedBody = await streamResponse(apiEndpoint, systemPrompt, userPrompt, apiConfig,
                 (snapText, snapThinking, snapToolCalls) => {
                     setSessionStore(prev => ({
                         ...prev, sessions: prev.sessions.map(s => {
-                            if (s.id !== prev.activeSessionId) return s;
+                            if (s.id !== targetSessionId) return s;
                             return { ...s, messages: s.messages.map(m => m.id === aiMsgId ? { ...m, content: snapText, thinking: snapThinking, toolCalls: snapToolCalls } : m) };
                         }),
                     }));
@@ -682,7 +830,7 @@ export default function AiSidebar({ onInsertText }) {
                     setSessionStore(prev => {
                         const finalStore = {
                             ...prev, sessions: prev.sessions.map(s => {
-                                if (s.id !== prev.activeSessionId) return s;
+                                if (s.id !== targetSessionId) return s;
                                 return {
                                     ...s, messages: s.messages.map(m => m.id === aiMsgId ? { ...m, content: finalText || '（AI 未返回内容）', thinking: finalThinking, toolCalls: finalToolCalls } : m),
                                     updatedAt: Date.now(),
@@ -700,7 +848,7 @@ export default function AiSidebar({ onInsertText }) {
                 setSessionStore(prev => {
                     const updated = {
                         ...prev, sessions: prev.sessions.map(s => {
-                            if (s.id !== prev.activeSessionId) return s;
+                            if (s.id !== targetSessionId) return s;
                             return { ...s, messages: s.messages.map(m => m.id === aiMsgId ? { ...m, _rawRequest: returnedBody } : m) };
                         }),
                     };
@@ -714,7 +862,7 @@ export default function AiSidebar({ onInsertText }) {
                 setSessionStore(prev => {
                     const store = {
                         ...prev, sessions: prev.sessions.map(s => {
-                            if (s.id !== prev.activeSessionId) return s;
+                            if (s.id !== targetSessionId) return s;
                             return {
                                 ...s, messages: s.messages.map(m => {
                                     if (m.id !== aiMsgId) return m;
@@ -728,13 +876,24 @@ export default function AiSidebar({ onInsertText }) {
                 });
             } else {
                 const errorMsg = { id: `msg-${Date.now()}-e`, role: 'assistant', content: `❌ ${err.message}`, timestamp: Date.now() };
-                setSessionStore(prev => addMessage(prev, errorMsg));
+                setSessionStore(prev => {
+                    const store = {
+                        ...prev,
+                        sessions: prev.sessions.map(s => (
+                            s.id === targetSessionId
+                                ? { ...s, messages: [...s.messages, errorMsg], updatedAt: Date.now() }
+                                : s
+                        )),
+                    };
+                    saveSessionStore(store);
+                    return store;
+                });
             }
         } finally {
             abortRef.current = null;
             setChatStreaming(false);
         }
-    }, [activeChapterId, contextSelection, streamResponse, setSessionStore, setChatStreaming]);
+    }, [activeChapterId, contextSelection, ensureActiveSessionForWork, streamResponse, setSessionStore, setChatStreaming]);
 
     const onRegenerate = useCallback(async (aiMsgId) => {
         if (chatStreaming) return;
@@ -751,6 +910,8 @@ export default function AiSidebar({ onInsertText }) {
 
         const userMsg = msgs[userMsgIdx];
         const priorHistory = msgs.slice(0, userMsgIdx);
+        const targetSessionId = activeSession?.id || sessionStore?.activeSessionId;
+        const targetWorkId = activeSession?.workId || getActiveWorkId() || 'work-default';
         setChatStreaming(true);
         const controller = new AbortController();
         abortRef.current = controller;
@@ -763,7 +924,7 @@ export default function AiSidebar({ onInsertText }) {
                     : (['claude', 'custom-claude'].includes(apiConfig?.provider) || apiConfig?.apiFormat === 'anthropic') ? '/api/ai/claude'
                         : '/api/ai';
 
-            const context = await buildContext(activeChapterId, userMsg.content, contextSelection.size > 0 ? contextSelection : null);
+            const context = await buildContext(activeChapterId, userMsg.content, contextSelection.size > 0 ? contextSelection : null, targetWorkId);
             const systemPrompt = compileSystemPrompt(context, 'chat');
             const historyForApi = priorHistory
                 .filter(m => m.role === 'user' || m.role === 'assistant')
@@ -772,7 +933,7 @@ export default function AiSidebar({ onInsertText }) {
 
             setSessionStore(prev => ({
                 ...prev, sessions: prev.sessions.map(s => {
-                    if (s.id !== prev.activeSessionId) return s;
+                    if (s.id !== targetSessionId) return s;
                     return {
                         ...s, messages: s.messages.map(m => {
                             if (m.id !== aiMsgId) return m;
@@ -787,14 +948,41 @@ export default function AiSidebar({ onInsertText }) {
                 (snapText, snapThinking, snapToolCalls) => {
                     setSessionStore(prev => ({
                         ...prev, sessions: prev.sessions.map(s => {
-                            if (s.id !== prev.activeSessionId) return s;
+                            if (s.id !== targetSessionId) return s;
                             return { ...s, messages: s.messages.map(m => m.id === aiMsgId ? { ...m, content: snapText, thinking: snapThinking, toolCalls: snapToolCalls } : m) };
                         }),
                     }));
                 },
                 (finalText, finalThinking, finalToolCalls) => {
                     setSessionStore(prev => {
-                        const newStore = addVariant(prev, aiMsgId, { content: finalText || '（AI 未返回内容）', thinking: finalThinking, toolCalls: finalToolCalls, timestamp: Date.now() });
+                        const variantData = { content: finalText || '（AI 未返回内容）', thinking: finalThinking, toolCalls: finalToolCalls, timestamp: Date.now() };
+                        const newStore = {
+                            ...prev,
+                            sessions: prev.sessions.map(s => {
+                                if (s.id !== targetSessionId) return s;
+                                return {
+                                    ...s,
+                                    messages: s.messages.map(m => {
+                                        if (m.id !== aiMsgId) return m;
+                                        const existingVariants = m.variants || [{
+                                            content: m.content,
+                                            thinking: m.thinking || '',
+                                            timestamp: m.timestamp,
+                                        }];
+                                        const variants = [...existingVariants, variantData];
+                                        return {
+                                            ...m,
+                                            variants,
+                                            activeVariant: variants.length - 1,
+                                            content: variantData.content,
+                                            thinking: variantData.thinking || '',
+                                            toolCalls: finalToolCalls,
+                                        };
+                                    }),
+                                    updatedAt: Date.now(),
+                                };
+                            }),
+                        };
                         saveSessionStore(newStore);
                         return newStore;
                     });
@@ -806,7 +994,7 @@ export default function AiSidebar({ onInsertText }) {
                 setSessionStore(prev => {
                     const store = {
                         ...prev, sessions: prev.sessions.map(s => {
-                            if (s.id !== prev.activeSessionId) return s;
+                            if (s.id !== targetSessionId) return s;
                             return {
                                 ...s, messages: s.messages.map(m => {
                                     if (m.id !== aiMsgId) return m;
@@ -819,81 +1007,114 @@ export default function AiSidebar({ onInsertText }) {
                     return store;
                 });
             } else {
-                setSessionStore(prev => ({
-                    ...prev, sessions: prev.sessions.map(s => {
-                        if (s.id !== prev.activeSessionId) return s;
-                        return { ...s, messages: s.messages.map(m => m.id === aiMsgId ? { ...m, content: `❌ ${err.message}` } : m) };
-                    }),
-                }));
+                setSessionStore(prev => {
+                    const store = {
+                        ...prev, sessions: prev.sessions.map(s => {
+                            if (s.id !== targetSessionId) return s;
+                            return { ...s, messages: s.messages.map(m => m.id === aiMsgId ? { ...m, content: `❌ ${err.message}` } : m), updatedAt: Date.now() };
+                        }),
+                    };
+                    saveSessionStore(store);
+                    return store;
+                });
             }
         } finally {
             abortRef.current = null;
             setChatStreaming(false);
         }
-    }, [chatHistory, chatStreaming, activeChapterId, contextSelection, streamResponse, setSessionStore, setChatStreaming]);
+    }, [activeSession, sessionStore, chatHistory, chatStreaming, activeChapterId, contextSelection, streamResponse, setSessionStore, setChatStreaming]);
 
     const onApplySettingsAction = useCallback(async (action, actionKey) => {
         try {
-            const nodes = await getSettingsNodes();
-            const workId = getActiveWorkId() || 'work-default';
+            const msgIdFromKey = actionKey.split('-action-')[0].replace(/-v\d+$/, '');
+            const targetSession = sessionStore.sessions.find(s =>
+                s.messages?.some(m => m.id === msgIdFromKey)
+            ) || activeSession;
+            const workId = targetSession?.workId || action.workId || getActiveWorkId() || 'work-default';
+            let nodes = await getSettingsNodes(workId);
+            const categoryInfo = normalizeCategoryInput(action.category);
+            const normalizedCat = categoryInfo.category;
+            const rawCategory = categoryInfo.raw;
 
-            // ===== 1. 归一化 category =====
-            // AI 可能输出中文分类名、别名或混写，统一映射到英文标准 key
-            const CATEGORY_ALIASES = {
-                character: 'character', world: 'world', location: 'location',
-                object: 'object', plot: 'plot', rules: 'rules', custom: 'custom',
-                '人物': 'character', '角色': 'character', '人物设定': 'character',
-                '世界': 'world', '世界观': 'world', '世界设定': 'world', '世界观设定': 'world',
-                '地点': 'location', '地点设定': 'location', '场所': 'location', '场景': 'location',
-                '空间': 'location', '地理': 'location',
-                '物品': 'object', '道具': 'object', '物品设定': 'object', '装备': 'object',
-                '大纲': 'plot', '情节': 'plot', '剧情': 'plot', '故事线': 'plot', '故事': 'plot',
-                '规则': 'rules', '写作规则': 'rules', '规范': 'rules',
-                '自定义': 'custom', '其他': 'custom', '补充': 'custom', '补充设定': 'custom',
-                'characters': 'character', 'char': 'character', 'npc': 'character', 'person': 'character',
-                'worlds': 'world', 'worldbuilding': 'world', 'setting': 'world', 'lore': 'world',
-                'locations': 'location', 'place': 'location', 'places': 'location', 'scene': 'location',
-                'objects': 'object', 'item': 'object', 'items': 'object', 'prop': 'object', 'props': 'object',
-                'outline': 'plot', 'story': 'plot', 'storyline': 'plot',
-                'rule': 'rules', 'writing_rules': 'rules',
+            const markApplied = () => {
+                setSessionStore(prev => {
+                    const newStore = {
+                        ...prev, sessions: prev.sessions.map(s => {
+                            if (s.id !== targetSession?.id && !s.messages?.some(m => m.id === msgIdFromKey)) return s;
+                            return { ...s, messages: s.messages.map(m => m.id === msgIdFromKey ? { ...m, _appliedActions: [...(m._appliedActions || []), actionKey] } : m), updatedAt: Date.now() };
+                        }),
+                    };
+                    saveSessionStore(newStore);
+                    return newStore;
+                });
             };
-            const rawCat = (action.category || '').toLowerCase().trim();
-            const normalizedCat = CATEGORY_ALIASES[rawCat] || CATEGORY_ALIASES[action.category] || 'custom';
-            action.category = normalizedCat;
 
-            // ===== 2. 查找父文件夹 =====
-            // 优先通过 category 在节点树中搜索（最可靠，不依赖 ID 格式）
-            const catToSuffix = { character: 'characters', world: 'world', location: 'locations', object: 'objects', plot: 'plot', rules: 'rules', custom: 'custom' };
-            let parentNode = nodes.find(n =>
-                n.parentId === workId && n.category === normalizedCat && (n.type === 'folder' || n.type === 'special')
-            );
-            if (!parentNode) {
-                const suffix = catToSuffix[normalizedCat] || 'custom';
-                parentNode = nodes.find(n => n.id === `${workId}-${suffix}`);
-            }
-            if (!parentNode) {
-                parentNode = nodes.find(n => n.parentId === workId && n.category === 'custom' && n.type === 'folder');
-            }
-            const parentId = parentNode?.id || `${workId}-${catToSuffix[normalizedCat] || 'custom'}`;
-
-            // ===== 3. 去重查找 =====
-            const resolveNode = () => {
-                if (action.nodeId) return nodes.find(n => n.id === action.nodeId);
-                if (action.name) {
-                    const exact = nodes.find(n => n.name === action.name && n.category === normalizedCat && n.type === 'item');
-                    if (exact) return exact;
-                    return nodes.find(n => n.name === action.name && n.type === 'item');
+            if (normalizedCat === 'bookInfo') {
+                let bookInfoNode = nodes.find(n => n.parentId === workId && n.category === 'bookInfo' && n.type === 'special');
+                if (!bookInfoNode) {
+                    bookInfoNode = await addSettingsNode({
+                        name: '作品信息',
+                        type: 'special',
+                        category: 'bookInfo',
+                        parentId: workId,
+                        icon: 'Info',
+                        content: {},
+                        workId,
+                    });
+                    nodes = await getSettingsNodes(workId);
                 }
-                return null;
+                if (action.action === 'delete') {
+                    await updateSettingsNode(bookInfoNode.id, { content: {} }, nodes, workId);
+                    showToast('已清空作品信息', 'success');
+                } else {
+                    const nextContent = { ...(bookInfoNode.content || {}), ...(action.content || {}) };
+                    if (action.name && !nextContent.title) nextContent.title = action.name;
+                    await updateSettingsNode(bookInfoNode.id, { content: nextContent }, nodes, workId);
+                    showToast('已更新作品信息', 'success');
+                }
+                markApplied();
+                return;
+            }
+
+            let parentNode = resolveActionParent(nodes, action, workId, normalizedCat, rawCategory);
+            if (!parentNode) {
+                parentNode = await addSettingsNode({
+                    name: categoryInfo.matchedAlias
+                        ? (SETTINGS_CATEGORY_LABEL[normalizedCat] || '自定义设定')
+                        : (rawCategory || '自定义设定'),
+                    type: 'folder',
+                    category: normalizedCat,
+                    parentId: workId,
+                    icon: 'FolderOpen',
+                    content: {},
+                    workId,
+                });
+                nodes = await getSettingsNodes(workId);
+            }
+            const parentId = parentNode.id;
+            const itemCategory = parentNode.category || normalizedCat;
+
+            const resolveNode = () => {
+                if (action.nodeId) {
+                    const byId = nodes.find(n => n.id === action.nodeId && n.type === 'item' && isNodeInWork(nodes, n, workId));
+                    if (byId) return byId;
+                }
+                const name = action.name?.trim();
+                if (!name) return null;
+                const sameParent = nodes.find(n => n.name === name && n.type === 'item' && n.parentId === parentId);
+                if (sameParent) return sameParent;
+                const sameCategory = nodes.find(n => n.name === name && n.type === 'item' && n.category === itemCategory && isNodeInWork(nodes, n, workId));
+                if (sameCategory) return sameCategory;
+                return nodes.find(n => n.name === name && n.type === 'item' && isNodeInWork(nodes, n, workId));
             };
 
             if (action.action === 'add') {
                 const existing = resolveNode();
                 if (existing) {
                     const mergedContent = { ...(existing.content || {}), ...(action.content || {}) };
-                    await updateSettingsNode(existing.id, { name: action.name || existing.name, content: mergedContent });
+                    await updateSettingsNode(existing.id, { name: action.name || existing.name, content: mergedContent }, nodes, workId);
                 } else {
-                    await addSettingsNode({ name: action.name || '新条目', type: 'item', category: normalizedCat, parentId, content: action.content || {} });
+                    await addSettingsNode({ name: action.name || '新条目', type: 'item', category: itemCategory, parentId, content: action.content || {}, workId });
                 }
             } else if (action.action === 'update') {
                 const target = resolveNode();
@@ -901,38 +1122,29 @@ export default function AiSidebar({ onInsertText }) {
                     const updates = {};
                     if (action.name) updates.name = action.name;
                     if (action.content) updates.content = { ...(target.content || {}), ...action.content };
-                    await updateSettingsNode(target.id, updates);
+                    await updateSettingsNode(target.id, updates, nodes, workId);
                 } else {
-                    await addSettingsNode({ name: action.name || '新条目', type: 'item', category: normalizedCat, parentId, content: action.content || {} });
+                    await addSettingsNode({ name: action.name || '新条目', type: 'item', category: itemCategory, parentId, content: action.content || {}, workId });
                 }
             } else if (action.action === 'delete') {
                 const target = resolveNode();
                 if (target) {
                     const deletedName = target.name || action.name || '未命名条目';
-                    await deleteSettingsNode(target.id);
+                    await deleteSettingsNode(target.id, workId);
                     showToast(`已删除「${deletedName}」`, 'success');
                 } else {
                     showToast(`未找到要删除的条目「${action.name || action.nodeId || ''}」`, 'error');
+                    return;
                 }
             }
 
-            const msgIdFromKey = actionKey.split('-action-')[0].replace(/-v\d+$/, '');
-            setSessionStore(prev => {
-                const newStore = {
-                    ...prev, sessions: prev.sessions.map(s => {
-                        if (s.id !== prev.activeSessionId) return s;
-                        return { ...s, messages: s.messages.map(m => m.id === msgIdFromKey ? { ...m, _appliedActions: [...(m._appliedActions || []), actionKey] } : m), updatedAt: Date.now() };
-                    }),
-                };
-                saveSessionStore(newStore);
-                return newStore;
-            });
+            markApplied();
             if (action.action !== 'delete') showToast('应用设定成功', 'success');
         } catch (err) {
             console.error('Settings action failed:', err);
             showToast('应用操作失败：' + err.message, 'error');
         }
-    }, [setSessionStore, showToast]);
+    }, [activeSession, sessionStore, setSessionStore, showToast]);
 
     // 发送消息
     const handleSend = useCallback(() => {

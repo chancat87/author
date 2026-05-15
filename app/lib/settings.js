@@ -1110,8 +1110,9 @@ async function ensureWorkExistsLegacy(nodes) {
 }
 
 // 添加节点 (Async)
-export async function addSettingsNode({ name, type, category, parentId, icon, content }) {
-    const nodes = await getSettingsNodes();
+export async function addSettingsNode({ name, type, category, parentId, icon, content, workId }) {
+    const targetWorkId = workId || getActiveWorkId() || 'work-default';
+    const nodes = await getSettingsNodes(targetWorkId);
     const siblings = nodes.filter(n => n.parentId === parentId);
     const node = {
         id: generateNodeId(),
@@ -1140,7 +1141,7 @@ export async function addSettingsNode({ name, type, category, parentId, icon, co
     }
 
     nodes.push(node);
-    await saveSettingsNodes(nodes);
+    await saveSettingsNodes(nodes, targetWorkId);
     return node;
 }
 
@@ -1198,8 +1199,9 @@ export async function updateSettingsNode(id, updates, currentNodes, workId) {
 }
 
 // 删除节点（及所有子节点） (Async)
-export async function deleteSettingsNode(id) {
-    let nodes = await getSettingsNodes();
+export async function deleteSettingsNode(id, workId) {
+    const targetWorkId = workId || getActiveWorkId() || 'work-default';
+    let nodes = await getSettingsNodes(targetWorkId);
     const node = nodes.find(n => n.id === id);
     if (node && node.parentId) {
         const parent = nodes.find(p => p.id === node.parentId);
@@ -1223,7 +1225,7 @@ export async function deleteSettingsNode(id) {
         }
     }
     nodes = nodes.filter(n => !toDelete.has(n.id));
-    await saveSettingsNodes(nodes);
+    await saveSettingsNodes(nodes, targetWorkId);
     return true;
 }
 

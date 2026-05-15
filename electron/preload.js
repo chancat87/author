@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     isElectron: true,
     // ---- 自动更新 (electron-updater) ----
     checkForUpdate: () => ipcRenderer.invoke('check-for-update'),
+    getAppVersion: () => ipcRenderer.invoke('get-app-version'),
     downloadUpdate: () => ipcRenderer.invoke('download-update'),
     downloadAndInstallUpdate: () => ipcRenderer.invoke('download-and-install-update'),
     quitAndInstall: () => ipcRenderer.invoke('quit-and-install'),

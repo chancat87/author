@@ -503,10 +503,9 @@ const Editor = forwardRef(function Editor({ content, chapterId, onUpdate, editab
 
 export default Editor;
 
-// ==================== 备注浮层 ====================
+// ==================== 备注侧边层 ====================
 function RemarkLayer({ editor, workspaceRef, contentRef }) {
     const [items, setItems] = useState([]);
-    const [activeRemarkId, setActiveRemarkId] = useState(null);
 
     const refresh = useCallback(() => {
         const workspace = workspaceRef.current;
@@ -518,9 +517,7 @@ function RemarkLayer({ editor, workspaceRef, contentRef }) {
 
         const workspaceRect = workspace.getBoundingClientRect();
         const pageWidth = workspace.clientWidth;
-        const sidePadding = pageWidth < 260 ? 10 : 18;
-        const noteWidth = Math.min(320, Math.max(160, pageWidth - sidePadding * 2));
-        const noteMaxLeft = Math.max(sidePadding, pageWidth - noteWidth - sidePadding);
+        const noteLeft = pageWidth + 22;
         const remarksById = new Map();
 
         root.querySelectorAll('.remark-mark[data-remark-id]').forEach(el => {
@@ -548,46 +545,24 @@ function RemarkLayer({ editor, workspaceRef, contentRef }) {
         const nextItems = Array.from(remarksById.values())
             .sort((a, b) => a.anchorY - b.anchorY)
             .map((item, index) => {
-                const estimatedHeight = Math.min(170, 54 + Math.ceil(item.text.length / 22) * 18);
-                const noteTop = Math.max(12, item.anchorY + 20, previousBottom + 10);
+                const estimatedHeight = Math.min(120, 42 + Math.ceil(item.text.length / 18) * 18);
+                const noteTop = Math.max(8, item.anchorY - 18, previousBottom + 8);
                 previousBottom = noteTop + estimatedHeight;
-                const noteLeft = Math.max(
-                    sidePadding,
-                    Math.min(noteMaxLeft, item.anchorX - noteWidth * 0.45)
-                );
-                const pointerX = Math.max(18, Math.min(noteWidth - 18, item.anchorX - noteLeft));
+                const lineLeft = Math.min(item.anchorX + 6, pageWidth + 8);
+                const lineWidth = Math.max(16, noteLeft - lineLeft - 6);
                 return {
                     ...item,
                     index: index + 1,
                     noteTop,
                     noteLeft,
-                    noteWidth,
-                    pointerX,
-                    lineLeft: item.anchorX,
-                    lineTop: item.anchorY + 4,
-                    lineHeight: Math.max(8, noteTop - item.anchorY - 6),
+                    lineLeft,
+                    lineTop: item.anchorY,
+                    lineWidth,
                 };
             });
 
         setItems(nextItems);
     }, [contentRef, workspaceRef]);
-
-    useEffect(() => {
-        const root = contentRef.current;
-        if (!root) return;
-
-        const handleClick = (event) => {
-            const mark = event.target?.closest?.('.remark-mark[data-remark-id]');
-            if (mark && root.contains(mark)) {
-                setActiveRemarkId(mark.getAttribute('data-remark-id'));
-                return;
-            }
-            setActiveRemarkId(null);
-        };
-
-        document.addEventListener('click', handleClick, true);
-        return () => document.removeEventListener('click', handleClick, true);
-    }, [contentRef]);
 
     useEffect(() => {
         if (!editor) return;
@@ -619,22 +594,18 @@ function RemarkLayer({ editor, workspaceRef, contentRef }) {
         };
     }, [contentRef, editor, refresh, workspaceRef]);
 
-    const visibleItems = activeRemarkId
-        ? items.filter(item => item.id === activeRemarkId)
-        : [];
-
-    if (visibleItems.length === 0) return null;
+    if (items.length === 0) return null;
 
     return (
-        <div className="remark-layer" aria-live="polite">
-            {visibleItems.map(item => (
+        <div className="remark-layer" aria-hidden="true">
+            {items.map(item => (
                 <div key={item.id} className="remark-layer-item">
                     <div
                         className="remark-line"
                         style={{
                             left: item.lineLeft,
                             top: item.lineTop,
-                            height: item.lineHeight,
+                            width: item.lineWidth,
                         }}
                     />
                     <div
@@ -642,8 +613,6 @@ function RemarkLayer({ editor, workspaceRef, contentRef }) {
                         style={{
                             left: item.noteLeft,
                             top: item.noteTop,
-                            width: item.noteWidth,
-                            '--remark-pointer-x': `${item.pointerX}px`,
                         }}
                     >
                         <span className="remark-note-index">{item.index}</span>

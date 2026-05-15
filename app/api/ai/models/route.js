@@ -126,8 +126,35 @@ function extractModelArray(data) {
 
 // OpenAI 兼容格式拉取模型（/v1/models）
 // 参考 Cherry Studio：多路径尝试 + 多格式兼容 + 超时处理
+function normalizeOpenAIBaseUrl(rawBaseUrl) {
+    let base = String(rawBaseUrl || '').trim().replace(/\/+$/, '');
+    if (!base) return base;
+
+    const endpointSuffixes = [
+        '/chat/completions',
+        '/embeddings',
+        '/responses',
+        '/models',
+    ];
+
+    let changed = true;
+    while (changed) {
+        changed = false;
+        const lower = base.toLowerCase();
+        for (const suffix of endpointSuffixes) {
+            if (lower.endsWith(suffix)) {
+                base = base.slice(0, -suffix.length).replace(/\/+$/, '');
+                changed = true;
+                break;
+            }
+        }
+    }
+
+    return base;
+}
+
 async function fetchOpenAIModels(apiKey, baseUrl, embedOnly, provider, proxyUrl) {
-    const base = (baseUrl || '').replace(/\/$/, '');
+    const base = normalizeOpenAIBaseUrl(baseUrl);
     if (!base) {
         return NextResponse.json(
             { error: '请先填写 API 地址' },

@@ -1,1 +1,1 @@
-优化批注、诊断日志与 AI 配置体验 | Improved remarks, diagnostics, and AI configuration
+修复启动、AI 设定应用与同步体验 | Fixed startup, AI settings, and sync reliability

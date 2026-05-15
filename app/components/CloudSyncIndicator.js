@@ -38,7 +38,7 @@ export default function CloudSyncIndicator() {
     }, []);
 
     if (!firebaseAvailable) {
-        const isElectron = typeof window !== 'undefined' && window.electron;
+        const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
         if (isElectron) {
             // Electron 环境下 Firebase 必定可用，即使暂时加载未完成也应该走正常未登录的流程

@@ -30,6 +30,9 @@ export function initAuth() {
         if (user) {
             import('./heartbeat').then(m => m.sendDailyHeartbeat()).catch(() => {});
         }
+        import('./firebase')
+            .then(m => m.setFirebaseAnalyticsUserContext?.({ userId: user?.uid || null }))
+            .catch(() => {});
         _listeners.forEach(fn => {
             try { fn(user); } catch (e) { console.error('[auth] listener error:', e); }
         });

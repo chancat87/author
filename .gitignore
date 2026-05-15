@@ -64,8 +64,9 @@ mcp_config.json
 *草稿*/
 *draft*/
 
-# flutter mobile (private repo — NEVER commit)
+# mobile apps (private repos — NEVER commit)
 /mobile
+/mobile_ios
 *.dart
 
 # mobile UI mockups & design artifacts (private)

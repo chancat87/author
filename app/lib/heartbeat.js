@@ -26,7 +26,12 @@ function detectPlatform() {
  * 获取应用版本号（从 package.json 注入或 Electron userAgent 中读取）
  * @returns {string}
  */
-function getAppVersion() {
+async function getAppVersion() {
+    if (typeof window !== 'undefined' && window.electronAPI?.getAppVersion) {
+        try {
+            return await window.electronAPI.getAppVersion();
+        } catch { }
+    }
     // Electron 桌面端 —— 从 userAgent 中提取 Author/x.x.x
     if (typeof navigator !== 'undefined') {
         const match = navigator.userAgent.match(/Author\/([\d.]+)/);
@@ -72,7 +77,7 @@ export async function sendDailyHeartbeat() {
         await setDoc(ref, {
             value: {
                 platform: detectPlatform(),
-                appVersion: getAppVersion(),
+                appVersion: await getAppVersion(),
                 lastActiveDate: today,
             },
             updatedAt: serverTimestamp(),

@@ -180,15 +180,16 @@ export async function getContextItems(activeChapterId, chaptersOverride) {
  * @param {string} selectedText
  * @param {Set|null} selectedIds - 如果提供，只包含 id 在此 Set 中的条目
  */
-export async function buildContext(activeChapterId, selectedText, selectedIds = null) {
+export async function buildContext(activeChapterId, selectedText, selectedIds = null, workId = null) {
     const settings = getProjectSettings();
-    const chapters = await getChapters(getActiveWorkId());
+    const targetWorkId = workId || getActiveWorkId();
+    const chapters = await getChapters(targetWorkId);
     const currentChapter = chapters.find(ch => ch.id === activeChapterId);
     const currentIndex = chapters.findIndex(ch => ch.id === activeChapterId);
 
     // 从树形节点读取设定（过滤掉禁用项，并按当前作品过滤）
     // getSettingsNodes() 已按当前作品过滤
-    const nodes = await getSettingsNodes();
+    const nodes = await getSettingsNodes(targetWorkId);
 
     // 获取所有有效的设定条目
     const allValidItemNodes = nodes.filter(n => n.type === 'item' && n.enabled !== false);
@@ -717,6 +718,9 @@ function getModeInstruction(mode) {
 - "plot"：大纲。content 可含：description, status
 - "rules"：写作规则。content 可含：description
 - "custom"：自定义。content 可含：description
+- "bookInfo"：作品信息。content 可含：title, genre, synopsis, style, tone, pov, targetAudience
+
+如果用户要求写入某个子分类，可以额外输出 "parentName"、"parentId" 或 "path" 字段；例如写入“细纲”时可使用 {"category":"plot","parentName":"细纲",...}，也可以直接让 category 等于已有文件夹名。
 
 使用规则：
 - 每个操作块只包含一个 JSON 对象

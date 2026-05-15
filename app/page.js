@@ -263,7 +263,7 @@ export default function Home() {
       // 加载会话数据
       let store = await loadSessionStore();
       if (store.sessions.length === 0) {
-        store = createSession(store);
+        store = createSession(store, { workId: getActiveWorkId() || 'work-default' });
       }
       setSessionStore(store);
       sessionStoreHydratedRef.current = true;

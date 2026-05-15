@@ -1,71 +1,47 @@
-## v1.2.29 — 优化批注、诊断日志与 AI 配置体验
+## v1.2.30 — 修复启动、AI 设定应用与同步体验
 
 ### 中文
 
-#### 正文批注与 AI 插入
+#### 桌面端
 
-- 备注现在保留正文标记，点击标记时才在附近弹出悬浮批注，避免持续遮挡正文阅读
-- AI 助手写正文时会优先把可插入内容放入代码块，编辑器插入时可直接取代码块内容
-- 插入到正文编辑区的 AI 文本会按纯文本转义，避免 Markdown 或 HTML 片段污染正文格式
-
-#### 桌面端诊断与稳定性
-
-- 诊断日志新增顶层元素、可疑遮罩、点击拦截、主线程长任务等线索，便于定位“界面突然不能点”的问题
-- 桌面端主进程会记录 renderer 控制台警告/错误、preload 错误、GPU 子进程异常和恢复响应事件
-- 帮助页补充诊断日志说明：可从“帮助 → 关于”导出诊断日志或打开桌面端日志目录
-- 移除 AI 悬浮入口的持续动画，降低桌面端空闲 GPU 占用
-
-#### API 与向量重建
-
-- Embedding 重建失败时会展示更明确的中文失败原因
-- OpenAI 兼容 Embedding 支持自动尝试 `/embeddings` 与 `/v1/embeddings`，减少自定义接口 404
-- DeepSeek / OpenAI 兼容接口的错误提示更精准，便于区分 Key、地址、模型和限流问题
-
-#### 同步与存档
-
-- 退出同步弹窗更清楚地区分本地已保存与云同步失败，降低误解和误操作风险
-- 项目存档导出继续保持隐私优先，不包含 API 配置、AI 会话、token 统计或 AI 摘要
+- 修复部分环境下客户端提示“内置服务器无法启动”的启动问题，并增强本地服务可用性检测。
+- 修复 OpenAI 兼容接口在向量化和模型列表请求中可能拼接出错误地址的问题。
+- 修复切换作品后，AI 助手仍把上一部作品的人物、设定或内容写入当前作品的问题。
+- 修复 AI 助手生成书籍信息后，作品信息仍显示为空白的问题。
+- 修复 AI 助手把设定应用到设定集时，可能放错大分类或子分类的问题。
+- 修复帮助文档中 `####` 四级标题无法正确渲染的问题。
+- 同步逻辑优化：快照保留在本机，超大的章节或设定数据会自动分片同步，减少单个文件过大导致的失败。
+- 修复右上角提示可能被顶部按钮或弹窗遮挡的问题。
+- 增强桌面端使用记录与版本信息上报，便于后续定位安装、启动和稳定性问题。
 
 #### Android 端
 
-- 移动端 AI 对话补充重发、重新生成、删除消息和分支入口
-- 移动端导入解析增强，提升电脑端导出内容在手机端按章节匹配的稳定性
-- 移动端 DeepSeek / OpenAI 兼容配置和错误提示同步优化
-
-本次发布包含 Windows 安装包；Android APK 由移动端私有仓库构建后上传到同一 GitHub Release。
+- 修复 AI 助手输出过程中切换底部导航，再返回后当前消息丢失的问题。
+- 修复自定义设定文件夹，例如“细纲”，无法接收 AI 助手写入内容的问题。
+- 修复 AI 会话列表右侧菜单显示位置异常、只能在小区域内滑动的问题。
+- 增强 Android 端使用记录、崩溃与性能信息上报，便于后续定位问题。
+- Android 安装包版本号更新为 `1230`。
 
 ---
 
 ### English
 
-#### Inline Remarks And AI Insertion
+#### Desktop
 
-- Remarks now keep an inline marker and only show the floating note after clicking the marker, avoiding persistent reading obstruction
-- AI writing responses now prefer putting insertable body text inside a code block, so the editor can insert only that content
-- AI text inserted into the editor is escaped as plain text to prevent Markdown or HTML fragments from affecting body formatting
-
-#### Desktop Diagnostics And Stability
-
-- Diagnostic logs now capture top elements, possible blocking overlays, intercepted clicks, and main-thread long tasks to help debug “nothing can be clicked” reports
-- The desktop main process now records renderer warnings/errors, preload errors, GPU child-process failures, and responsive recovery events
-- The Help page now explains where to export diagnostic logs and where to find the desktop log directory
-- Removed the continuous animation from the floating AI entry to reduce idle GPU usage in the desktop client
-
-#### API And Embedding Rebuilds
-
-- Embedding rebuild failures now show clearer Chinese error messages
-- OpenAI-compatible embedding endpoints can automatically try both `/embeddings` and `/v1/embeddings`, reducing custom-endpoint 404s
-- DeepSeek / OpenAI-compatible API errors are clearer for key, endpoint, model, and rate-limit problems
-
-#### Sync And Archives
-
-- The exit sync dialog now more clearly distinguishes locally saved data from cloud sync failures
-- Project archives remain privacy-first and do not include API config, AI conversations, token stats, or AI summaries
+- Fixed a startup issue where the desktop client could report that the built-in server failed to start, with stronger local service readiness checks.
+- Fixed incorrect URL construction for OpenAI-compatible embedding and model-list requests.
+- Fixed AI assistant writes leaking from the previous work into the currently selected work after switching projects.
+- Fixed AI-generated book information not being applied back to the work profile.
+- Fixed AI-generated settings being placed under the wrong top-level category or subcategory.
+- Fixed `####` level headings not rendering correctly in Help documents.
+- Improved sync reliability: snapshots stay local, and oversized chapter or settings data is split automatically during cloud sync.
+- Fixed top-right notifications being hidden behind header buttons or popups.
+- Improved desktop usage and version reporting to help diagnose install, startup, and stability issues.
 
 #### Android
 
-- Mobile AI chat now supports resending, regenerating, deleting messages, and creating branches
-- Mobile import parsing is improved so desktop-exported content maps to chapters more reliably
-- Mobile DeepSeek / OpenAI-compatible configuration and error reporting are also improved
-
-This release includes the Windows installer. The Android APK is built from the private mobile repository and uploaded to the same GitHub Release.
+- Fixed the current AI message disappearing after switching bottom navigation tabs during generation.
+- Fixed custom settings folders, such as outline/detail folders, not accepting AI-generated content.
+- Fixed the AI conversation list menu appearing in a cramped scroll area instead of as a normal popup.
+- Improved Android usage, crash, and performance reporting for issue diagnosis.
+- Android version code is now `1230`.

@@ -77,7 +77,27 @@ export async function logFirebasePageView({ pageTitle, pageLocation, pagePath } 
         page_title: pageTitle || document.title,
         page_location: pageLocation || window.location.href,
         page_path: pagePath || `${window.location.pathname}${window.location.search}`,
+        app_surface: window.electronAPI?.isElectron ? 'desktop_client' : 'web',
     });
+    return true;
+}
+
+export async function logFirebaseEvent(eventName, params = {}) {
+    const analytics = await getFirebaseAnalytics();
+    if (!analytics) return false;
+
+    const { logEvent } = await import('firebase/analytics');
+    logEvent(analytics, eventName, params);
+    return true;
+}
+
+export async function setFirebaseAnalyticsUserContext({ userId, properties } = {}) {
+    const analytics = await getFirebaseAnalytics();
+    if (!analytics) return false;
+
+    const { setUserId, setUserProperties } = await import('firebase/analytics');
+    if (userId !== undefined) setUserId(analytics, userId);
+    if (properties) setUserProperties(analytics, properties);
     return true;
 }
 

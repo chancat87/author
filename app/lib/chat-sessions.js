@@ -62,10 +62,11 @@ function autoTitle(messages) {
 /**
  * 创建新的空白会话
  */
-export function createSession(store) {
+export function createSession(store, initial = {}) {
     const session = {
         id: generateId(), title: '新对话', createdAt: Date.now(),
         updatedAt: Date.now(), messages: [],
+        ...initial,
     };
     const newStore = {
         activeSessionId: session.id,

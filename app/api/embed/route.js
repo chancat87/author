@@ -40,6 +40,33 @@ function invalidEmbeddingResponse(provider, model) {
     }), { status: 502 });
 }
 
+function normalizeOpenAIBaseUrl(rawBaseUrl) {
+    let base = String(rawBaseUrl || '').trim().replace(/\/+$/, '');
+    if (!base) return base;
+
+    const endpointSuffixes = [
+        '/chat/completions',
+        '/embeddings',
+        '/responses',
+        '/models',
+    ];
+
+    let changed = true;
+    while (changed) {
+        changed = false;
+        const lower = base.toLowerCase();
+        for (const suffix of endpointSuffixes) {
+            if (lower.endsWith(suffix)) {
+                base = base.slice(0, -suffix.length).replace(/\/+$/, '');
+                changed = true;
+                break;
+            }
+        }
+    }
+
+    return base;
+}
+
 export async function POST(request) {
     try {
         const { text, apiConfig } = await request.json();
@@ -66,7 +93,9 @@ export async function POST(request) {
             rawBaseUrl = defaultBaseUrl;
         }
 
-        const baseUrl = rawBaseUrl.replace(/\/$/, '');
+        const baseUrl = ['gemini-native', 'custom-gemini'].includes(provider)
+            ? rawBaseUrl.replace(/\/$/, '')
+            : normalizeOpenAIBaseUrl(rawBaseUrl);
 
         let embedModelName;
         if (isCustomEmbed) {
