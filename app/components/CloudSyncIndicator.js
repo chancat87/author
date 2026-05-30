@@ -2,18 +2,16 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Cloud, CloudOff, LogOut, RefreshCw, CheckCircle2, User, ArrowRightLeft } from 'lucide-react';
+import { Cloud, CloudOff, LogOut, RefreshCw, CheckCircle2, User, ArrowRightLeft, Settings } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
-import { useI18n } from '../lib/useI18n';
 
 /**
  * 顶栏云同步状态指示器
- * - 未登录：显示灰色云图标 + "登录同步"，点击打开偏好设置
+ * - 未登录：显示灰色云图标 + "同步方式"，点击打开偏好设置
  * - 已登录：显示用户头像 + 绿色圆点，点击弹出账户菜单
  */
 export default function CloudSyncIndicator() {
-    const { setShowLoginModal, setShowAccountModal, setShowSyncGuideModal } = useAppStore();
-    const { t } = useI18n();
+    const { setShowAccountModal, setShowSettings } = useAppStore();
     const [authUser, setAuthUser] = useState(null);
     const [syncStatus, setSyncStatus] = useState(null);
     const [firebaseAvailable, setFirebaseAvailable] = useState(false);
@@ -37,34 +35,21 @@ export default function CloudSyncIndicator() {
         return () => { unmounted = true; };
     }, []);
 
+    const openSyncSettings = () => {
+        setMenuOpen(false);
+        setShowSettings(true, 'preferences');
+    };
+
     if (!firebaseAvailable) {
-        const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
-
-        if (isElectron) {
-            // Electron 环境下 Firebase 必定可用，即使暂时加载未完成也应该走正常未登录的流程
-            return (
-                <button
-                    id="tour-cloud-sync"
-                    className="cloud-sync-indicator cloud-sync-login"
-                    onClick={() => setShowLoginModal(true)}
-                    title="登录以开启云同步"
-                >
-                    <CloudOff size={15} />
-                    <span className="cloud-sync-label">{t('cloudSync.sync') || '同步'}</span>
-                </button>
-            );
-        }
-
-        // 非 Electron 环境（Web/Vercel）且未配置 Firebase
         return (
             <button
                 id="tour-cloud-sync"
                 className="cloud-sync-indicator cloud-sync-login"
-                onClick={() => setShowSyncGuideModal(true)}
-                title={t('settings.syncGuide') || '云同步指南'}
+                onClick={openSyncSettings}
+                title="选择 Firebase、WebDAV 或局域网同步"
             >
                 <CloudOff size={15} />
-                <span className="cloud-sync-label">{t('cloudSync.sync') || '同步'}</span>
+                <span className="cloud-sync-label">同步方式</span>
             </button>
         );
     }
@@ -97,11 +82,11 @@ export default function CloudSyncIndicator() {
             <button
                 id="tour-cloud-sync"
                 className="cloud-sync-indicator cloud-sync-login"
-                onClick={() => setShowLoginModal(true)}
-                title="登录以开启云同步"
+                onClick={openSyncSettings}
+                title="选择 Firebase、WebDAV 或局域网同步"
             >
                 <CloudOff size={15} />
-                <span className="cloud-sync-label">登录同步</span>
+                <span className="cloud-sync-label">同步方式</span>
             </button>
         );
     }
@@ -116,7 +101,7 @@ export default function CloudSyncIndicator() {
                 ref={btnRef}
                 className="cloud-sync-indicator cloud-sync-active"
                 onClick={() => setMenuOpen(!menuOpen)}
-                title={authUser.displayName || authUser.email}
+                title={`${authUser.displayName || authUser.email} · 点击查看同步状态和同步方式`}
             >
                 {authUser.photoURL ? (
                     <img src={authUser.photoURL} alt="" className="cloud-sync-avatar" />
@@ -187,6 +172,12 @@ export default function CloudSyncIndicator() {
 
                         <div className="cloud-sync-menu-divider" />
 
+                        <button
+                            className="cloud-sync-menu-item"
+                            onClick={openSyncSettings}
+                        >
+                            <Settings size={14} /> 同步方式
+                        </button>
                         <button
                             className="cloud-sync-menu-item"
                             onClick={() => { setShowAccountModal(true); setMenuOpen(false); }}

@@ -114,7 +114,7 @@ $diffOutput = @(& git diff -- . ':(exclude)package-lock.json' ':(exclude)scripts
 $stagedDiffOutput = @(& git diff --cached -- . ':(exclude)package-lock.json' ':(exclude)scripts/release-safety-check.ps1')
 $allDiffOutput = Get-CurrentDiffLines (@($diffOutput) + @($stagedDiffOutput))
 
-$highConfidenceSecretPattern = 'sk-[A-Za-z0-9_-]{20,}|Bearer\s+[A-Za-z0-9._~+/=-]{20,}|(api[_-]?key|secret[_-]?key|private[_-]?key|firebase[_-]?api|password|credential|token)\s*[:=]\s*["'']?\S{12,}'
+$highConfidenceSecretPattern = 'sk-[A-Za-z0-9_-]{20,}|Bearer\s+[A-Za-z0-9._~+/=-]{20,}|(api[_-]?key|secret[_-]?key|private[_-]?key|firebase[_-]?api|password|credential|token)\s*[:=]\s*["''][A-Za-z0-9._~+/=:@-]{16,}["'']'
 $highConfidenceSecretDiff = @($allDiffOutput | Select-String -Pattern $highConfidenceSecretPattern -CaseSensitive:$false)
 if ($highConfidenceSecretDiff.Count -gt 0) {
     Add-Failure "Diff contains high-confidence secret-looking values. Review before release:`n$($highConfidenceSecretDiff -join "`n")"

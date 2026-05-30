@@ -37,6 +37,7 @@ const HEARTBEAT_INTERVAL_MS = 60 * 1000;
 const OVERLAY_WARNING_COOLDOWN_MS = 30 * 1000;
 const FULLSCREEN_OVERLAY_RATIO = 0.55;
 const LONG_TASK_THRESHOLD_MS = 250;
+const KEYBOARD_GUARD_KEY = '__authorDiagnosticsKeyboardEventGuard';
 
 let installed = false;
 let originalConsole = null;
@@ -44,6 +45,7 @@ let entriesCache = [];
 let healthTimer = null;
 let longTaskObserver = null;
 let lastOverlayWarningAt = 0;
+let cleanupFns = [];
 
 function nowIso() {
     return new Date().toISOString();
@@ -302,6 +304,45 @@ function mirrorToElectron(entry) {
     window.electronAPI.writeDiagnosticLog(entry).catch(() => { });
 }
 
+function addDiagnosticListener(target, type, listener, options) {
+    target.addEventListener(type, listener, options);
+    cleanupFns.push(() => {
+        try { target.removeEventListener(type, listener, options); } catch { }
+    });
+}
+
+function normalizeEventKey(event) {
+    return typeof event?.key === 'string' ? event.key : '';
+}
+
+function installKeyboardEventGuard() {
+    if (typeof window === 'undefined' || window[KEYBOARD_GUARD_KEY]) return;
+    const listener = (event) => {
+        if (!event || typeof event.key === 'string') return;
+        try {
+            Object.defineProperty(event, 'key', { configurable: true, value: '' });
+        } catch {
+            event.stopImmediatePropagation?.();
+        }
+    };
+    window.addEventListener('keydown', listener, { capture: true });
+    window[KEYBOARD_GUARD_KEY] = listener;
+}
+
+function cleanupInstalledDiagnostics() {
+    cleanupFns.forEach(cleanup => cleanup());
+    cleanupFns = [];
+    if (healthTimer) {
+        window.clearInterval(healthTimer);
+        healthTimer = null;
+    }
+    if (longTaskObserver) {
+        try { longTaskObserver.disconnect(); } catch { }
+        longTaskObserver = null;
+    }
+    installed = false;
+}
+
 export function recordDiagnosticEvent(event, message, metadata = {}, level = 'info') {
     if (typeof window === 'undefined') return null;
     const entry = {
@@ -338,7 +379,7 @@ function installConsoleCapture() {
 }
 
 function installGlobalErrorCapture() {
-    window.addEventListener('error', (event) => {
+    addDiagnosticListener(window, 'error', (event) => {
         recordDiagnosticEvent('window.error', event.message || 'Unhandled error', {
             filename: event.filename,
             lineno: event.lineno,
@@ -347,24 +388,24 @@ function installGlobalErrorCapture() {
         }, 'error');
     });
 
-    window.addEventListener('unhandledrejection', (event) => {
+    addDiagnosticListener(window, 'unhandledrejection', (event) => {
         recordDiagnosticEvent('window.unhandledrejection', event.reason?.message || String(event.reason || 'Unhandled rejection'), {
             reason: serializeError(event.reason) || safeSerialize(event.reason),
         }, 'error');
     });
 
-    window.addEventListener('pagehide', () => {
+    addDiagnosticListener(window, 'pagehide', () => {
         recordDiagnosticEvent('page.lifecycle', 'pagehide', { persisted: false }, 'debug');
     });
 
-    document.addEventListener('visibilitychange', () => {
+    addDiagnosticListener(document, 'visibilitychange', () => {
         recordDiagnosticEvent('page.visibility', document.visibilityState, {}, 'debug');
     });
 }
 
 function installInteractionBreadcrumbs() {
     const capture = { capture: true, passive: true };
-    document.addEventListener('pointerdown', (event) => {
+    addDiagnosticListener(document, 'pointerdown', (event) => {
         const diagnostics = getPointerDiagnostics(event);
         if (diagnostics.largeBlockingOverlays.length > 0 || diagnostics.targetDiffersFromTopElement) {
             recordDiagnosticEvent('ui.blocked-pointer', 'Pointer down may be intercepted by an overlay or a different top element', diagnostics, 'warn');
@@ -376,7 +417,7 @@ function installInteractionBreadcrumbs() {
             }, 'debug');
         }
     }, capture);
-    document.addEventListener('pointerup', (event) => {
+    addDiagnosticListener(document, 'pointerup', (event) => {
         recordDiagnosticEvent('ui.pointerup', 'pointerup', {
             target: describeElement(event.target),
             pointer: {
@@ -387,28 +428,31 @@ function installInteractionBreadcrumbs() {
             },
         }, 'debug');
     }, capture);
-    document.addEventListener('click', (event) => {
+    addDiagnosticListener(document, 'click', (event) => {
         const topElement = document.elementFromPoint?.(event.clientX, event.clientY);
         recordDiagnosticEvent('ui.click', 'click', {
             target: describeElement(event.target),
             topElement: describeVisualElement(topElement),
         }, 'debug');
     }, capture);
-    document.addEventListener('dragstart', (event) => {
+    addDiagnosticListener(document, 'dragstart', (event) => {
         recordDiagnosticEvent('ui.dragstart', 'dragstart', { target: describeElement(event.target) }, 'debug');
     }, capture);
-    document.addEventListener('drop', (event) => {
+    addDiagnosticListener(document, 'drop', (event) => {
         recordDiagnosticEvent('ui.drop', 'drop', { target: describeElement(event.target) }, 'debug');
     }, capture);
-    document.addEventListener('keydown', (event) => {
-        if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key.length === 1) return;
+    addDiagnosticListener(document, 'keydown', (event) => {
+        const key = normalizeEventKey(event);
+        const hasShortcutModifier = Boolean(event?.ctrlKey || event?.metaKey || event?.altKey);
+        const isPlainPrintableKey = !hasShortcutModifier && /^[\s\S]$/.test(key);
+        if (isPlainPrintableKey) return;
         recordDiagnosticEvent('ui.keydown', 'shortcut', {
-            key: event.key,
-            ctrlKey: event.ctrlKey,
-            metaKey: event.metaKey,
-            altKey: event.altKey,
-            shiftKey: event.shiftKey,
-            target: describeElement(event.target),
+            key,
+            ctrlKey: !!event?.ctrlKey,
+            metaKey: !!event?.metaKey,
+            altKey: !!event?.altKey,
+            shiftKey: !!event?.shiftKey,
+            target: describeElement(event?.target),
         }, 'debug');
     }, capture);
 }
@@ -459,6 +503,8 @@ function installPerformanceDiagnostics() {
 
 export function initDiagnostics() {
     if (typeof window === 'undefined' || installed) return;
+    installKeyboardEventGuard();
+    window.__authorDiagnosticsCleanup?.();
     installed = true;
     entriesCache = readEntries();
     installConsoleCapture();
@@ -471,6 +517,7 @@ export function initDiagnostics() {
         export: downloadDiagnosticReport,
         record: recordDiagnosticEvent,
     };
+    window.__authorDiagnosticsCleanup = cleanupInstalledDiagnostics;
     recordDiagnosticEvent('app.diagnostics.ready', 'Diagnostics initialized', getEnvironmentSnapshot(), 'info');
 }
 

@@ -1,25 +1,28 @@
-## v1.2.33 — 完善章节编排、AI 存档与移动端备份
+## v1.2.34 — 新增便携同步与移动端阅读模式
 
 ### 中文
 
 #### 桌面端 / Web
 
-- 章节列表现在支持悬停点击「+」，可直接在当前章节后插入空白章节。
-- 新增「特殊章节」标记，章节重排编号时会跳过这类章节，适合前言、番外、资料章等不参与编号的内容。
-- 修复 AI 助手「存档」空白的问题：内联 AI 已接受、已拒绝或重新生成时放弃的内容都会保存到当前作品的 AI 存档，之后可重新插入正文。
-- 切换章节时会记住每章上次的光标和滚动位置，返回章节后会恢复到上次编辑位置并显示光标。
-- 修复作品切换时，如果目标作品顶部是分卷，正文仍停留在上一部作品内容的问题；现在会回到该作品上次章节，或自动选择第一个可编辑章节。
-- 删除分卷按钮增加提示，明确只删除分卷本身，不删除包含的章节。
-- 网页版「关于」页面现在也能读取并显示当前版本号。
-- 本地光标位置、作品当前章节和 AI 生成存档均保持本地私有，不进入云同步或项目导出。
+- 新增 WebDAV 同步，可在「偏好设置 → 云同步」中配置坚果云、123 云盘或自建 NAS/Nextcloud 等服务。
+- 新增局域网临时同步，可在同一 Wi-Fi 下生成分享链接，将作品、章节和设定迁移到另一台设备。
+- 同步入口统一调整为「同步方式」，未登录或未配置 Firebase 时会直接进入同步设置，不再只引导登录。
+- WebDAV 应用密码在桌面端使用 Electron 安全存储保存，网页版仅保存在本机浏览器。
+- WebDAV 服务端代理增加公网安全限制，公网部署不会代理访问 localhost 或内网地址。
+- 便携同步继续沿用隐私优先 allowlist，仅同步作品索引、章节和设定节点；AI 会话、API 配置、快照、调试信息和本地偏好保持本地私有。
+- 诊断系统增加键盘事件保护和重复初始化清理，降低异常输入事件导致的诊断报错风险。
+- README 和帮助页面已同步更新 Firebase、WebDAV、局域网同步说明。
+- 发版流程新增 preflight 检查，确保每次发版前都能发现并阅读本地 release workflow。
 
 #### Android 端
 
-- Android 安装包版本号更新为 `1233`。
-- 优化移动端备份与导出流程，让项目导出、ZIP 备份和本地备份历史更容易在手机文件系统中找到和使用。
-- 修复备份页导出失败时 `setState()` 返回 Future 的运行时错误。
-- 修复备份列表在新版 Flutter 调试模式下触发 `ListTile` 背景材质断言的问题。
-- 升级 `flutter_quill` 依赖，修复新 Flutter SDK 下 `TextInputClient.onFocusReceived` 缺失导致的 Android 编译失败。
+- Android 版本更新为 `1.2.34+1234`。
+- 修复桌面端同步分割线后，移动端编辑器显示大块灰色占位的问题。
+- 移动端编辑器和专注写作页现在能正确渲染分割线等 Quill embed，并对未知 embed 使用安全文本回退。
+- 阅读模式新增「连续滚动 / 左右分页 / 上下分页」布局选项。
+- 阅读模式新增「无动画 / 滑动 / 经典 / 魔方」翻页效果，并修复滑动到一半页面消失的问题。
+- 阅读模式设置会记住字号、行距、主题、阅读方式和翻页效果。
+- 优化阅读模式分页估算和长段落拆分，减少单页内容过长导致的分页不稳定。
 
 ---
 
@@ -27,19 +30,22 @@
 
 #### Desktop / Web
 
-- Chapter rows now show a hover `+` action for inserting a blank chapter directly after the current chapter.
-- Added a “special chapter” marker. Renumbering skips these chapters, which is useful for prologues, extras, notes, and other unnumbered content.
-- Fixed the empty AI Assistant Archive issue: accepted, rejected, and regenerated-away inline AI text is now saved to the current work's AI archive and can be inserted back into the manuscript later.
-- Chapter switching now remembers each chapter's last cursor and scroll position, restoring the previous editing location and visible caret when you return.
-- Fixed work switching when the target work starts with a volume: the editor now restores that work's last chapter or falls back to its first editable chapter instead of keeping another work's content.
-- Added clearer tooltip text for deleting a volume, explaining that only the volume itself is removed and its chapters are kept.
-- The web About page can now read and display the current app version.
-- Cursor positions, active chapter memory, and AI generation archives stay local-only and are excluded from cloud sync and project exports.
+- Added WebDAV sync in **Preferences → Cloud Sync**, supporting Jianguoyun, 123 Cloud Drive, and self-hosted NAS/Nextcloud-style services.
+- Added temporary LAN sync for transferring works, chapters, and lore/settings between devices on the same Wi-Fi network.
+- Unified sync entry points under “Sync methods”, so users without Firebase login/configuration are taken to sync settings instead of only being prompted to log in.
+- WebDAV app passwords are stored with Electron secure storage on desktop and remain local to the browser in web builds.
+- The WebDAV server proxy now blocks localhost and private-network targets when running from public deployments.
+- Portable sync keeps the privacy-first allowlist: only work indexes, chapters, and settings nodes sync. AI chats, API configs, snapshots, diagnostics, and local preferences remain local-only.
+- Improved diagnostics with keyboard event guards and cleanup for repeated initialization, reducing noise from malformed input events.
+- README files and the Help panel now describe Firebase, WebDAV, and LAN sync consistently.
+- Added a release preflight guard so local release workflow docs are discovered and read before future releases.
 
 #### Android
 
-- Android version code is now `1233`.
-- Improved mobile backup and export flows so project exports, ZIP backups, and local backup history are easier to find and use on-device.
-- Fixed a runtime error where backup export failure handling returned a Future from `setState()`.
-- Fixed backup list `ListTile` material assertions in newer Flutter debug builds.
-- Updated `flutter_quill` to fix Android build failures with newer Flutter SDKs caused by the missing `TextInputClient.onFocusReceived` implementation.
+- Android version is now `1.2.34+1234`.
+- Fixed large gray placeholders in the mobile editor after syncing divider blocks from desktop.
+- Mobile editor and focus writing pages now render divider-style Quill embeds correctly and use safe text fallbacks for unknown embeds.
+- Reading mode now supports **continuous scroll**, **horizontal pagination**, and **vertical pagination**.
+- Reading mode now supports **instant**, **slide**, **classic cover**, and **cube** page effects, and fixes the half-swipe disappearing page issue.
+- Reading mode preferences now persist font size, line height, theme, layout, and page effect.
+- Improved reading page estimation and long paragraph splitting for more stable pagination.

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, shell, dialog, ipcMain, safeStorage } = require('electron');
 const path = require('path');
 const { execSync } = require('child_process');
 const http = require('http');
@@ -72,11 +72,63 @@ function sanitizeDiagnosticValue(value, depth = 0) {
 
 // 日志文件 - 写到操作系统的 UserData 目录（避免 C 盘权限问题被静默拦截）
 const logFile = path.join(app.getPath('userData'), 'author-debug.log');
+const secureStoreFile = path.join(app.getPath('userData'), 'author-secure-store.json');
 function log(msg) {
     const safeMessage = sanitizeLogText(msg, MAX_LOG_MESSAGE_LENGTH);
     const line = `[${new Date().toISOString()}] ${safeMessage}\n`;
     console.log(safeMessage);
     try { fs.appendFileSync(logFile, line); } catch (e) { }
+}
+
+function readSecureStore() {
+    try {
+        if (!fs.existsSync(secureStoreFile)) return {};
+        const parsed = JSON.parse(fs.readFileSync(secureStoreFile, 'utf8'));
+        return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+        return {};
+    }
+}
+
+function writeSecureStore(store) {
+    try {
+        fs.mkdirSync(path.dirname(secureStoreFile), { recursive: true });
+        fs.writeFileSync(secureStoreFile, JSON.stringify(store, null, 2), 'utf8');
+    } catch (err) {
+        log('Secure store write failed: ' + err.message);
+        throw err;
+    }
+}
+
+function normalizeSecureStoreKey(key) {
+    const safeKey = String(key || '').trim();
+    if (!/^[a-zA-Z0-9_.-]{1,80}$/.test(safeKey)) {
+        throw new Error('Invalid secure store key');
+    }
+    return safeKey;
+}
+
+function encryptSecret(value) {
+    const text = String(value || '');
+    if (safeStorage.isEncryptionAvailable()) {
+        return {
+            encrypted: true,
+            value: safeStorage.encryptString(text).toString('base64'),
+        };
+    }
+    return {
+        encrypted: false,
+        value: Buffer.from(text, 'utf8').toString('base64'),
+    };
+}
+
+function decryptSecret(entry) {
+    if (!entry?.value) return '';
+    const buffer = Buffer.from(entry.value, 'base64');
+    if (entry.encrypted) {
+        return safeStorage.decryptString(buffer);
+    }
+    return buffer.toString('utf8');
 }
 
 function readLogTail(filePath, maxBytes = 2 * 1024 * 1024) {
@@ -246,6 +298,29 @@ ipcMain.handle('open-diagnostic-log-file', async () => {
     } catch (err) {
         return { success: false, error: err.message, logFile };
     }
+});
+
+ipcMain.handle('secure-store-set', async (event, key, value) => {
+    const safeKey = normalizeSecureStoreKey(key);
+    const store = readSecureStore();
+    store[safeKey] = encryptSecret(value);
+    writeSecureStore(store);
+    return { success: true, encrypted: !!store[safeKey].encrypted };
+});
+
+ipcMain.handle('secure-store-get', async (event, key) => {
+    const safeKey = normalizeSecureStoreKey(key);
+    const store = readSecureStore();
+    if (!store[safeKey]) return '';
+    return decryptSecret(store[safeKey]);
+});
+
+ipcMain.handle('secure-store-delete', async (event, key) => {
+    const safeKey = normalizeSecureStoreKey(key);
+    const store = readSecureStore();
+    delete store[safeKey];
+    writeSecureStore(store);
+    return { success: true };
 });
 
 function createWindow() {

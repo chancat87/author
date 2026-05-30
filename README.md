@@ -61,9 +61,9 @@ I watched the versatility of these models being gutted. I don't want us to live 
 - **Multi-format export** — one-click export current chapter or batch export (TXT / Markdown / DOCX / EPUB / PDF), with body-only or annotated versions
 
 ### 📱 Mobile App
-- **Android app** — native Flutter app with Google Sign-In cloud sync
+- **Android app** — native Flutter app with Google Sign-In cloud sync and richer reading mode controls
 - Read and write your novels on the go
-- Syncs with desktop client via the same cloud account
+- Syncs with desktop client via the same cloud account, with desktop WebDAV/LAN transfer options for portable workflows
 
 ### 🌐 Internationalization
 - 🇨🇳 简体中文 / 🇺🇸 English / 🇷🇺 Русский
@@ -100,7 +100,7 @@ If you encounter a white screen, crash, or startup failure:
 
 ## 🚀 Getting Started
 
-> 💡 **Highly Recommended**: For most users who only need daily writing and cloud multi-device synchronization, please [directly download and install the client](https://github.com/YuanShiJiLoong/author/releases/latest). Source code deployment or Vercel deployment is only recommended for advanced users who need **secondary development** or are willing to configure a Firebase database themselves.
+> 💡 **Highly Recommended**: For most users who only need daily writing and multi-device synchronization, please [directly download and install the client](https://github.com/YuanShiJiLoong/author/releases/latest). Source code deployment or Vercel deployment is only recommended for advanced users who need **secondary development** or are willing to configure Firebase/WebDAV storage themselves.
 
 ### Requirements
 - **Node.js** 18+
@@ -144,15 +144,15 @@ npm start
 
 ### Deploy to Vercel
 
-> 💡 **⚠️ Note:** The version deployed via Vercel does **not** have cloud sync features by default (you need to configure your own manual Firebase database separately). If you just want multi-device synchronization, please **download the client directly** to avoid the hassle.
+> 💡 **⚠️ Note:** The version deployed via Vercel does **not** have Firebase cloud sync configured by default. You can either configure Firebase yourself or use the in-app WebDAV/LAN sync options. If you just want multi-device synchronization with minimal setup, please **download the client directly**.
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/YuanShiJiLoong/author)
 
-### ☁️ Cloud Sync Setup (Self-Deploy)
+### ☁️ Sync Setup (Self-Deploy)
 
-> 💡 **Tip:** The desktop client (Windows/macOS) **has a built-in official cloud sync server**, requiring no extra configuration to use cross-device sync. If you find configuring Firebase too tedious, **it is highly recommended to directly download and use the client**.
+> 💡 **Tip:** The desktop client (Windows/macOS) supports built-in Firebase sync, optional WebDAV sync, and temporary LAN transfer. If you find configuring Firebase too tedious, use the desktop client and choose **Preferences → Cloud Sync** for WebDAV or LAN options.
 
-If you insist on self-deploying via source code or Vercel and want to enable multi-device sync, follow these steps to configure your own Firebase database:
+If you insist on self-deploying via source code or Vercel and want Firebase multi-device sync, follow these steps to configure your own Firebase database. WebDAV and LAN sync can be configured in the app without Firebase.
 
 #### 1. Create a Firebase Project
 

@@ -41,6 +41,7 @@ import SettingsTree from './SettingsTree';
 import { useI18n } from '../lib/useI18n';
 import SettingsItemEditor from './SettingsItemEditor';
 import { getModeRolePrompt } from '../lib/context-engine';
+import PortableSyncSettings from './PortableSyncSettings';
 import { downloadFile, downloadBlob } from '../lib/project-io';
 import {
     detectCategory, parseTextToFields, mapFieldsToContent,
@@ -1795,6 +1796,7 @@ function PreferencesForm() {
                             </button>
                         </div>
                     )}
+                    <PortableSyncSettings />
                 </div>
 
             {/* 写作模式选择器 */}

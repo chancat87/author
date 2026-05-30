@@ -1,1 +1,1 @@
-完善章节编排、AI 存档与移动端备份 | Improved chapter organization, AI archive, and mobile backup
+新增便携同步与移动端阅读模式 | Added portable sync and mobile reading mode controls

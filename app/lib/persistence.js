@@ -124,6 +124,13 @@ function isFirebaseSignedIn() {
     return _authModule?.isSignedIn?.() || false;
 }
 
+function enqueuePortableSync(key, value, options = {}) {
+    if (!isSyncableKey(key)) return;
+    import('./portable-sync')
+        .then(sync => sync.portableSyncEnqueue(key, value, options))
+        .catch(() => {});
+}
+
 // ==================== 统一存储接口 ====================
 
 /**
@@ -186,6 +193,7 @@ export async function persistSet(key, value) {
         if (sync && isFirebaseSignedIn()) {
             sync.firestoreEnqueue(key, value);
         }
+        enqueuePortableSync(key, value);
     }
 }
 
@@ -208,6 +216,7 @@ export async function persistDel(key) {
         if (sync && isFirebaseSignedIn()) {
             sync.firestoreDel(key).catch(() => { });
         }
+        enqueuePortableSync(key, null, { deleted: true });
     }
 }
 

@@ -36,4 +36,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     writeDiagnosticLog: (entry) => ipcRenderer.invoke('write-diagnostic-log', entry),
     getDiagnosticBundle: () => ipcRenderer.invoke('get-diagnostic-bundle'),
     openDiagnosticLogFile: () => ipcRenderer.invoke('open-diagnostic-log-file'),
+    // ---- 本机安全存储（WebDAV 应用密码等）----
+    secureSet: (key, value) => ipcRenderer.invoke('secure-store-set', key, value),
+    secureGet: (key) => ipcRenderer.invoke('secure-store-get', key),
+    secureDelete: (key) => ipcRenderer.invoke('secure-store-delete', key),
 });

@@ -62,9 +62,9 @@
 - **多格式导出** — 导航栏一键导出本章或批量导出（TXT / Markdown / DOCX / EPUB / PDF），可选择正文版或批注版
 
 ### 📱 移动端
-- **Android 应用** — 基于 Flutter 的原生应用，支持 Google 登录云同步
+- **Android 应用** — 基于 Flutter 的原生应用，支持 Google 登录云同步和更丰富的阅读模式设置
 - 随时随地在手机上阅读和编辑你的小说
-- 与桌面客户端共享同一云端账号，数据自动同步
+- 与桌面客户端共享同一云端账号；桌面端也提供 WebDAV 和局域网迁移选项
 
 ### 🌐 国际化
 - 🇨🇳 简体中文 / 🇺🇸 English / 🇷🇺 Русский
@@ -102,7 +102,7 @@
 
 ## 🚀 快速开始
 
-> 💡 **强烈建议**：对于只需满足日常写作和云端多设备同步需求的大多数用户，请[直接下载安装客户端](https://github.com/YuanShiJiLoong/author/releases/latest)使用。源码部署或 Vercel 部署仅建议需要进行**二次开发**，或愿意自行配置 Firebase 数据库的高级用户使用。
+> 💡 **强烈建议**：对于只需满足日常写作和多设备同步需求的大多数用户，请[直接下载安装客户端](https://github.com/YuanShiJiLoong/author/releases/latest)使用。源码部署或 Vercel 部署仅建议需要进行**二次开发**，或愿意自行配置 Firebase/WebDAV 存储的高级用户使用。
 
 ### 环境要求
 - **Node.js** 18+
@@ -146,15 +146,15 @@ npm start
 
 ### 部署到 Vercel
 
-> 💡 **⚠️ 注意：** 通过 Vercel 部署的版本默认**没有**云同步等功能（需要单独配置你自己的 Firebase 数据库）。如果你只想要多设备同步，请**直接下载客户端**，无需折腾。
+> 💡 **⚠️ 注意：** 通过 Vercel 部署的版本默认**没有**配置 Firebase 云同步。你可以自行配置 Firebase，也可以在应用内使用 WebDAV/局域网同步。如果只想低成本使用多设备同步，请**直接下载客户端**。
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/YuanShiJiLoong/author)
 
-### ☁️ 云同步配置（自部署用户）
+### ☁️ 同步配置（自部署用户）
 
-> 💡 **提示：** 桌面客户端（Windows/macOS）**已内置官方云同步服务器**，无需任何额外配置即可直接使用跨端同步。如果你觉得配置 Firebase 过于繁琐，**强烈建议直接下载客户端使用**。
+> 💡 **提示：** 桌面客户端（Windows/macOS）支持内置 Firebase 同步、可选 WebDAV 同步和临时局域网迁移。如果你觉得配置 Firebase 过于繁琐，可以直接使用桌面端的 **偏好设置 → 云同步** 配置 WebDAV 或局域网同步。
 
-如果你坚持通过源码或 Vercel 自部署，并希望开启多端同步，需按照以下步骤配置你自己的 Firebase 数据库：
+如果你坚持通过源码或 Vercel 自部署，并希望开启 Firebase 多端同步，需按照以下步骤配置你自己的 Firebase 数据库。WebDAV 和局域网同步可在应用内单独配置。
 
 #### 1. 创建 Firebase 项目
 
