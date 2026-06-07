@@ -63,6 +63,54 @@ async function safeReadJson(filePath, maxRetries = 3) {
     }
 }
 
+const WINDOWS_REPLACE_RETRY_CODES = new Set(['EPERM', 'EACCES', 'EBUSY', 'EEXIST']);
+
+function wait(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function unlinkIfExists(filePath) {
+    try {
+        await fs.unlink(filePath);
+    } catch (e) {
+        if (e.code !== 'ENOENT') throw e;
+    }
+}
+
+async function replaceFileWithRetry(tmpPath, filePath, maxRetries = 5) {
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            await fs.rename(tmpPath, filePath);
+            return;
+        } catch (e) {
+            if (!WINDOWS_REPLACE_RETRY_CODES.has(e.code) || i === maxRetries - 1) {
+                throw e;
+            }
+
+            await wait(40 * (i + 1));
+            try {
+                await unlinkIfExists(filePath);
+            } catch (unlinkError) {
+                if (!WINDOWS_REPLACE_RETRY_CODES.has(unlinkError.code) || i === maxRetries - 1) {
+                    throw unlinkError;
+                }
+            }
+        }
+    }
+}
+
+async function atomicWriteJson(filePath, value) {
+    const tmpPath = filePath + '.tmp.' + crypto.randomBytes(4).toString('hex');
+    await fs.writeFile(tmpPath, JSON.stringify(value, null, 2), 'utf-8');
+
+    try {
+        await replaceFileWithRetry(tmpPath, filePath);
+    } catch (e) {
+        await unlinkIfExists(tmpPath).catch(() => {});
+        throw e;
+    }
+}
+
 // GET /api/storage?key=xxx — 读取数据
 export async function GET(request) {
     try {
@@ -171,9 +219,7 @@ export async function POST(request) {
         await ensureDir(path.dirname(filePath));
 
         // 原子写入：先写临时文件，再重命名，防止并发读取到半截数据
-        const tmpPath = filePath + '.tmp.' + crypto.randomBytes(4).toString('hex');
-        await fs.writeFile(tmpPath, JSON.stringify(value, null, 2), 'utf-8');
-        await fs.rename(tmpPath, filePath);
+        await atomicWriteJson(filePath, value);
 
         return NextResponse.json({ ok: true });
     } catch (error) {

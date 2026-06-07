@@ -1422,6 +1422,8 @@ body.resizing .main-content {
 
 .editor-toolbar {
   padding: 8px 20px 8px 8px;
+  min-height: 47px;
+  box-sizing: border-box;
   border-bottom: 1px solid var(--border-light);
   background: var(--bg-secondary);
   display: flex;
@@ -10433,7 +10435,7 @@ h5.chat-md-heading {
 
 /* ===== Toolbar Collapse ===== */
 .editor-toolbar {
-  transition: max-height 0.25s ease, opacity 0.2s ease, padding 0.25s ease;
+  transition: none;
 }
 
 .toolbar-collapse-btn {

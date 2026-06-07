@@ -8,7 +8,7 @@ import { rotateKey } from '../../lib/keyRotator';
 function readErrorDetail(errorText) {
     try {
         const parsed = JSON.parse(errorText);
-        const detail = parsed?.error?.message || parsed?.error || parsed?.message;
+        const detail = parsed?.error?.message || parsed?.errors?.message || parsed?.error || parsed?.errors || parsed?.message;
         if (!detail) return errorText;
         return typeof detail === 'string' ? detail : JSON.stringify(detail);
     } catch {
@@ -65,6 +65,13 @@ function normalizeOpenAIBaseUrl(rawBaseUrl) {
     }
 
     return base;
+}
+
+function shouldRequestFloatEncoding(provider) {
+    // Some OpenAI-compatible relays forward an omitted encoding_format as an
+    // empty string. Be explicit for custom/relay providers while leaving the
+    // default Zhipu path untouched.
+    return provider !== 'zhipu';
 }
 
 export async function POST(request) {
@@ -146,16 +153,21 @@ export async function POST(request) {
             let lastErrorResponse = null;
 
             for (const url of urls) {
+                const embeddingBody = {
+                    input: text,
+                    model: embedModelName
+                };
+                if (shouldRequestFloatEncoding(provider)) {
+                    embeddingBody.encoding_format = 'float';
+                }
+
                 const res = await proxyFetch(url, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${apiKey}`
                     },
-                    body: JSON.stringify({
-                        input: text,
-                        model: embedModelName
-                    })
+                    body: JSON.stringify(embeddingBody)
                 }, proxyUrl);
 
                 if (!res.ok) {

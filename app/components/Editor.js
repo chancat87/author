@@ -193,14 +193,6 @@ const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-d
     // 斜杠命令菜单状态
     const [slashRange, setSlashRange] = useState(null);
 
-    // 工具栏折叠状态
-    const [toolbarCollapsed, setToolbarCollapsed] = useState(() => {
-        if (typeof window !== 'undefined') {
-            return localStorage.getItem('author-toolbar-collapsed') === 'true';
-        }
-        return false;
-    });
-
     // 搜索栏
     const [findBarVisible, setFindBarVisible] = useState(false);
 

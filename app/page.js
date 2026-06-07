@@ -223,6 +223,10 @@ export default function Home() {
 
   // 监听工具栏高度，设置 CSS 变量供侧边栏定位使用
   useEffect(() => {
+    let observedHeader = null;
+    let observedToolbar = null;
+    let rafId = 0;
+
     const updateHeaderHeight = () => {
       const header = document.querySelector('.top-header-bar');
       if (!header) return;
@@ -234,27 +238,50 @@ export default function Home() {
       const main = document.querySelector('.main-content');
       updateHeaderHeight();
       if (toolbar && main) {
-        const h = toolbar.offsetHeight + 'px';
+        const h = `${Math.ceil(toolbar.getBoundingClientRect().height)}px`;
         main.style.setProperty('--toolbar-h', h);
         document.documentElement.style.setProperty('--toolbar-h', h);
       }
     };
-    const observer = new ResizeObserver(updateToolbarHeight);
-    const tryObserve = () => {
+
+    const scheduleUpdate = () => {
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = 0;
+        updateToolbarHeight();
+      });
+    };
+
+    const resizeObserver = new ResizeObserver(scheduleUpdate);
+    const syncObservedTargets = () => {
       const toolbar = document.querySelector('.editor-toolbar');
       const header = document.querySelector('.top-header-bar');
-      if (header) observer.observe(header);
-      if (toolbar) {
-        observer.observe(toolbar);
-        updateToolbarHeight();
-      } else {
-        updateHeaderHeight();
-        requestAnimationFrame(tryObserve);
+
+      if (observedHeader !== header) {
+        if (observedHeader) resizeObserver.unobserve(observedHeader);
+        observedHeader = header;
+        if (observedHeader) resizeObserver.observe(observedHeader);
       }
+
+      if (observedToolbar !== toolbar) {
+        if (observedToolbar) resizeObserver.unobserve(observedToolbar);
+        observedToolbar = toolbar;
+        if (observedToolbar) resizeObserver.observe(observedToolbar);
+      }
+
+      scheduleUpdate();
     };
-    tryObserve();
-    return () => observer.disconnect();
-  }, [activeChapterId]);
+
+    const mutationObserver = new MutationObserver(syncObservedTargets);
+    mutationObserver.observe(document.body, { childList: true, subtree: true });
+    syncObservedTargets();
+
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      mutationObserver.disconnect();
+      resizeObserver.disconnect();
+    };
+  }, []);
 
   // 派生：当前活动会话和消息列表
   const activeSession = useMemo(() => getActiveSession(sessionStore), [sessionStore]);

@@ -1,1 +1,1 @@
-修复编辑器空白点击与移动端模型选择 | Editor outside-click and mobile model selector fixes
+修复 AI 兼容性、启动存储与移动端思考流 | AI compatibility, startup storage, and mobile thinking fixes
