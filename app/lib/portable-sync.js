@@ -59,7 +59,7 @@ function cloneDefaultSettings() {
 function normalizeBasePath(basePath) {
     const raw = String(basePath || '/AuthorSync').trim();
     if (!raw || raw === '/') return '';
-    return '/' + raw.replace(/^\/+|\/+$/g, '');
+    return '/' + raw.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
 }
 
 function normalizeEndpoint(endpoint) {

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, dialog, ipcMain, safeStorage } = require('electron');
+const { app, BrowserWindow, shell, dialog, ipcMain, safeStorage, Menu } = require('electron');
 const path = require('path');
 const { execSync } = require('child_process');
 const http = require('http');
@@ -171,6 +171,7 @@ let serverReady = false; // 追踪服务器是否真正就绪
 let serverCrashed = false; // 追踪子进程是否已崩溃
 let latestCrashReportPath = null;
 let rendererBreadcrumbs = [];
+const APP_WINDOW_TITLE = 'Author';
 
 function getServerUrl(host = 'localhost') {
     return `http://${host}:${actualPort}`;
@@ -324,20 +325,28 @@ ipcMain.handle('secure-store-delete', async (event, key) => {
 });
 
 function createWindow() {
+    Menu.setApplicationMenu(null);
+
     mainWindow = new BrowserWindow({
         width: 1400,
         height: 900,
         minWidth: 900,
         minHeight: 600,
-        title: 'Author — AI-Powered Creative Writing',
+        title: APP_WINDOW_TITLE,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
             nodeIntegration: false,
         },
-        autoHideMenuBar: true,
+        autoHideMenuBar: false,
+        backgroundColor: '#faf8f5',
         show: false,
     });
+
+    // Windows 原生标题栏偶发闪烁通常来自菜单栏显隐或网页标题反复同步。
+    // 桌面端不需要原生菜单，窗口标题也保持固定，避免触发系统标题栏重绘。
+    mainWindow.setMenu(null);
+    mainWindow.setMenuBarVisibility(false);
 
     mainWindow.loadURL(getServerUrl());
 
@@ -377,6 +386,16 @@ function createWindow() {
         if (url.includes('localhost') || url.includes('127.0.0.1')) {
             log('Page loaded successfully: ' + url);
             loadRetries = 0;
+            if (!mainWindow.isDestroyed() && mainWindow.getTitle() !== APP_WINDOW_TITLE) {
+                mainWindow.setTitle(APP_WINDOW_TITLE);
+            }
+        }
+    });
+
+    mainWindow.webContents.on('page-title-updated', (event) => {
+        event.preventDefault();
+        if (!mainWindow.isDestroyed() && mainWindow.getTitle() !== APP_WINDOW_TITLE) {
+            mainWindow.setTitle(APP_WINDOW_TITLE);
         }
     });
 

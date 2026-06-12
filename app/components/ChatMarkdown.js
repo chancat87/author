@@ -3,6 +3,7 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { memo, useState, useCallback } from 'react';
+import { copyTextToClipboard } from '../lib/clipboard';
 
 function ChatMarkdownInner({ content }) {
     if (!content) return null;
@@ -72,13 +73,12 @@ function ChatMarkdownInner({ content }) {
 
 // 代码块子组件（带复制按钮）
 function CodeBlock({ lang, code }) {
-    const [copied, setCopied] = useState(false);
+    const [copyState, setCopyState] = useState('idle');
 
-    const handleCopy = useCallback(() => {
-        navigator.clipboard.writeText(code).then(() => {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        });
+    const handleCopy = useCallback(async () => {
+        const ok = await copyTextToClipboard(code);
+        setCopyState(ok ? 'copied' : 'failed');
+        setTimeout(() => setCopyState('idle'), 2000);
     }, [code]);
 
     return (
@@ -86,7 +86,7 @@ function CodeBlock({ lang, code }) {
             <div className="chat-md-code-header">
                 <span className="chat-md-code-lang">{lang || 'text'}</span>
                 <button className="chat-md-copy-btn" onClick={handleCopy}>
-                    {copied ? '✓ 已复制' : '📋 复制'}
+                    {copyState === 'copied' ? '✓ 已复制' : copyState === 'failed' ? '复制失败' : '📋 复制'}
                 </button>
             </div>
             <pre className="chat-md-pre"><code>{code}</code></pre>

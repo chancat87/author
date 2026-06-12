@@ -1,1 +1,1 @@
-修复 AI 兼容性、启动存储与移动端思考流 | AI compatibility, startup storage, and mobile thinking fixes
+修复编辑器、AI 助手与 WebDAV 双端同步 | Editor, AI assistant, and WebDAV sync fixes

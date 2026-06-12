@@ -30,16 +30,43 @@ function isLocalRequest(requestUrl, hostHeader) {
 }
 
 function normalizePath(inputPath) {
-    const raw = String(inputPath || '').trim();
+    const raw = String(inputPath || '').trim().replace(/\\/g, '/');
     if (!raw || raw === '/') return '';
-    if (raw.includes('\0') || raw.includes('..')) {
+    if (raw.includes('\0')) {
         throw new Error('Invalid WebDAV path');
     }
     return raw
         .split('/')
+        .map(segment => segment.trim())
         .filter(Boolean)
-        .map(segment => encodeURIComponent(decodeURIComponent(segment)))
+        .map(segment => {
+            let decoded = segment;
+            try {
+                decoded = decodeURIComponent(segment);
+            } catch {
+                decoded = segment;
+            }
+            if (
+                !decoded ||
+                decoded === '.' ||
+                decoded === '..' ||
+                decoded.includes('/') ||
+                decoded.includes('\\') ||
+                decoded.includes('\0')
+            ) {
+                throw new Error('Invalid WebDAV path');
+            }
+            return encodeURIComponent(decoded);
+        })
         .join('/');
+}
+
+function normalizeEndpointBaseUrl(parsedBase) {
+    const normalizedPath = normalizePath(parsedBase.pathname);
+    parsedBase.pathname = normalizedPath ? `/${normalizedPath}/` : '/';
+    parsedBase.search = '';
+    parsedBase.hash = '';
+    return parsedBase.toString();
 }
 
 function buildWebDavUrl(endpoint, inputPath, options = {}) {
@@ -51,7 +78,7 @@ function buildWebDavUrl(endpoint, inputPath, options = {}) {
     if (!options.allowPrivateNetwork && isLocalHost(parsedBase.hostname)) {
         throw new Error('公网部署不允许代理访问本机或内网 WebDAV 地址');
     }
-    const normalizedBase = base.endsWith('/') ? base : `${base}/`;
+    const normalizedBase = normalizeEndpointBaseUrl(parsedBase);
     let normalizedPath = normalizePath(inputPath);
     if (options.collection && normalizedPath && !normalizedPath.endsWith('/')) {
         normalizedPath = `${normalizedPath}/`;

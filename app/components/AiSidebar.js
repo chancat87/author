@@ -15,6 +15,124 @@ import ChatMarkdown from './ChatMarkdown';
 import ModelPicker from './ModelPicker';
 import { FolderOpen, Plus, X, Pencil, Trash2, RefreshCw, GitBranch, CornerDownLeft, ClipboardList, Copy, Code2, FileText, Maximize2, Minimize2 } from 'lucide-react';
 import { useI18n } from '../lib/useI18n';
+import { copyTextToClipboard } from '../lib/clipboard';
+
+const INLINE_THINK_OPEN = '<think>';
+const INLINE_THINK_CLOSE = '</think>';
+const DSML_TOOL_OPEN_RE = /<\s*\|\s*\|\s*DSML\s*\|\s*\|\s*tool_calls?\b[^>]*>/ig;
+const DSML_TOOL_CLOSE_RE = /<\/\s*\|\s*\|\s*DSML\s*\|\s*\|\s*tool_calls?\s*>/ig;
+const INLINE_MARKUP_PENDING_LIMIT = 96;
+
+function createInlineThinkingFilter() {
+    let captureMode = null;
+    let pending = '';
+
+    const firstRegexMatch = (pattern, source, start) => {
+        pattern.lastIndex = start;
+        const match = pattern.exec(source);
+        if (!match) return null;
+        return { start: match.index, end: match.index + match[0].length };
+    };
+
+    const findNextOpenTag = (source, lower, start) => {
+        const thinkIndex = lower.indexOf(INLINE_THINK_OPEN, start);
+        const think = thinkIndex === -1 ? null : {
+            start: thinkIndex,
+            end: thinkIndex + INLINE_THINK_OPEN.length,
+            mode: 'thinking',
+        };
+        const tool = firstRegexMatch(DSML_TOOL_OPEN_RE, source, start);
+        const toolCall = tool ? { ...tool, mode: 'toolCall' } : null;
+        if (!think) return toolCall;
+        if (!toolCall) return think;
+        return think.start <= toolCall.start ? think : toolCall;
+    };
+
+    const findCloseTag = (source, lower, start, mode) => {
+        if (mode === 'thinking') {
+            const closeIndex = lower.indexOf(INLINE_THINK_CLOSE, start);
+            return closeIndex === -1 ? null : {
+                start: closeIndex,
+                end: closeIndex + INLINE_THINK_CLOSE.length,
+            };
+        }
+        return firstRegexMatch(DSML_TOOL_CLOSE_RE, source, start);
+    };
+
+    const safeEndBeforePartialTag = (source, start, tag) => {
+        const remainder = source.slice(start).toLowerCase();
+        let pendingLength = 0;
+        for (let length = 1; length < tag.length && length <= remainder.length; length++) {
+            if (remainder.endsWith(tag.slice(0, length))) pendingLength = length;
+        }
+        return source.length - pendingLength;
+    };
+
+    const safeEndBeforePotentialMarkup = (source, start) => {
+        const searchStart = Math.max(start, source.length - INLINE_MARKUP_PENDING_LIMIT);
+        const lastOpen = source.lastIndexOf('<');
+        return lastOpen >= searchStart && lastOpen >= start ? lastOpen : source.length;
+    };
+
+    const safeEndOutsideCapture = (source, start) => Math.min(
+        safeEndBeforePartialTag(source, start, INLINE_THINK_OPEN),
+        safeEndBeforePotentialMarkup(source, start),
+    );
+
+    const safeEndInsideCapture = (source, start, mode) => (
+        mode === 'thinking'
+            ? safeEndBeforePartialTag(source, start, INLINE_THINK_CLOSE)
+            : safeEndBeforePotentialMarkup(source, start)
+    );
+
+    return {
+        consume(input) {
+            if (!input && !pending) return { text: '', thinking: '' };
+            const source = pending + input;
+            const lower = source.toLowerCase();
+            let text = '';
+            let thinking = '';
+            pending = '';
+
+            let index = 0;
+            while (index < source.length) {
+                if (captureMode) {
+                    const close = findCloseTag(source, lower, index, captureMode);
+                    if (!close) {
+                        const safeEnd = safeEndInsideCapture(source, index, captureMode);
+                        thinking += source.slice(index, safeEnd);
+                        pending = source.slice(safeEnd);
+                        return { text, thinking };
+                    }
+                    thinking += source.slice(index, close.start);
+                    index = close.end;
+                    captureMode = null;
+                    continue;
+                }
+
+                const open = findNextOpenTag(source, lower, index);
+                if (!open) {
+                    const safeEnd = safeEndOutsideCapture(source, index);
+                    text += source.slice(index, safeEnd);
+                    pending = source.slice(safeEnd);
+                    return { text, thinking };
+                }
+
+                text += source.slice(index, open.start);
+                index = open.end;
+                captureMode = open.mode;
+            }
+
+            return { text, thinking };
+        },
+        flush() {
+            if (!pending) return { text: '', thinking: '' };
+            const value = pending;
+            pending = '';
+            return captureMode ? { text: '', thinking: value } : { text: value, thinking: '' };
+        },
+    };
+}
 
 /* ---------- 上下文查看器弹窗组件 ---------- */
 function ContextViewerModal({ viewingContext, onClose }) {
@@ -22,12 +140,13 @@ function ContextViewerModal({ viewingContext, onClose }) {
     const [copied, setCopied] = useState(false);
     const { context, rawRequest } = viewingContext || {};
 
-    const handleCopy = () => {
+    const handleCopy = async () => {
         const text = rawRequest ? JSON.stringify(rawRequest, null, 2) : '';
-        navigator.clipboard.writeText(text).then(() => {
+        const ok = await copyTextToClipboard(text);
+        if (ok) {
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
-        });
+        }
     };
 
     return (
@@ -536,6 +655,13 @@ export default function AiSidebar({ onInsertText }) {
 
     const onClose = useCallback(() => setAiSidebarOpen(false), [setAiSidebarOpen]);
     const onOpenSettings = useCallback(() => { setAiSidebarOpen(false); setShowSettings('settings'); }, [setAiSidebarOpen, setShowSettings]);
+    const handleCopyText = useCallback(async (text) => {
+        const ok = await copyTextToClipboard(text);
+        showToast?.(
+            ok ? t('aiSidebar.toastCopied') : t('aiSidebar.toastCopyFailed'),
+            ok ? 'success' : 'error',
+        );
+    }, [showToast, t]);
 
     // 派生状态
     const activeSession = useMemo(() => getActiveSession(sessionStore), [sessionStore]);
@@ -760,6 +886,7 @@ export default function AiSidebar({ onInsertText }) {
         let fullThinking = '';
         let usageData = null;
         let toolCalls = []; // 收集工具调用结果
+        const inlineThinking = createInlineThinkingFilter();
 
         while (true) {
             const { done, value } = await reader.read();
@@ -775,7 +902,12 @@ export default function AiSidebar({ onInsertText }) {
                     try {
                         const json = JSON.parse(trimmed.slice(6));
                         if (json.thinking) { fullThinking += json.thinking; hasUpdate = true; }
-                        if (json.text) { fullText += json.text; hasUpdate = true; }
+                        if (json.text) {
+                            const parsed = inlineThinking.consume(json.text);
+                            if (parsed.text) fullText += parsed.text;
+                            if (parsed.thinking) fullThinking += parsed.thinking;
+                            hasUpdate = hasUpdate || !!parsed.text || !!parsed.thinking;
+                        }
                         if (json.usage) { usageData = json.usage; }
                         // 工具调用事件
                         if (json.codeExec) { toolCalls.push({ type: 'codeExec', ...json.codeExec }); hasUpdate = true; }
@@ -785,6 +917,13 @@ export default function AiSidebar({ onInsertText }) {
                 }
             }
             if (hasUpdate) onUpdate(fullText, fullThinking, toolCalls);
+        }
+
+        const flushed = inlineThinking.flush();
+        if (flushed.text || flushed.thinking) {
+            fullText += flushed.text;
+            fullThinking += flushed.thinking;
+            onUpdate(fullText, fullThinking, toolCalls);
         }
 
         // 记录 token 统计
@@ -1839,7 +1978,7 @@ export default function AiSidebar({ onInsertText }) {
                                                                         <span className="settings-action-badge">{t(`aiSidebar.actions.${action.action}`) || action.action}</span>
                                                                         <span className="settings-action-cat">{t(`aiSidebar.categories.${action.category}`) || action.category || ''}</span>
                                                                         <span className="settings-action-name">{action.name || (action.nodeId && contextItems?.find(ci => ci._nodeId === action.nodeId)?.name) || ''}</span>
-                                                                        <span style={{ marginLeft: 'auto', fontSize: '10px', color: 'var(--text-muted)' }}>{expandedActions.has(actionKey) ? '▲...' : '▼...'}</span>
+                                                                        <span style={{ marginLeft: 'auto', fontSize: 'var(--ui-font-size-xs)', color: 'var(--text-muted)' }}>{expandedActions.has(actionKey) ? '▲...' : '▼...'}</span>
                                                                     </div>
                                                                     {action.content && expandedActions.has(actionKey) && (
                                                                         <div className="settings-action-preview">
@@ -1868,7 +2007,7 @@ export default function AiSidebar({ onInsertText }) {
                                                                                 border: '1px solid var(--border-color, rgba(200,200,200,0.3))',
                                                                                 color: 'var(--text-secondary)',
                                                                                 display: 'inline-flex', alignItems: 'center', gap: '3px',
-                                                                                cursor: 'pointer', borderRadius: '4px', padding: '3px 8px', fontSize: '11px',
+                                                                                cursor: 'pointer', borderRadius: '4px', padding: '3px 8px', fontSize: 'var(--ui-font-size-xs)',
                                                                             }}
                                                                         >
                                                                             <Trash2 size={11} /> {t('aiSidebar.actionsDelete') || '删除'}
@@ -1925,7 +2064,7 @@ export default function AiSidebar({ onInsertText }) {
                                                     className="btn-mini"
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                        navigator.clipboard.writeText(msg.content || '');
+                                                        handleCopyText(msg.content || '');
                                                     }}
                                                 >{t('aiSidebar.copy')}</button>
                                             </div>
@@ -2038,7 +2177,7 @@ export default function AiSidebar({ onInsertText }) {
                                                     <button className="btn-mini" onClick={(e) => { e.stopPropagation(); onInsertText?.(item.text); }}>
                                                         {t('aiSidebar.insertEditor')}
                                                     </button>
-                                                    <button className="btn-mini" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(item.text); }}>
+                                                    <button className="btn-mini" onClick={(e) => { e.stopPropagation(); handleCopyText(item.text); }}>
                                                         {t('aiSidebar.copy')}
                                                     </button>
                                                     <button className="btn-mini danger" onClick={(e) => { e.stopPropagation(); handleDeleteArchiveItem(item.id); }}>
@@ -2432,7 +2571,7 @@ export default function AiSidebar({ onInsertText }) {
                             </div>
                             <textarea
                                 className="chat-input"
-                                style={{ flex: 1, resize: 'none', fontSize: 14, padding: 12 }}
+                                style={{ flex: 1, resize: 'none', fontSize: 'var(--ui-font-size)', padding: 12 }}
                                 placeholder={chatInputPlaceholder}
                                 value={inputText}
                                 onChange={e => setInputText(e.target.value)}
@@ -2446,7 +2585,7 @@ export default function AiSidebar({ onInsertText }) {
                                 autoFocus
                             />
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{chatInputSendHint}</div>
+                                <div style={{ fontSize: 'var(--ui-font-size-sm)', color: 'var(--text-muted)' }}>{chatInputSendHint}</div>
                                 <div style={{ display: 'flex', gap: 8 }}>
                                     <button className="btn" onClick={() => setInputExpanded(false)}>{t('common.cancel')}</button>
                                     <button

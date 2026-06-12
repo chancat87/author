@@ -949,29 +949,30 @@ function ChapterSynopsisOverviewModal({
     };
 
     const handleGenerateSingle = async (targetEntry = selectedEntry) => {
-        if (!targetEntry || singleBusy) return;
-        const isCurrentEntry = selectedEntry?.chapter.id === targetEntry.chapter.id;
-        const targetLocked = isCurrentEntry ? singleLocked : targetEntry.synopsis.locked;
+        const entry = targetEntry?.chapter?.id ? targetEntry : selectedEntry;
+        if (!entry?.chapter?.id || singleBusy) return;
+        const isCurrentEntry = selectedEntry?.chapter?.id === entry.chapter.id;
+        const targetLocked = isCurrentEntry ? singleLocked : !!entry.synopsis?.locked;
 
-        setSelectedId(targetEntry.chapter.id);
+        setSelectedId(entry.chapter.id);
         setActiveView('single');
 
         if (targetLocked) {
             showToast?.('当前概要已锁定，取消锁定后再生成', 'info');
             return;
         }
-        const plainText = stripChapterHtml(targetEntry.chapter.content || '');
+        const plainText = stripChapterHtml(entry.chapter.content || '');
         if (plainText.length < 20) {
             setSingleError('正文太短，暂时无法生成有效概要');
             showToast?.('正文太短，暂时无法生成有效概要', 'info');
             return;
         }
         setSingleBusy(true);
-        setSingleGeneratingId(targetEntry.chapter.id);
+        setSingleGeneratingId(entry.chapter.id);
         setSingleError('');
         try {
             const { apiConfig } = getProjectSettings();
-            const { systemPrompt, userPrompt } = buildSynopsisPrompts(targetEntry.chapter);
+            const { systemPrompt, userPrompt } = buildSynopsisPrompts(entry.chapter);
             const response = await fetch(resolveAiEndpoint(apiConfig), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1540,7 +1541,7 @@ function ChapterSynopsisOverviewModal({
                                     {singleError && <div className="chapter-synopsis-error">{singleError}</div>}
                                     <div className="synopsis-inspector-actions">
                                         <button className="btn btn-ghost btn-sm" onClick={handleClearSingle} disabled={singleBusy}>清空</button>
-                                        <button className="btn btn-secondary btn-sm" onClick={handleGenerateSingle} disabled={singleBusy || singleLocked}>
+                                        <button className="btn btn-secondary btn-sm" onClick={() => handleGenerateSingle()} disabled={singleBusy || singleLocked}>
                                             {singleBusy ? <RefreshCw size={14} className="spin" /> : <Sparkles size={14} />}
                                             AI 生成
                                         </button>
@@ -2719,12 +2720,15 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                     <div className="sidebar-nav-top">
                         {/* 章节 */}
                         <IconButton icon={<BookOpen size={18} />} label={t('sidebar.chapterList') || '章节大纲'} text={sidebarOpen ? (t('sidebar.navChapter') || '章节') : undefined} tooltipSide="right" className={`nav-item ${activeNavTab === 'chapters' ? 'active' : ''}`} onClick={() => { if (activeNavTab === 'chapters' && sidebarOpen) { setSidebarOpen(false); } else { setActiveNavTab('chapters'); setSidebarOpen(true); } }} />
-                        
+
+                        {/* 概要 */}
+                        <IconButton icon={<FileText size={18} />} label="章节概要总览" text={sidebarOpen ? '概要' : undefined} tooltipSide="right" className={`nav-item ${synopsisOverviewModal ? 'active' : ''}`} onClick={handleOpenSynopsisOverview} />
+
                         {/* 作品信息 */}
                         <IconButton icon={<Book size={18} />} label={'作品信息'} text={sidebarOpen ? '作品' : undefined} tooltipSide="right" className="nav-item" onClick={() => setShowBookInfo(true)} />
-                        
+
                         <div className="nav-category-divider" />
-                        
+
                         {/* 设定集 + 分类快捷入口 视觉分组 */}
                         <div className="nav-settings-group" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', borderWidth: 1, borderStyle: 'solid', borderColor: 'var(--border-light, #e5e7eb)', borderRadius: 12, padding: '4px 2px', margin: '0 3px', background: 'var(--bg-secondary, #f9fafb)', gap: 1 }}>
                         {/* 设定集 — 弹出缩略图菜单 */}

@@ -1,18 +1,25 @@
-## v1.2.40 — 修复 AI 兼容性、启动存储与移动端思考流
+## v1.2.41 — 修复编辑器、AI 助手与 WebDAV 双端同步
 
 ### 中文
 
 #### 桌面端 / Web
 
-- 修复自定义 OpenAI 兼容 Embedding 中转调用 Qwen 等模型时，`encoding_format` 被中转转为空字符串导致 400 的问题；现在会显式请求 `float` 格式，并更清楚地展示中转返回的 `errors.message`。
-- 修复 Windows 下本地存储探活写入 `__ping.json` 时偶发 `EPERM`，导致页面初始化一直转圈的问题；存储写入现在会在目标文件短暂占用时安全重试。
-- 修复切换章节时编辑器工具栏高度观察反复重建造成的抖动；工具栏高度现在保持稳定。
+- 修复连续空行导致编辑器光标落入 0 高度段落、看起来消失的问题；保留用户用多空行分隔内容的写作习惯。
+- 修复 AI 内联润色偶发 `Selection passed to setSelection must point at the current document` 的选择区异常。
+- 修复 AI 生成设定卡时 `content` 被拆成逐字字段的问题，并收紧提示词要求结构化输出。
+- 修复 AI 对话气泡和代码块的「复制」按钮在网页端无反应的问题，增加剪贴板权限失败时的兼容兜底与提示。
+- 修复网页端中文引号/中文文本优先字体显示不一致的问题，并将编辑器列表、任务、引用、代码按钮换成更统一的图标。
+- 修复 Windows 桌面端标题栏偶发持续闪烁的问题，固定窗口标题并关闭菜单栏标题更新干扰。
+- 修复章节概要单章生成按钮把点击事件当作章节数据导致的崩溃。
+- 新增正文之外的界面文字大小设置，覆盖 AI 助手、历史、参考面板等非正文区域。
+- 修复 WebDAV 地址或远端目录包含中文、已编码中文、`%` 或反斜杠路径时，桌面/Web 同步失败或路径不一致的问题。
 
 #### Android 端
 
-- Android 版本更新为 `1.2.40+1240`。
-- 修复 Claude / OpenAI 兼容流式输出中 `<think>...</think>` 片段被显示到正文的问题；即使标签被拆在多个 SSE 分片里，也会被归入 thinking。
-- 修复 AI 对话顶部模型切换入口首次点击无反应的问题；模型列表为空或仍在加载时也会打开选择面板并刷新模型。
+- Android 版本更新为 `1.2.41+1241`。
+- 修复移动端把长文章引用到 AI 对话时，后半段被省略成三个点的问题。
+- 修复移动端 WebDAV 中文路径、混合编码路径与桌面/Web 端路径规则不一致的问题；双端现在使用同一套远端路径和 key 文件名规范。
+- 补充 AI 流式输出兼容性测试，覆盖 `<think>` 标签跨分片和工具调用标签过滤。
 
 ---
 
@@ -20,12 +27,19 @@
 
 #### Desktop / Web
 
-- Fixed custom OpenAI-compatible embedding relays returning 400 for Qwen and similar embedding models when `encoding_format` was forwarded as an empty string. The app now explicitly requests `float` format and surfaces relay `errors.message` details more clearly.
-- Fixed an intermittent Windows local-storage `EPERM` while writing `__ping.json`, which could leave the app spinning during startup. Storage writes now retry safely when the destination file is briefly locked.
-- Fixed editor toolbar jitter when switching chapters by keeping toolbar height observation stable.
+- Fixed the editor caret disappearing when users insert consecutive blank lines; intentional multi-blank spacing is preserved.
+- Fixed an intermittent inline AI polish selection error: `Selection passed to setSelection must point at the current document`.
+- Fixed AI-generated settings cards being split into one-character fields, and tightened the prompt contract for structured settings output.
+- Fixed the AI chat bubble and code-block Copy buttons doing nothing on web by adding a clipboard fallback and user feedback.
+- Fixed web Chinese quote/font rendering priority, and replaced the list/task/quote/code toolbar text buttons with consistent icons.
+- Fixed intermittent Windows desktop title-bar flicker by keeping the window title stable and suppressing menu/title update interference.
+- Fixed a chapter synopsis single-generation crash caused by treating the click event as the target chapter entry.
+- Added a non-editor UI text size setting for AI assistant chats, history, reference panels, and related chrome.
+- Fixed WebDAV sync failures or path mismatches when the endpoint or remote directory contains Chinese text, already encoded Chinese, `%`, or backslash path separators.
 
 #### Android
 
-- Android is now version `1.2.40+1240`.
-- Fixed Claude / OpenAI-compatible streamed `<think>...</think>` fragments leaking into the visible answer; split tags across SSE chunks are now routed into thinking output.
-- Fixed the first tap on the AI chat model switcher doing nothing when the model list is empty or still loading; the selector now opens and refreshes models.
+- Android is now version `1.2.41+1241`.
+- Fixed long article references inserted into AI chat being truncated with an ellipsis on mobile.
+- Fixed mobile WebDAV Chinese and mixed-encoded path handling so it matches the desktop/Web remote path and key filename rules.
+- Added AI streaming compatibility coverage for split `<think>` tags and tool-call tag filtering.

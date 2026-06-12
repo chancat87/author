@@ -7,6 +7,117 @@ import { getEmbedding } from './embeddings';
 
 const SETTINGS_KEY = 'author-project-settings';
 
+function isPlainObject(value) {
+    return value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function stringifySettingValue(value) {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    if (Array.isArray(value)) {
+        return value.map(stringifySettingValue).filter(Boolean).join('\n');
+    }
+    if (isPlainObject(value)) {
+        return Object.entries(value)
+            .map(([key, val]) => {
+                const text = stringifySettingValue(val);
+                return text ? `${key}: ${text}` : '';
+            })
+            .filter(Boolean)
+            .join('\n');
+    }
+    return String(value);
+}
+
+function getFallbackContentKey(category) {
+    return category === 'bookInfo' ? 'synopsis' : 'description';
+}
+
+function collapseIndexedContent(values) {
+    const texts = values.map(stringifySettingValue).filter(Boolean);
+    if (texts.length === 0) return '';
+    return texts.every(text => text.length <= 1) ? texts.join('') : texts.join('\n');
+}
+
+function normalizeSettingsContent(content, category) {
+    const fallbackKey = getFallbackContentKey(category);
+    if (content === null || content === undefined) return {};
+
+    if (typeof content !== 'object') {
+        const text = stringifySettingValue(content).trim();
+        return text ? { [fallbackKey]: text } : {};
+    }
+
+    if (Array.isArray(content)) {
+        const text = stringifySettingValue(content).trim();
+        return text ? { [fallbackKey]: text } : {};
+    }
+
+    const normalized = {};
+    const indexedKeys = [];
+
+    for (const [key, value] of Object.entries(content)) {
+        if (/^\d+$/.test(key)) {
+            indexedKeys.push(key);
+            continue;
+        }
+
+        if (key === 'stats' || key.startsWith('_')) {
+            normalized[key] = value;
+            continue;
+        }
+
+        if (value === null || value === undefined) {
+            normalized[key] = '';
+        } else if (typeof value === 'string') {
+            normalized[key] = value;
+        } else if (typeof value === 'number' || typeof value === 'boolean') {
+            normalized[key] = String(value);
+        } else {
+            normalized[key] = stringifySettingValue(value);
+        }
+    }
+
+    if (indexedKeys.length > 0) {
+        const indexedText = collapseIndexedContent(
+            indexedKeys
+                .sort((a, b) => Number(a) - Number(b))
+                .map(key => content[key])
+        ).trim();
+        if (indexedText) {
+            normalized[fallbackKey] = normalized[fallbackKey]
+                ? `${normalized[fallbackKey]}\n${indexedText}`
+                : indexedText;
+        }
+    }
+
+    return normalized;
+}
+
+function normalizeSettingsNode(node) {
+    if (!node || typeof node !== 'object') return node;
+    return {
+        ...node,
+        content: normalizeSettingsContent(node.content, node.category),
+    };
+}
+
+function normalizeSettingsNodesInPlace(nodes) {
+    let changed = false;
+    const now = new Date().toISOString();
+    for (let i = 0; i < nodes.length; i++) {
+        const before = JSON.stringify(nodes[i]?.content ?? {});
+        const normalized = normalizeSettingsContent(nodes[i]?.content, nodes[i]?.category);
+        const after = JSON.stringify(normalized);
+        if (before !== after) {
+            nodes[i] = { ...nodes[i], content: normalized, updatedAt: now };
+            changed = true;
+        }
+    }
+    return changed;
+}
+
 /**
  * 递归提取节点的所有文本内容，用于向量化
  */
@@ -980,8 +1091,9 @@ export async function getSettingsNodes(workId) {
         }
 
         const cycleRepaired = repairParentCycles(nodes, wid);
+        const contentRepaired = normalizeSettingsNodesInPlace(nodes);
 
-        if (repaired || patched || biPatched || rootFolderPatched || cycleRepaired) {
+        if (repaired || patched || biPatched || rootFolderPatched || cycleRepaired || contentRepaired) {
             await persistSet(getNodesKey(wid), nodes);
         }
         return nodes;
@@ -1033,7 +1145,8 @@ function ensurePresetSubFolders(nodes, workId) {
 export async function saveSettingsNodes(nodes, workId) {
     if (typeof window === 'undefined') return;
     const wid = workId || getActiveWorkId() || 'work-default';
-    await persistSet(getNodesKey(wid), nodes);
+    const normalizedNodes = Array.isArray(nodes) ? nodes.map(normalizeSettingsNode) : nodes;
+    await persistSet(getNodesKey(wid), normalizedNodes);
 }
 
 /**
@@ -1123,7 +1236,7 @@ export async function addSettingsNode({ name, type, category, parentId, icon, co
         parentId: parentId || null,
         order: siblings.length,
         icon: icon || '',
-        content: content || {},
+        content: normalizeSettingsContent(content, category || 'custom'),
         collapsed: false,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -1155,27 +1268,31 @@ export async function updateSettingsNode(id, updates, currentNodes, workId) {
     const nodes = currentNodes || await getSettingsNodes(targetWorkId);
     const idx = nodes.findIndex(n => n.id === id);
     if (idx === -1) return null;
+    const safeUpdates = { ...(updates || {}) };
+    if (Object.prototype.hasOwnProperty.call(safeUpdates, 'content')) {
+        safeUpdates.content = normalizeSettingsContent(safeUpdates.content, safeUpdates.category || nodes[idx].category);
+    }
     const isProtected = GLOBAL_ROOT_CATEGORIES.some(c => c.id === id) ||
         nodes[idx].type === 'work' ||
         (nodes[idx].parentId && nodes.some(p => p.id === nodes[idx].parentId && p.type === 'work') && WORK_SUB_CATEGORIES.some(c => id.endsWith('-' + c.suffix)));
     if (isProtected) {
-        delete updates.type;
-        delete updates.category;
-        delete updates.parentId;
+        delete safeUpdates.type;
+        delete safeUpdates.category;
+        delete safeUpdates.parentId;
     }
-    if (updates.parentId !== undefined && wouldCreateParentCycle(nodes, id, updates.parentId)) {
+    if (safeUpdates.parentId !== undefined && wouldCreateParentCycle(nodes, id, safeUpdates.parentId)) {
         throw new Error('不能把分类移动到自身或它的子分类下');
     }
 
     // 先立即保存内容（不等 embedding），确保数据不丢失
-    nodes[idx] = { ...nodes[idx], ...updates, updatedAt: new Date().toISOString() };
+    nodes[idx] = { ...nodes[idx], ...safeUpdates, updatedAt: new Date().toISOString() };
     await saveSettingsNodes(nodes, targetWorkId);
 
     // 如果名称或内容发生改变，且是条目，且开启了嵌入功能，延迟计算 embedding
     // 使用 3 秒防抖，避免输入过程中频繁调用 embedding API
-    const nodeType = updates.type || nodes[idx].type;
+    const nodeType = safeUpdates.type || nodes[idx].type;
     const { apiConfig } = getProjectSettings();
-    if (nodeType === 'item' && apiConfig.useCustomEmbed && (updates.name !== undefined || updates.content !== undefined)) {
+    if (nodeType === 'item' && apiConfig.useCustomEmbed && (safeUpdates.name !== undefined || safeUpdates.content !== undefined)) {
         clearTimeout(_embeddingTimers[id]);
         _embeddingTimers[id] = setTimeout(async () => {
             try {

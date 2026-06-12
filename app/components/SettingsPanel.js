@@ -11,7 +11,7 @@ import {
     Heart, Star, Shield, Zap, Feather, Compass, Flag, Tag, Layers,
     Bookmark, Crown, Flame, Lightbulb, Music, Palette, Sword, Target,
     Moon, Sun, Cloud, CloudOff, TreePine, Mountain, Waves, Building, Car,
-    Keyboard, Plus
+    Keyboard, Plus, Type
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import {
@@ -1464,10 +1464,13 @@ function PreferencesForm() {
         sidebarPushMode, setSidebarPushMode,
         aiSidebarPushMode, setAiSidebarPushMode,
         chatSendShortcutMode, setChatSendShortcutMode,
+        uiFontSize, setUiFontSize,
         setShowSyncGuideModal,
     } = useAppStore();
     const { t } = useI18n();
     const normalizedChatSendShortcutMode = chatSendShortcutMode === 'ctrlEnter' ? 'ctrlEnter' : 'enter';
+    const rawUiFontSize = Number(uiFontSize);
+    const normalizedUiFontSize = Number.isFinite(rawUiFontSize) ? Math.min(18, Math.max(12, Math.round(rawUiFontSize))) : 13;
 
     // ---- Firebase 账户 ----
     const [authUser, setAuthUser] = useState(null);
@@ -1872,6 +1875,44 @@ function PreferencesForm() {
                             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{theme.desc}</div>
                         </button>
                     ))}
+                </div>
+            </div>
+
+            {/* 正文之外的界面文字大小 */}
+            <div style={{ marginBottom: 28 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 12 }}>
+                    <Type size={14} /> {t('preferences.uiFontSizeLabel')}
+                </label>
+                <div style={{ padding: '16px 18px', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', background: 'var(--bg-primary)', boxShadow: 'var(--shadow-sm)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 12 }}>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                            {t('preferences.uiFontSizeDesc')}
+                        </div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+                            {normalizedUiFontSize}px
+                        </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{t('preferences.uiFontSizeSmall')}</span>
+                        <input
+                            type="range"
+                            min="12"
+                            max="18"
+                            step="1"
+                            value={normalizedUiFontSize}
+                            onChange={e => setUiFontSize(e.target.value)}
+                            style={{ flex: 1, accentColor: 'var(--accent)', cursor: 'pointer' }}
+                        />
+                        <span style={{ fontSize: 15, color: 'var(--text-muted)', flexShrink: 0 }}>{t('preferences.uiFontSizeLarge')}</span>
+                        <button
+                            className="btn btn-ghost btn-sm"
+                            style={{ fontSize: 11, padding: '5px 10px', whiteSpace: 'nowrap' }}
+                            onClick={() => setUiFontSize(13)}
+                            disabled={normalizedUiFontSize === 13}
+                        >
+                            {t('preferences.uiFontSizeReset')}
+                        </button>
+                    </div>
                 </div>
             </div>
 

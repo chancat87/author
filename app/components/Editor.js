@@ -24,7 +24,10 @@ import RemarkMark, { promptForRemark } from './RemarkMark';
 import EditorBubbleMenu from './EditorBubbleMenu';
 import { createSlashExtension, SlashCommandMenu } from './SlashCommands';
 import { useEffect, useCallback, useRef, useState, useMemo, useId, forwardRef, useImperativeHandle } from 'react';
-import { ChevronUp, ChevronDown, Undo2, Redo2, Wand2, MessageSquareText, Flag } from 'lucide-react';
+import {
+    ChevronUp, ChevronDown, Undo2, Redo2, Wand2, MessageSquareText, Flag,
+    List, ListOrdered, ListChecks, Quote, Code2,
+} from 'lucide-react';
 import { ragRecommend } from '../lib/context-engine';
 import { useAppStore } from '../store/useAppStore';
 import ModelPicker from './ModelPicker';
@@ -100,6 +103,27 @@ function clampDocPosition(doc, pos) {
     const max = Math.max(0, doc.content.size);
     if (!Number.isFinite(pos)) return max;
     return Math.max(0, Math.min(Math.round(pos), max));
+}
+
+const MAX_PASTE_BLANK_RUN = 8;
+const PRESERVED_PASTE_BLANK_RUN = 4;
+
+function limitPastedPlainTextBlankRuns(text) {
+    return text
+        .replace(new RegExp(`(?:\\r\\n){${MAX_PASTE_BLANK_RUN},}`, 'g'), '\r\n'.repeat(PRESERVED_PASTE_BLANK_RUN))
+        .replace(new RegExp(`\\n{${MAX_PASTE_BLANK_RUN},}`, 'g'), '\n'.repeat(PRESERVED_PASTE_BLANK_RUN));
+}
+
+function limitPastedHtmlBlankRuns(html) {
+    return html
+        .replace(
+            new RegExp(`(?:<p[^>]*>\\s*(?:<br\\s*\\/?>)?\\s*<\\/p>\\s*){${MAX_PASTE_BLANK_RUN},}`, 'gi'),
+            '<p><br></p>'.repeat(PRESERVED_PASTE_BLANK_RUN),
+        )
+        .replace(
+            new RegExp(`(?:<br\\s*\\/?>\\s*){${MAX_PASTE_BLANK_RUN},}`, 'gi'),
+            '<br>'.repeat(PRESERVED_PASTE_BLANK_RUN),
+        );
 }
 
 function saveEditorPositionSnapshot(targetEditor, workId, chapterId, container) {
@@ -366,17 +390,14 @@ const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-d
             attributes: {
                 class: 'tiptap',
             },
-            // 修复：从对话中复制 MD 格式粘贴时连续空行产生大量空段落导致排版空白过大
+            // 保留作者有意使用的多空行，只限制极端粘贴噪声
             handlePaste: (view, event) => {
                 const html = event.clipboardData?.getData('text/html');
                 const text = event.clipboardData?.getData('text/plain');
                 if (!text && !html) return false;
 
                 if (html) {
-                    // HTML 粘贴：清理连续空段落 <p><br></p><p><br></p>... → 只保留一个
-                    const cleaned = html
-                        .replace(/(<p[^>]*>\s*(?:<br\s*\/?>)?\s*<\/p>\s*){2,}/gi, '<p><br></p>')
-                        .replace(/(<br\s*\/?>\s*){3,}/gi, '<br><br>');
+                    const cleaned = limitPastedHtmlBlankRuns(html);
                     if (cleaned !== html) {
                         event.preventDefault();
                         const container = document.createElement('div');
@@ -389,8 +410,7 @@ const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-d
                     return false; // HTML 无需清理，走默认流程
                 }
 
-                // 纯文本 Markdown 粘贴：3+ 连续换行 → 2个（一个段落分隔）
-                const cleaned = text.replace(/\n{3,}/g, '\n\n').replace(/(\r\n){3,}/g, '\r\n\r\n');
+                const cleaned = limitPastedPlainTextBlankRuns(text);
                 if (cleaned === text) return false; // 无变化，走默认
 
                 // 用 editor 的 markdown parser 解析清理后的文本
@@ -1476,9 +1496,9 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
             originalRangeRef.current = { from, to };
             const deleteMarkType = editor.state.schema.marks.aiDiffDelete;
             if (deleteMarkType) {
-                const tr = editor.state.tr
-                    .addMark(from, to, deleteMarkType.create())
-                    .setSelection(TextSelection.create(editor.state.doc, to));
+                let tr = editor.state.tr.addMark(from, to, deleteMarkType.create());
+                const safeTo = clampDocPosition(tr.doc, to);
+                tr = tr.setSelection(TextSelection.create(tr.doc, safeTo));
                 tr.removeStoredMark(deleteMarkType);
                 editor.view.dispatch(tr);
             } else {
@@ -2031,13 +2051,16 @@ function ColorPicker({ label, currentColor, onSelect, onClose, style }) {
 }
 
 // ==================== 字体族选项 ====================
+const CJK_SERIF_FONT_STACK = '"Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun", "STSong", serif';
+const CJK_SANS_FONT_STACK = '"Noto Sans SC", "Microsoft YaHei", "PingFang SC", "Heiti SC", sans-serif';
+
 const FONT_FAMILIES = [
     { label: '默认（宋体）', value: '' },
-    { label: '黑体', value: '"Noto Sans SC", "Microsoft YaHei", sans-serif' },
-    { label: '楷体', value: '"KaiTi", "STKaiti", serif' },
-    { label: '仿宋', value: '"FangSong", "STFangsong", serif' },
-    { label: 'serif', value: '"Noto Serif SC", "Source Han Serif SC", Georgia, serif' },
-    { label: 'monospace', value: '"SF Mono", "Cascadia Code", "Consolas", monospace' },
+    { label: '黑体', value: CJK_SANS_FONT_STACK },
+    { label: '楷体', value: '"KaiTi", "Kaiti SC", "STKaiti", "SimKai", "SimSun", serif' },
+    { label: '仿宋', value: '"FangSong", "STFangsong", "FangSong_GB2312", "SimSun", serif' },
+    { label: 'serif', value: CJK_SERIF_FONT_STACK },
+    { label: 'monospace', value: '"NSimSun", "SimSun", "SF Mono", "Cascadia Code", "Consolas", monospace' },
 ];
 
 const FONT_SIZES = [12, 14, 15, 16, 17, 18, 20, 22, 24, 28, 32];
@@ -2407,11 +2430,11 @@ function EditorToolbar({ editor, margins, setMargins, chapterNumberingIgnored = 
 
             {/* 列表和引用 */}
             <div className="toolbar-group">
-                <button className={`toolbar-btn ${editor.isActive('bulletList') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleBulletList().run()} title="无序列表">• 列</button>
-                <button className={`toolbar-btn ${editor.isActive('orderedList') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleOrderedList().run()} title="有序列表">1. 列</button>
-                <button className={`toolbar-btn ${editor.isActive('taskList') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleTaskList().run()} title="任务列表">☑ 任</button>
-                <button className={`toolbar-btn ${editor.isActive('blockquote') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleBlockquote().run()} title="引用块">❝ 引</button>
-                <button className={`toolbar-btn ${editor.isActive('codeBlock') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleCodeBlock().run()} title="代码块">&lt;/&gt;</button>
+                <button className={`toolbar-btn ${editor.isActive('bulletList') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleBulletList().run()} title="无序列表"><List size={16} strokeWidth={2.3} /></button>
+                <button className={`toolbar-btn ${editor.isActive('orderedList') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleOrderedList().run()} title="有序列表"><ListOrdered size={16} strokeWidth={2.3} /></button>
+                <button className={`toolbar-btn ${editor.isActive('taskList') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleTaskList().run()} title="任务列表"><ListChecks size={16} strokeWidth={2.3} /></button>
+                <button className={`toolbar-btn ${editor.isActive('blockquote') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleBlockquote().run()} title="引用块"><Quote size={16} strokeWidth={2.3} /></button>
+                <button className={`toolbar-btn ${editor.isActive('codeBlock') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleCodeBlock().run()} title="代码块"><Code2 size={16} strokeWidth={2.3} /></button>
                 <button className="toolbar-btn" onClick={() => {
                     openMathEditor('', (latex) => {
                         editor.chain().focus().insertContent({ type: 'mathInline', attrs: { latex } }).run();

@@ -2,6 +2,28 @@ import { create } from 'zustand';
 import { useRef, useState, useEffect } from 'react';
 import { persistSet } from '../lib/persistence';
 
+const UI_FONT_SIZE_KEY = 'author-ui-font-size';
+const DEFAULT_UI_FONT_SIZE = 13;
+const MIN_UI_FONT_SIZE = 12;
+const MAX_UI_FONT_SIZE = 18;
+
+function normalizeUiFontSize(value) {
+    if (value === null || value === undefined || value === '') return DEFAULT_UI_FONT_SIZE;
+    const size = Number(value);
+    if (!Number.isFinite(size)) return DEFAULT_UI_FONT_SIZE;
+    return Math.min(MAX_UI_FONT_SIZE, Math.max(MIN_UI_FONT_SIZE, Math.round(size)));
+}
+
+function readStoredUiFontSize() {
+    if (typeof window === 'undefined') return DEFAULT_UI_FONT_SIZE;
+    return normalizeUiFontSize(localStorage.getItem(UI_FONT_SIZE_KEY));
+}
+
+function applyUiFontSize(size) {
+    if (typeof document === 'undefined') return;
+    document.documentElement.style.setProperty('--ui-font-size', `${normalizeUiFontSize(size)}px`);
+}
+
 // ============================================================
 // 内部 store
 // ============================================================
@@ -50,15 +72,25 @@ const store = create((set, get) => ({
         if (typeof window !== 'undefined') localStorage.setItem('author-chat-send-shortcut', normalized);
         return { chatSendShortcutMode: normalized };
     }),
+    uiFontSize: readStoredUiFontSize(),
+    setUiFontSize: (size) => set(() => {
+        const normalized = normalizeUiFontSize(size);
+        if (typeof window !== 'undefined') localStorage.setItem(UI_FONT_SIZE_KEY, String(normalized));
+        applyUiFontSize(normalized);
+        return { uiFontSize: normalized };
+    }),
     _hydrateSidebarModes: () => {
         if (typeof window === 'undefined') return;
         const sp = localStorage.getItem('author-sidebar-push');
         const ap = localStorage.getItem('author-ai-sidebar-push');
         const chatSendShortcut = localStorage.getItem('author-chat-send-shortcut');
+        const uiFontSize = readStoredUiFontSize();
         const updates = {};
         if (sp !== null) updates.sidebarPushMode = sp === 'true';
         if (ap !== null) updates.aiSidebarPushMode = ap === 'true';
         if (chatSendShortcut !== null) updates.chatSendShortcutMode = chatSendShortcut === 'ctrlEnter' ? 'ctrlEnter' : 'enter';
+        updates.uiFontSize = uiFontSize;
+        applyUiFontSize(uiFontSize);
         if (Object.keys(updates).length) set(updates);
     },
 

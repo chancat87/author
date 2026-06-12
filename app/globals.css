@@ -8,12 +8,16 @@
   --transition-normal: 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   --transition-slow: 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 
-  --font-writing: var(--font-noto-serif-sc), 'Source Han Serif SC', 'STSong', Georgia, serif;
-  --font-ui: var(--font-inter), 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-writing: var(--font-noto-serif-sc, 'Noto Serif SC'), 'Source Han Serif SC', 'Songti SC', 'SimSun', 'STSong', 'Microsoft YaHei', serif;
+  --font-ui: var(--font-inter, 'Inter'), 'Noto Sans SC', 'Microsoft YaHei', 'PingFang SC', -apple-system, BlinkMacSystemFont, sans-serif;
 
   --editor-font-size: 17px;
   --editor-line-height: 1.9;
   --editor-max-width: 816px;
+  --ui-font-size: 13px;
+  --ui-font-size-xs: max(10px, calc(var(--ui-font-size) - 2px));
+  --ui-font-size-sm: max(11px, calc(var(--ui-font-size) - 1px));
+  --ui-font-size-lg: calc(var(--ui-font-size) + 2px);
   --top-header-h: 44px;
 }
 
@@ -1752,14 +1756,10 @@ body.resizing .main-content {
 }
 
 
-/* 折叠连续空段落：空段落紧跟空段落时隐藏多余间距，修复 MD 粘贴后大片空白 */
-.tiptap p:empty + p:empty,
-.tiptap p:has(> br:only-child) + p:has(> br:only-child) {
-  margin-bottom: 0;
-  font-size: 0;
-  line-height: 0;
-  height: 0;
-  overflow: hidden;
+/* 保持空段落可见：连续换行时光标不能落进 0 高度段落 */
+.tiptap p:empty,
+.tiptap p:has(> br:only-child) {
+  min-height: calc(var(--editor-font-size) * var(--editor-line-height));
 }
 
 /* 含公式/特殊元素的段落取消首行缩进 */
@@ -2302,7 +2302,7 @@ body.resizing .main-content {
   background: var(--bg-secondary);
   border-radius: var(--radius-md);
   font-family: var(--font-writing);
-  font-size: 15px;
+  font-size: var(--ui-font-size-lg);
   line-height: 1.8;
   color: var(--text-primary);
   white-space: pre-wrap;
@@ -2335,7 +2335,7 @@ body.resizing .main-content {
   color: var(--text-secondary);
   border-radius: 20px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--ui-font-size);
   transition: all var(--transition-fast);
 }
 
@@ -2362,7 +2362,7 @@ body.resizing .main-content {
   border-radius: var(--radius-md);
   background: var(--bg-secondary);
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: var(--ui-font-size);
   font-family: var(--font-ui);
   resize: none;
   outline: none;
@@ -6158,7 +6158,7 @@ body.resizing .main-content {
   border-radius: 20px;
   background: linear-gradient(135deg, var(--accent), var(--accent-hover));
   color: white;
-  font-size: 13px;
+  font-size: var(--ui-font-size);
   font-weight: 600;
   font-family: var(--font-ui);
   cursor: pointer;
@@ -6198,6 +6198,7 @@ body.resizing .main-content {
   transition: transform 0.3s ease, opacity 0.3s ease;
   transform: translateX(0);
   overflow-x: clip;
+  font-size: var(--ui-font-size);
 }
 
 /* AI 侧栏打开时，编辑区右移让出滚动条（挤开模式） */
@@ -6243,7 +6244,7 @@ body.resizing .main-content {
 
 .ai-sidebar-title {
   font-weight: 700;
-  font-size: 16px;
+  font-size: var(--ui-font-size-lg);
   color: var(--accent);
   letter-spacing: 0.5px;
 }
@@ -6261,7 +6262,7 @@ body.resizing .main-content {
   border: none;
   background: transparent;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--ui-font-size);
   font-family: var(--font-ui);
   cursor: pointer;
   border-bottom: 2.5px solid transparent;
@@ -6306,7 +6307,7 @@ body.resizing .main-content {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
   color: var(--text-secondary);
   cursor: pointer;
 }
@@ -6324,7 +6325,7 @@ body.resizing .main-content {
   border-radius: 4px;
   background: var(--bg-primary);
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
   font-family: var(--font-ui);
   text-align: center;
 }
@@ -6341,7 +6342,7 @@ body.resizing .main-content {
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--ui-font-size-xs);
   font-family: var(--font-ui);
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -6386,7 +6387,7 @@ body.resizing .main-content {
 }
 
 .summary-editor-label {
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
   color: var(--accent);
   font-weight: 600;
   margin-bottom: 6px;
@@ -6399,7 +6400,7 @@ body.resizing .main-content {
   border-radius: var(--radius-sm);
   background: var(--bg-primary);
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
   font-family: var(--font-ui);
   line-height: 1.5;
   resize: vertical;
@@ -6427,7 +6428,7 @@ body.resizing .main-content {
 }
 
 .summary-undo-bar span {
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
   color: var(--text-secondary);
 }
 
@@ -6457,7 +6458,7 @@ body.resizing .main-content {
   text-align: center;
   color: var(--text-muted);
   padding: 40px 20px;
-  font-size: 14px;
+  font-size: var(--ui-font-size);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -6470,7 +6471,7 @@ body.resizing .main-content {
 }
 
 .chat-empty-hint {
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
 }
 
 .chat-message {
@@ -6483,7 +6484,7 @@ body.resizing .main-content {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: var(--ui-font-size-xs);
   color: var(--text-muted);
 }
 
@@ -6496,7 +6497,7 @@ body.resizing .main-content {
 
 .chat-role {
   font-weight: 600;
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
 }
 
 .chat-message.user .chat-role {
@@ -6536,7 +6537,7 @@ body.resizing .main-content {
   background: none;
   border: 1px solid transparent;
   cursor: pointer;
-  font-size: 11px;
+  font-size: var(--ui-font-size-xs);
   padding: 3px 5px;
   border-radius: 6px;
   opacity: 0.7;
@@ -6564,7 +6565,7 @@ body.resizing .main-content {
 
 /* 已编辑标记 */
 .chat-edited-badge {
-  font-size: 10px;
+  font-size: var(--ui-font-size-xs);
   color: var(--text-muted);
   font-style: italic;
   padding: 1px 6px;
@@ -6599,7 +6600,7 @@ body.resizing .main-content {
   border-radius: 10px;
   background: var(--bg-primary);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--ui-font-size);
   line-height: 1.6;
   resize: vertical;
   font-family: inherit;
@@ -6622,7 +6623,7 @@ body.resizing .main-content {
 .chat-edit-actions .btn-mini {
   border-radius: 8px;
   padding: 5px 14px;
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
   transition: all 0.15s ease;
 }
 
@@ -6637,7 +6638,7 @@ body.resizing .main-content {
 /* ===== 聊天 Markdown 渲染 ===== */
 
 .chat-bubble-content {
-  font-size: 13px;
+  font-size: var(--ui-font-size);
   line-height: 1.7;
   word-break: break-word;
   overflow-wrap: break-word;
@@ -6658,15 +6659,15 @@ body.resizing .main-content {
 }
 
 h3.chat-md-heading {
-  font-size: 15px;
+  font-size: var(--ui-font-size-lg);
 }
 
 h4.chat-md-heading {
-  font-size: 14px;
+  font-size: calc(var(--ui-font-size) + 1px);
 }
 
 h5.chat-md-heading {
-  font-size: 13px;
+  font-size: var(--ui-font-size);
 }
 
 .chat-md-inline-code {
@@ -6697,7 +6698,7 @@ h5.chat-md-heading {
 }
 
 .chat-md-code-lang {
-  font-size: 10px;
+  font-size: var(--ui-font-size-xs);
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -6709,7 +6710,7 @@ h5.chat-md-heading {
   border: none;
   background: transparent;
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--ui-font-size-xs);
   cursor: pointer;
   border-radius: 4px;
   transition: all 0.15s;
@@ -6725,7 +6726,7 @@ h5.chat-md-heading {
   margin: 0;
   padding: 10px 12px;
   overflow-x: auto;
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
   line-height: 1.5;
   font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
   color: var(--text-primary);
@@ -6745,7 +6746,7 @@ h5.chat-md-heading {
 .chat-md-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
 }
 
 .chat-md-table th {
@@ -6779,7 +6780,7 @@ h5.chat-md-heading {
   background: var(--accent-light);
   border-radius: 0 6px 6px 0;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
 }
 
 .chat-md-blockquote p {
@@ -6830,7 +6831,7 @@ h5.chat-md-heading {
   display: inline-block;
   padding: 1px 8px;
   border-radius: 10px;
-  font-size: 10px;
+  font-size: var(--ui-font-size-xs);
   font-weight: 700;
   background: var(--accent);
   color: white;
@@ -6839,12 +6840,12 @@ h5.chat-md-heading {
 }
 
 .settings-action-cat {
-  font-size: 11px;
+  font-size: var(--ui-font-size-xs);
   color: var(--text-muted);
 }
 
 .settings-action-name {
-  font-size: 13px;
+  font-size: var(--ui-font-size);
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -6854,7 +6855,7 @@ h5.chat-md-heading {
   padding: 6px 8px;
   background: var(--bg-secondary);
   border-radius: 6px;
-  font-size: 11px;
+  font-size: var(--ui-font-size-xs);
   line-height: 1.5;
 }
 
@@ -6882,7 +6883,7 @@ h5.chat-md-heading {
   text-align: center;
   border-radius: 8px;
   padding: 5px 0;
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
 }
 
 .settings-action-apply:disabled {
@@ -6924,7 +6925,7 @@ h5.chat-md-heading {
 
 .session-list-header {
   padding: 12px 14px 10px;
-  font-size: 13px;
+  font-size: var(--ui-font-size);
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: 0.3px;
@@ -6948,7 +6949,7 @@ h5.chat-md-heading {
   border-radius: 10px;
   cursor: pointer;
   transition: all 0.18s ease;
-  font-size: 13px;
+  font-size: var(--ui-font-size);
   margin-bottom: 2px;
   border: 1px solid transparent;
   position: relative;
@@ -6986,7 +6987,7 @@ h5.chat-md-heading {
 }
 
 .session-item-title {
-  font-size: 13px;
+  font-size: var(--ui-font-size);
   font-weight: 500;
   color: var(--text-primary);
   overflow: hidden;
@@ -6995,7 +6996,7 @@ h5.chat-md-heading {
 }
 
 .session-item-meta {
-  font-size: 11px;
+  font-size: var(--ui-font-size-xs);
   color: var(--text-muted);
   display: flex;
   gap: 6px;
@@ -7020,7 +7021,7 @@ h5.chat-md-heading {
   border-radius: 8px;
   background: var(--bg-primary);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--ui-font-size);
   font-family: inherit;
   box-shadow: 0 0 0 3px rgba(var(--accent-rgb, 100, 130, 200), 0.12);
 }
@@ -7165,7 +7166,7 @@ h5.chat-md-heading {
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
   color: var(--text-secondary);
   text-align: left;
   transition: background 0.15s;
@@ -7187,7 +7188,7 @@ h5.chat-md-heading {
 
 .thinking-preview {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--ui-font-size-xs);
   opacity: 0.7;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -7198,7 +7199,7 @@ h5.chat-md-heading {
 
 .chat-thinking-content {
   padding: 8px 12px;
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
   line-height: 1.6;
   color: var(--text-secondary);
   white-space: pre-wrap;
@@ -7249,14 +7250,14 @@ h5.chat-md-heading {
   align-items: center;
   gap: 6px;
   padding: 5px 10px;
-  font-size: 11px;
+  font-size: var(--ui-font-size-xs);
   font-weight: 600;
   color: var(--text-secondary);
   border-bottom: 1px solid var(--border-light);
 }
 
 .tool-lang {
-  font-size: 10px;
+  font-size: var(--ui-font-size-xs);
   font-weight: 400;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -7266,7 +7267,7 @@ h5.chat-md-heading {
 .tool-code-block {
   margin: 0;
   padding: 8px 10px;
-  font-size: 11px;
+  font-size: var(--ui-font-size-xs);
   line-height: 1.5;
   font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
   color: var(--text-primary);
@@ -7292,7 +7293,7 @@ h5.chat-md-heading {
   display: inline-block;
   padding: 3px 10px;
   border-radius: 12px;
-  font-size: 11px;
+  font-size: var(--ui-font-size-xs);
   font-weight: 500;
   background: rgba(255, 180, 60, 0.10);
   color: var(--accent);
@@ -7322,7 +7323,7 @@ h5.chat-md-heading {
 }
 
 .variant-indicator {
-  font-size: 11px;
+  font-size: var(--ui-font-size-xs);
   color: var(--text-muted);
   font-weight: 600;
   min-width: 36px;
@@ -7339,7 +7340,7 @@ h5.chat-md-heading {
 .chat-bubble-content {
   padding: 12px 16px;
   border-radius: var(--radius-lg);
-  font-size: 13px;
+  font-size: var(--ui-font-size);
   line-height: 1.6;
   word-break: break-word;
   box-shadow: var(--shadow-sm);
@@ -7370,7 +7371,7 @@ h5.chat-md-heading {
   background: rgba(106, 150, 196, 0.06);
   color: var(--text-secondary);
   border: 1px solid rgba(106, 150, 196, 0.15);
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
   border-radius: var(--radius-sm);
 }
 
@@ -7413,7 +7414,7 @@ h5.chat-md-heading {
   border-radius: 20px;
   background: var(--bg-card);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--ui-font-size);
   font-family: var(--font-ui);
   line-height: 1.5;
   resize: none;
@@ -7479,7 +7480,7 @@ h5.chat-md-heading {
   border-radius: var(--radius-md);
   background: var(--bg-primary);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--ui-font-size);
   font-family: var(--font-ui);
   outline: none;
   transition: border-color var(--transition-fast);
@@ -7520,7 +7521,7 @@ h5.chat-md-heading {
 }
 
 .archive-status {
-  font-size: 11px;
+  font-size: var(--ui-font-size-xs);
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 10px;
@@ -7542,18 +7543,18 @@ h5.chat-md-heading {
 }
 
 .archive-mode {
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
   color: var(--text-secondary);
 }
 
 .archive-time {
-  font-size: 11px;
+  font-size: var(--ui-font-size-xs);
   color: var(--text-muted);
   margin-left: auto;
 }
 
 .archive-preview {
-  font-size: 13px;
+  font-size: var(--ui-font-size);
   line-height: 1.5;
   color: var(--text-secondary);
   white-space: pre-wrap;
@@ -7580,7 +7581,7 @@ h5.chat-md-heading {
 
 .archive-full-text {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--ui-font-size);
   line-height: 1.6;
   color: var(--text-primary);
   white-space: pre-wrap;
@@ -7606,7 +7607,7 @@ h5.chat-md-heading {
 .context-budget-label {
   display: flex;
   justify-content: space-between;
-  font-size: 11px;
+  font-size: var(--ui-font-size-xs);
   color: var(--text-secondary);
   margin-bottom: 5px;
   font-weight: 500;
@@ -7649,7 +7650,7 @@ h5.chat-md-heading {
   border-radius: var(--radius-md);
   background: var(--bg-primary);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--ui-font-size);
   font-family: var(--font-ui);
   outline: none;
   transition: border-color var(--transition-fast);
@@ -7684,7 +7685,7 @@ h5.chat-md-heading {
 }
 
 .context-collapse-icon {
-  font-size: 10px;
+  font-size: var(--ui-font-size-xs);
   color: var(--text-muted);
   width: 14px;
   text-align: center;
@@ -7701,7 +7702,7 @@ h5.chat-md-heading {
 
 .context-group-name {
   flex: 1;
-  font-size: 13px;
+  font-size: var(--ui-font-size);
   font-weight: 600;
   color: var(--text-primary);
   overflow: hidden;
@@ -7710,7 +7711,7 @@ h5.chat-md-heading {
 }
 
 .context-group-tokens {
-  font-size: 11px;
+  font-size: var(--ui-font-size-xs);
   color: var(--text-muted);
   font-family: var(--font-mono, monospace);
   flex-shrink: 0;
@@ -7746,7 +7747,7 @@ h5.chat-md-heading {
 
 .context-item-name {
   flex: 1;
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -7754,7 +7755,7 @@ h5.chat-md-heading {
 }
 
 .context-item-tokens {
-  font-size: 11px;
+  font-size: var(--ui-font-size-xs);
   color: var(--text-muted);
   font-family: var(--font-mono, monospace);
   flex-shrink: 0;
