@@ -14,6 +14,10 @@ const themeInitScript = `
     document.documentElement.setAttribute('data-theme', t);
     var v = localStorage.getItem('author-visual');
     if (v) document.documentElement.setAttribute('data-visual', v);
+    var wf = localStorage.getItem('author-writing-font-family');
+    if (wf && wf.length < 240 && !/[;{}]/.test(wf)) {
+      document.documentElement.style.setProperty('--font-writing', wf);
+    }
   } catch(e) {}
 })();
 `;

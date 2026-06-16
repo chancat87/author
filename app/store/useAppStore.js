@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { useRef, useState, useEffect } from 'react';
 import { persistSet } from '../lib/persistence';
+import { DEFAULT_WRITING_FONT_FAMILY, WRITING_FONT_STORAGE_KEY, normalizeWritingFontFamily } from '../lib/typography';
 
 const UI_FONT_SIZE_KEY = 'author-ui-font-size';
 const DEFAULT_UI_FONT_SIZE = 13;
@@ -22,6 +23,16 @@ function readStoredUiFontSize() {
 function applyUiFontSize(size) {
     if (typeof document === 'undefined') return;
     document.documentElement.style.setProperty('--ui-font-size', `${normalizeUiFontSize(size)}px`);
+}
+
+function readStoredWritingFontFamily() {
+    if (typeof window === 'undefined') return DEFAULT_WRITING_FONT_FAMILY;
+    return normalizeWritingFontFamily(localStorage.getItem(WRITING_FONT_STORAGE_KEY));
+}
+
+function applyWritingFontFamily(fontFamily) {
+    if (typeof document === 'undefined') return;
+    document.documentElement.style.setProperty('--font-writing', normalizeWritingFontFamily(fontFamily));
 }
 
 // ============================================================
@@ -72,6 +83,13 @@ const store = create((set, get) => ({
         if (typeof window !== 'undefined') localStorage.setItem('author-chat-send-shortcut', normalized);
         return { chatSendShortcutMode: normalized };
     }),
+    writingFontFamily: readStoredWritingFontFamily(),
+    setWritingFontFamily: (fontFamily) => set(() => {
+        const normalized = normalizeWritingFontFamily(fontFamily);
+        if (typeof window !== 'undefined') localStorage.setItem(WRITING_FONT_STORAGE_KEY, normalized);
+        applyWritingFontFamily(normalized);
+        return { writingFontFamily: normalized };
+    }),
     uiFontSize: readStoredUiFontSize(),
     setUiFontSize: (size) => set(() => {
         const normalized = normalizeUiFontSize(size);
@@ -85,12 +103,15 @@ const store = create((set, get) => ({
         const ap = localStorage.getItem('author-ai-sidebar-push');
         const chatSendShortcut = localStorage.getItem('author-chat-send-shortcut');
         const uiFontSize = readStoredUiFontSize();
+        const writingFontFamily = readStoredWritingFontFamily();
         const updates = {};
         if (sp !== null) updates.sidebarPushMode = sp === 'true';
         if (ap !== null) updates.aiSidebarPushMode = ap === 'true';
         if (chatSendShortcut !== null) updates.chatSendShortcutMode = chatSendShortcut === 'ctrlEnter' ? 'ctrlEnter' : 'enter';
         updates.uiFontSize = uiFontSize;
+        updates.writingFontFamily = writingFontFamily;
         applyUiFontSize(uiFontSize);
+        applyWritingFontFamily(writingFontFamily);
         if (Object.keys(updates).length) set(updates);
     },
 

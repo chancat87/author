@@ -23,6 +23,10 @@ const DSML_TOOL_OPEN_RE = /<\s*\|\s*\|\s*DSML\s*\|\s*\|\s*tool_calls?\b[^>]*>/ig
 const DSML_TOOL_CLOSE_RE = /<\/\s*\|\s*\|\s*DSML\s*\|\s*\|\s*tool_calls?\s*>/ig;
 const INLINE_MARKUP_PENDING_LIMIT = 96;
 
+function getDialogueSelectionId(messageId) {
+    return `dialogue-${messageId}`;
+}
+
 function createInlineThinkingFilter() {
     let captureMode = null;
     let pending = '';
@@ -720,8 +724,7 @@ export default function AiSidebar({ onInsertText }) {
     const [inputText, setInputText] = useState('');
     const [archiveSearch, setArchiveSearch] = useState('');
     const [expandedArchive, setExpandedArchive] = useState(null);
-    // 对话历史勾选状态
-    const [checkedHistory, setCheckedHistory] = useState(new Set());
+    // 对话历史勾选状态与参考面板中的 dialogue-* 条目共用 contextSelection
     const [slidingWindow, setSlidingWindow] = useState(false);
     const [slidingWindowSize, setSlidingWindowSize] = useState(8);
     // 总结编辑
@@ -755,6 +758,10 @@ export default function AiSidebar({ onInsertText }) {
     const inputRef = useRef(null);
     const abortRef = useRef(null);
     const [viewingContext, setViewingContext] = useState(null); // { context, rawRequest }
+
+    const selectedChatHistory = useMemo(() => {
+        return chatHistory.filter(m => contextSelection?.has(getDialogueSelectionId(m.id)));
+    }, [chatHistory, contextSelection]);
 
     const handleDeleteArchiveItem = useCallback((itemId) => {
         const currentArchive = useAppStore.getState().generationArchive;
@@ -794,33 +801,19 @@ export default function AiSidebar({ onInsertText }) {
         }
     }, [activeTab, open]);
 
-    // 新消息自动加入 checkedHistory（仅追加，不全量重置）
-    useEffect(() => {
-        if (chatHistory.length === 0) {
-            setCheckedHistory(new Set());
-            return;
-        }
-        setCheckedHistory(prev => {
-            const next = new Set(prev);
-            for (const m of chatHistory) {
-                if (!next.has(m.id)) next.add(m.id);
-            }
-            // 清理已删除的消息 ID
-            const currentIds = new Set(chatHistory.map(m => m.id));
-            for (const id of next) {
-                if (!currentIds.has(id)) next.delete(id);
-            }
-            return next;
-        });
-    }, [chatHistory]);
-
     // 滑动窗口联动
     useEffect(() => {
         if (slidingWindow && chatHistory.length > 0) {
-            const recent = chatHistory.slice(-slidingWindowSize);
-            setCheckedHistory(new Set(recent.map(m => m.id)));
+            const currentDialogueIds = new Set(chatHistory.map(m => getDialogueSelectionId(m.id)));
+            const recentDialogueIds = new Set(chatHistory.slice(-slidingWindowSize).map(m => getDialogueSelectionId(m.id)));
+            setContextSelection(prev => {
+                const next = new Set(prev);
+                currentDialogueIds.forEach(id => next.delete(id));
+                recentDialogueIds.forEach(id => next.add(id));
+                return next;
+            });
         }
-    }, [slidingWindow, slidingWindowSize, chatHistory.length]);
+    }, [slidingWindow, slidingWindowSize, chatHistory, setContextSelection]);
 
     // --- 通用 SSE 流式读取，支持 text+thinking+tools ---
     const streamResponse = useCallback(async (apiEndpoint, systemPrompt, userPrompt, apiConfig, onUpdate, onDone, signal) => {
@@ -1003,7 +996,8 @@ export default function AiSidebar({ onInsertText }) {
             if (context.previousChapters) contextSnapshot['前文概要'] = context.previousChapters;
             if (context.currentChapter) contextSnapshot['当前章节'] = context.currentChapter;
             if (context.previousChapterAnchor) contextSnapshot['上一章文风锚点'] = context.previousChapterAnchor;
-            contextSnapshot['对话历史'] = userPrompt;
+            if (historyForApi) contextSnapshot['对话历史'] = historyForApi;
+            contextSnapshot['当前提问'] = `${t('aiSidebar.roleYou')}: ${text}`;
 
             const aiPlaceholder = { id: aiMsgId, role: 'assistant', content: '', thinking: '', toolCalls: [], timestamp: Date.now(), _context: contextSnapshot, _rawRequest: null, _workId: targetWorkId };
             setSessionStore(prev => addMessage(prev, aiPlaceholder));
@@ -1118,7 +1112,7 @@ export default function AiSidebar({ onInsertText }) {
             const context = await buildContext(activeChapterId, userMsg.content, contextSelection.size > 0 ? contextSelection : null, targetWorkId, inputTokenBudget);
             const systemPrompt = compileSystemPrompt(context, 'chat');
             const historyForApi = priorHistory
-                .filter(m => m.role === 'user' || m.role === 'assistant')
+                .filter(m => (m.role === 'user' || m.role === 'assistant') && contextSelection?.has(getDialogueSelectionId(m.id)))
                 .map(m => `${m.role === 'user' ? t('aiSidebar.roleYou') : t('aiSidebar.roleAi')}: ${m.content}`).join('\n');
             const userPrompt = historyForApi ? `${historyForApi}\n${t('aiSidebar.roleYou')}: ${userMsg.content}` : userMsg.content;
 
@@ -1342,10 +1336,9 @@ export default function AiSidebar({ onInsertText }) {
         const text = inputText.trim();
         if (!text || chatStreaming) return;
 
-        const selectedHistory = chatHistory.filter(m => checkedHistory.has(m.id));
-        onChatMessage?.(text, selectedHistory);
+        onChatMessage?.(text, selectedChatHistory);
         setInputText('');
-    }, [inputText, chatStreaming, chatHistory, checkedHistory, onChatMessage]);
+    }, [inputText, chatStreaming, selectedChatHistory, onChatMessage]);
 
     const shouldSendOnKeyDown = useCallback((event) => {
         if (event.key !== 'Enter' || event.nativeEvent?.isComposing || event.isComposing) return false;
@@ -1357,9 +1350,9 @@ export default function AiSidebar({ onInsertText }) {
     const handleResend = useCallback((msgId) => {
         const msg = chatHistory.find(m => m.id === msgId);
         if (!msg || msg.role !== 'user' || chatStreaming) return;
-        const selectedHistory = chatHistory.filter(m => checkedHistory.has(m.id) && m.timestamp < msg.timestamp);
+        const selectedHistory = chatHistory.filter(m => contextSelection?.has(getDialogueSelectionId(m.id)) && m.timestamp < msg.timestamp);
         onChatMessage?.(msg.content, selectedHistory);
-    }, [chatHistory, checkedHistory, chatStreaming, onChatMessage]);
+    }, [chatHistory, contextSelection, chatStreaming, onChatMessage]);
 
     // 思维链折叠状态
     const [expandedThinking, setExpandedThinking] = useState(new Set());
@@ -1395,30 +1388,30 @@ export default function AiSidebar({ onInsertText }) {
 
     // 切换单条历史勾选
     const toggleCheck = (id) => {
-        setCheckedHistory(prev => {
+        setContextSelection(prev => {
             const next = new Set(prev);
-            if (next.has(id)) next.delete(id);
-            else next.add(id);
+            const dialogueId = getDialogueSelectionId(id);
+            if (next.has(dialogueId)) next.delete(dialogueId);
+            else next.add(dialogueId);
             return next;
         });
     };
 
     // 总结历史
     const handleSummarize = useCallback(() => {
-        const checked = chatHistory.filter(m => checkedHistory.has(m.id));
-        if (checked.length < 2) return;
-        const summaryLines = checked.map(m =>
+        if (selectedChatHistory.length < 2) return;
+        const summaryLines = selectedChatHistory.map(m =>
             `${m.role === 'user' ? t('aiSidebar.roleYou') : t('aiSidebar.roleAi')}: ${m.content.slice(0, 80)}${m.content.length > 80 ? '...' : ''}`
         );
         setSummaryDraft(summaryLines.join('\n'));
-    }, [chatHistory, checkedHistory, t]);
+    }, [selectedChatHistory, t]);
 
     // 确认总结
     const confirmSummary = useCallback(() => {
         if (!summaryDraft) return;
         // 保存当前历史以便撤销
-        summaryUndoRef.current = [...chatHistory];
-        const checkedIds = new Set(checkedHistory);
+        summaryUndoRef.current = { messages: [...chatHistory], contextSelection: new Set(contextSelection) };
+        const checkedIds = new Set(selectedChatHistory.map(m => m.id));
         const unchecked = chatHistory.filter(m => !checkedIds.has(m.id));
         const summaryMsg = {
             id: `summary-${Date.now()}`,
@@ -1428,6 +1421,12 @@ export default function AiSidebar({ onInsertText }) {
             isSummary: true,
         };
         setChatHistory?.([...unchecked, summaryMsg]);
+        setContextSelection(prev => {
+            const next = new Set(prev);
+            checkedIds.forEach(id => next.delete(getDialogueSelectionId(id)));
+            next.add(getDialogueSelectionId(summaryMsg.id));
+            return next;
+        });
         setSummaryDraft(null);
         // 显示撤销栏
         setSummaryUndoVisible(true);
@@ -1436,22 +1435,32 @@ export default function AiSidebar({ onInsertText }) {
             setSummaryUndoVisible(false);
             summaryUndoRef.current = null;
         }, 8000);
-    }, [summaryDraft, checkedHistory, chatHistory, setChatHistory]);
+    }, [summaryDraft, selectedChatHistory, chatHistory, contextSelection, setChatHistory, setContextSelection]);
 
     // 撤销总结
     const undoSummary = useCallback(() => {
         if (!summaryUndoRef.current) return;
-        setChatHistory?.(summaryUndoRef.current);
+        const snapshot = summaryUndoRef.current;
+        setChatHistory?.(Array.isArray(snapshot) ? snapshot : snapshot.messages);
+        if (!Array.isArray(snapshot) && snapshot.contextSelection) {
+            setContextSelection(new Set(snapshot.contextSelection));
+        }
         summaryUndoRef.current = null;
         setSummaryUndoVisible(false);
         if (summaryUndoTimerRef.current) clearTimeout(summaryUndoTimerRef.current);
         showToast?.(t('aiSidebar.summaryUndone'), 'success');
-    }, [setChatHistory, showToast, t]);
+    }, [setChatHistory, setContextSelection, showToast, t]);
 
     // 清空对话
     const handleClearChat = () => {
         setChatHistory?.([]);
-        setCheckedHistory(new Set());
+        setContextSelection(prev => {
+            const next = new Set(prev);
+            for (const id of next) {
+                if (String(id).startsWith('dialogue-')) next.delete(id);
+            }
+            return next;
+        });
     };
 
     // 存档过滤
@@ -1777,7 +1786,7 @@ export default function AiSidebar({ onInsertText }) {
                                 <button
                                     className="btn-mini"
                                     onClick={handleSummarize}
-                                    disabled={chatHistory.filter(m => checkedHistory.has(m.id)).length < 2}
+                                    disabled={selectedChatHistory.length < 2}
                                     title={t('aiSidebar.summarizeTitle')}
                                 >
                                     {t('aiSidebar.summarize')}
@@ -1835,7 +1844,7 @@ export default function AiSidebar({ onInsertText }) {
                                         <div className="chat-message-header">
                                             <input
                                                 type="checkbox"
-                                                checked={checkedHistory.has(msg.id)}
+                                                checked={contextSelection?.has(getDialogueSelectionId(msg.id)) || false}
                                                 onChange={() => toggleCheck(msg.id)}
                                                 className="chat-check"
                                             />

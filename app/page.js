@@ -11,6 +11,7 @@ import {
   createChapter,
   updateChapter,
   deleteChapter,
+  generateId,
   exportToMarkdown,
   exportAllToMarkdown,
   migrateGlobalChapters,
@@ -79,6 +80,54 @@ function chooseActiveChapterForWork(chapters, workId) {
 
   const rememberedId = getRememberedChapterId(workId);
   return realChapters.find(ch => ch.id === rememberedId) || realChapters[0];
+}
+
+function stripHtmlForWordCount(html) {
+  if (typeof document !== 'undefined') {
+    const el = document.createElement('div');
+    el.innerHTML = html || '';
+    return (el.textContent || '').replace(/\u00a0/g, ' ');
+  }
+  return String(html || '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(?:p|div|h[1-6]|li)>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/g, ' ');
+}
+
+function countChapterWords(html) {
+  return stripHtmlForWordCount(html).replace(/\s/g, '').length;
+}
+
+function hasChapterText(html) {
+  return countChapterWords(html) > 0;
+}
+
+function mergeChapterHtml(currentHtml, nextHtml) {
+  const current = String(currentHtml || '').trim();
+  const next = String(nextHtml || '').trim();
+  if (!hasChapterText(current)) return next;
+  if (!hasChapterText(next)) return current;
+  return `${current}<p><br></p>${next}`;
+}
+
+function tryNextChapterTitle(title) {
+  const source = String(title || '').trim();
+  const arabic = source.match(/第(\d+)章/);
+  if (arabic) return `第${Number(arabic[1]) + 1}章`;
+  const trailing = source.match(/^(.+?)(\d+)\s*$/);
+  if (trailing) return `${trailing[1]}${Number(trailing[2]) + 1}`;
+  return null;
+}
+
+function makeUniqueChapterTitle(chapters, title) {
+  const existing = new Set((chapters || []).map(ch => ch?.title).filter(Boolean));
+  if (!existing.has(title)) return title;
+  const first = `${title}（新）`;
+  if (!existing.has(first)) return first;
+  let index = 2;
+  while (existing.has(`${title}（新${index}）`)) index++;
+  return `${title}（新${index}）`;
 }
 
 export default function Home() {
@@ -491,7 +540,7 @@ export default function Home() {
           name: `${label}: ${preview}`,
           tokens: estimateTokens(m.content),
           category: 'dialogue',
-          enabled: true,
+          enabled: false,
           _msgId: m.id,
         };
       });
@@ -581,6 +630,86 @@ export default function Home() {
       updateChapterStore(chapterIdToSave, { content: html, wordCount });
     }
   }, [activeChapterId, activeWorkId, updateChapterStore]);
+
+  const handleSplitActiveChapter = useCallback(async (draft) => {
+    if (!activeChapter || !isWritableChapter(activeChapter)) return null;
+    if (!draft || draft.beforeWordCount <= 0 || draft.afterWordCount <= 0) {
+      showToast('请把光标放在正文中间，拆分点前后都需要有内容', 'error');
+      return null;
+    }
+
+    const currentIndex = chapters.findIndex(ch => ch.id === activeChapter.id);
+    if (currentIndex === -1) return null;
+
+    const now = new Date().toISOString();
+    const fallbackTitle = activeChapter.title
+      ? `${activeChapter.title}（下）`
+      : t('sidebar.defaultChapterTitle').replace('{num}', chapters.length + 1);
+    const title = makeUniqueChapterTitle(
+      chapters,
+      tryNextChapterTitle(activeChapter.title) || fallbackTitle,
+    );
+    const newChapter = {
+      id: generateId(),
+      title,
+      content: draft.afterHtml,
+      wordCount: draft.afterWordCount,
+      ...(activeChapter.numberingIgnored ? { numberingIgnored: true } : {}),
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const nextChapters = [...chapters];
+    nextChapters[currentIndex] = {
+      ...activeChapter,
+      content: draft.beforeHtml,
+      wordCount: draft.beforeWordCount,
+      updatedAt: now,
+    };
+    nextChapters.splice(currentIndex + 1, 0, newChapter);
+
+    await saveChapters(nextChapters, activeWorkId);
+    setChapters(nextChapters);
+    setActiveChapterId(newChapter.id);
+    showToast(`已拆分为「${activeChapter.title}」和「${newChapter.title}」`, 'success');
+    return { chapterId: newChapter.id };
+  }, [activeChapter, activeWorkId, chapters, setActiveChapterId, setChapters, showToast, t]);
+
+  const handleMergeNextChapter = useCallback(async ({ currentHtml, currentWordCount } = {}) => {
+    if (!activeChapter || !isWritableChapter(activeChapter)) return null;
+
+    const currentIndex = chapters.findIndex(ch => ch.id === activeChapter.id);
+    if (currentIndex === -1) return null;
+
+    const nextIndex = chapters.findIndex((chapter, index) =>
+      index > currentIndex && isWritableChapter(chapter)
+    );
+    if (nextIndex === -1) {
+      showToast('当前章节后面没有可合并的章节', 'error');
+      return null;
+    }
+
+    const nextChapter = chapters[nextIndex];
+    const baseHtml = typeof currentHtml === 'string' ? currentHtml : activeChapter.content || '';
+    const mergedContent = mergeChapterHtml(baseHtml, nextChapter.content || '');
+    const mergedWordCount = countChapterWords(mergedContent) || currentWordCount || 0;
+    const now = new Date().toISOString();
+    const nextChapters = chapters.map(ch => ch.id === activeChapter.id
+      ? {
+        ...activeChapter,
+        content: mergedContent,
+        wordCount: mergedWordCount,
+        updatedAt: now,
+      }
+      : ch
+    ).filter(ch => ch.id !== nextChapter.id);
+
+    await saveChapters(nextChapters, activeWorkId);
+    setChapters(nextChapters);
+    setActiveChapterId(activeChapter.id);
+    showToast(`已将「${nextChapter.title}」合并到当前章节`, 'success');
+    return { content: mergedContent, chapterId: activeChapter.id };
+  }, [activeChapter, activeWorkId, chapters, setActiveChapterId, setChapters, showToast]);
 
   // Inline AI 回调：编辑器调用此函数发起 AI 请求
   const handleInlineAiRequest = useCallback(async ({ mode, text, instruction, signal, onChunk }) => {
@@ -763,6 +892,8 @@ export default function Home() {
               onArchiveGeneration={handleArchiveGeneration}
               chapterNumberingIgnored={!!activeChapter.numberingIgnored}
               onToggleSpecialChapter={handleToggleActiveChapterSpecial}
+              onSplitChapter={handleSplitActiveChapter}
+              onMergeNextChapter={handleMergeNextChapter}
               contextItems={contextItems}
               contextSelection={contextSelection}
               setContextSelection={setContextSelection}

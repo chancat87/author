@@ -1,1 +1,1 @@
-修复作品信息切换崩溃与大纲曲线兼容 | Book info switching crash and plot curve compatibility fixes
+桌面章节拆分合并与移动端作品整理增强 | Desktop chapter split/merge and mobile organization improvements

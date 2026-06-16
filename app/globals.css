@@ -8,7 +8,7 @@
   --transition-normal: 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   --transition-slow: 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 
-  --font-writing: var(--font-noto-serif-sc, 'Noto Serif SC'), 'Source Han Serif SC', 'Songti SC', 'SimSun', 'STSong', 'Microsoft YaHei', serif;
+  --font-writing: 'SimSun', 'Songti SC', 'STSong', 'Noto Serif SC', 'Source Han Serif SC', 'Microsoft YaHei', serif;
   --font-ui: var(--font-inter, 'Inter'), 'Noto Sans SC', 'Microsoft YaHei', 'PingFang SC', -apple-system, BlinkMacSystemFont, sans-serif;
 
   --editor-font-size: 17px;

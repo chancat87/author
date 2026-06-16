@@ -52,6 +52,7 @@ import {
     parsePmpxFile,
 } from '../lib/settings-io';
 import SettingsConflictModal from './SettingsConflictModal';
+import { DEFAULT_WRITING_FONT_FAMILY, WRITING_FONT_FAMILIES } from '../lib/typography';
 
 // 分类图标映射（Lucide）
 const CAT_ICONS = {
@@ -1464,6 +1465,7 @@ function PreferencesForm() {
         sidebarPushMode, setSidebarPushMode,
         aiSidebarPushMode, setAiSidebarPushMode,
         chatSendShortcutMode, setChatSendShortcutMode,
+        writingFontFamily, setWritingFontFamily,
         uiFontSize, setUiFontSize,
         setShowSyncGuideModal,
     } = useAppStore();
@@ -1471,6 +1473,9 @@ function PreferencesForm() {
     const normalizedChatSendShortcutMode = chatSendShortcutMode === 'ctrlEnter' ? 'ctrlEnter' : 'enter';
     const rawUiFontSize = Number(uiFontSize);
     const normalizedUiFontSize = Number.isFinite(rawUiFontSize) ? Math.min(18, Math.max(12, Math.round(rawUiFontSize))) : 13;
+    const normalizedWritingFontFamily = WRITING_FONT_FAMILIES.some(font => font.value === writingFontFamily)
+        ? writingFontFamily
+        : DEFAULT_WRITING_FONT_FAMILY;
 
     // ---- Firebase 账户 ----
     const [authUser, setAuthUser] = useState(null);
@@ -1875,6 +1880,63 @@ function PreferencesForm() {
                             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{theme.desc}</div>
                         </button>
                     ))}
+                </div>
+            </div>
+
+            {/* 正文默认字体 */}
+            <div style={{ marginBottom: 28 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 12 }}>
+                    <Type size={14} /> {t('preferences.writingFontFamilyLabel')}
+                </label>
+                <div style={{ padding: '16px 18px', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', background: 'var(--bg-primary)', boxShadow: 'var(--shadow-sm)' }}>
+                    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: 12 }}>
+                        <div style={{ flex: 1, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                            {t('preferences.writingFontFamilyDesc')}
+                        </div>
+                        <button
+                            className="btn btn-ghost btn-sm"
+                            style={{ fontSize: 11, padding: '5px 10px', whiteSpace: 'nowrap' }}
+                            onClick={() => setWritingFontFamily(DEFAULT_WRITING_FONT_FAMILY)}
+                            disabled={normalizedWritingFontFamily === DEFAULT_WRITING_FONT_FAMILY}
+                        >
+                            {t('preferences.writingFontReset')}
+                        </button>
+                    </div>
+                    <select
+                        value={normalizedWritingFontFamily}
+                        onChange={e => setWritingFontFamily(e.target.value)}
+                        style={{
+                            width: '100%',
+                            padding: '9px 12px',
+                            border: '1px solid var(--border-light)',
+                            borderRadius: 'var(--radius-sm)',
+                            background: 'var(--bg-secondary)',
+                            color: 'var(--text-primary)',
+                            fontSize: 13,
+                            outline: 'none',
+                            marginBottom: 12,
+                            cursor: 'pointer',
+                        }}
+                    >
+                        {WRITING_FONT_FAMILIES.map(font => (
+                            <option key={font.key} value={font.value}>
+                                {t(font.labelKey)}
+                            </option>
+                        ))}
+                    </select>
+                    <div
+                        style={{
+                            fontFamily: normalizedWritingFontFamily,
+                            fontSize: 16,
+                            lineHeight: 1.8,
+                            padding: '12px 14px',
+                            borderRadius: 'var(--radius-sm)',
+                            background: 'var(--bg-secondary)',
+                            color: 'var(--text-primary)',
+                        }}
+                    >
+                        {t('preferences.writingFontPreview')}
+                    </div>
                 </div>
             </div>
 

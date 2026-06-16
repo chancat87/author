@@ -2,7 +2,7 @@
 
 import { useEditor, EditorContent } from '@tiptap/react';
 import { Selection, TextSelection } from '@tiptap/pm/state';
-import { DOMParser as PmDOMParser } from '@tiptap/pm/model';
+import { DOMParser as PmDOMParser, DOMSerializer } from '@tiptap/pm/model';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import CharacterCount from '@tiptap/extension-character-count';
@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { ragRecommend } from '../lib/context-engine';
 import { useAppStore } from '../store/useAppStore';
+import { WRITING_FONT_FAMILIES } from '../lib/typography';
 import ModelPicker from './ModelPicker';
 import { PanelLeftOpen, PanelLeftClose } from 'lucide-react';
 
@@ -55,6 +56,17 @@ function escapeHtml(text) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+}
+
+function serializeFragmentToHtml(schema, fragment) {
+    if (typeof document === 'undefined' || !schema || !fragment) return '';
+    const container = document.createElement('div');
+    container.appendChild(DOMSerializer.fromSchema(schema).serializeFragment(fragment));
+    return container.innerHTML;
+}
+
+function countPlainTextWords(text) {
+    return String(text || '').replace(/\s/g, '').length;
 }
 
 function getEditorPositionKey(workId) {
@@ -191,7 +203,7 @@ function restoreEditorPositionSnapshot(targetEditor, workId, chapterId, containe
     return true;
 }
 
-const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-default', onUpdate, editable = true, onAiRequest, onArchiveGeneration, chapterNumberingIgnored = false, onToggleSpecialChapter, contextItems, contextSelection, setContextSelection }, ref) {
+const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-default', onUpdate, editable = true, onAiRequest, onArchiveGeneration, chapterNumberingIgnored = false, onToggleSpecialChapter, onSplitChapter, onMergeNextChapter, contextItems, contextSelection, setContextSelection }, ref) {
     const clipPathId = useId();
     const debounceRef = useRef(null);
     const positionSaveTimerRef = useRef(null);
@@ -455,6 +467,49 @@ const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-d
         return await queueSave(payload);
     }, [buildSavePayload, editor, queueSave]);
 
+    const buildSplitDraft = useCallback(() => {
+        if (!editor) return null;
+        const { doc, selection } = editor.state;
+        const splitPos = clampDocPosition(doc, selection.from);
+        const docStart = 0;
+        const docEnd = doc.content.size;
+        const beforeText = doc.textBetween(docStart, splitPos, '\n', '\n');
+        const afterText = doc.textBetween(splitPos, docEnd, '\n', '\n');
+        const beforeWordCount = countPlainTextWords(beforeText);
+        const afterWordCount = countPlainTextWords(afterText);
+
+        return {
+            splitPos,
+            beforeHtml: serializeFragmentToHtml(editor.schema, doc.slice(docStart, splitPos).content),
+            afterHtml: serializeFragmentToHtml(editor.schema, doc.slice(splitPos, docEnd).content),
+            beforeWordCount,
+            afterWordCount,
+        };
+    }, [editor]);
+
+    const handleSplitChapter = useCallback(async () => {
+        if (!editor || !onSplitChapter) return;
+        const draft = buildSplitDraft();
+        if (!draft) return;
+        await flushPendingSave();
+        await Promise.resolve(onSplitChapter(draft));
+    }, [buildSplitDraft, editor, flushPendingSave, onSplitChapter]);
+
+    const handleMergeNextChapter = useCallback(async () => {
+        if (!editor || !onMergeNextChapter) return;
+        const payload = buildSavePayload(editor);
+        await flushPendingSave();
+        const result = await Promise.resolve(onMergeNextChapter({
+            currentHtml: payload?.html || '',
+            currentWordCount: payload?.wordCount || 0,
+        }));
+        if (result?.content) {
+            isLoadingContentRef.current = true;
+            editor.commands.setContent(result.content, false);
+            isLoadingContentRef.current = false;
+        }
+    }, [buildSavePayload, editor, flushPendingSave, onMergeNextChapter]);
+
     useEffect(() => () => {
         if (debounceRef.current) {
             clearTimeout(debounceRef.current);
@@ -632,6 +687,8 @@ const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-d
                 setMargins={setMargins}
                 chapterNumberingIgnored={chapterNumberingIgnored}
                 onToggleSpecialChapter={onToggleSpecialChapter}
+                onSplitChapter={handleSplitChapter}
+                onMergeNextChapter={handleMergeNextChapter}
             />
             <div
                 ref={containerRef}
@@ -2051,22 +2108,15 @@ function ColorPicker({ label, currentColor, onSelect, onClose, style }) {
 }
 
 // ==================== 字体族选项 ====================
-const CJK_SERIF_FONT_STACK = '"Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun", "STSong", serif';
-const CJK_SANS_FONT_STACK = '"Noto Sans SC", "Microsoft YaHei", "PingFang SC", "Heiti SC", sans-serif';
-
 const FONT_FAMILIES = [
-    { label: '默认（宋体）', value: '' },
-    { label: '黑体', value: CJK_SANS_FONT_STACK },
-    { label: '楷体', value: '"KaiTi", "Kaiti SC", "STKaiti", "SimKai", "SimSun", serif' },
-    { label: '仿宋', value: '"FangSong", "STFangsong", "FangSong_GB2312", "SimSun", serif' },
-    { label: 'serif', value: CJK_SERIF_FONT_STACK },
-    { label: 'monospace', value: '"NSimSun", "SimSun", "SF Mono", "Cascadia Code", "Consolas", monospace' },
+    { label: '默认（正文默认）', value: '' },
+    ...WRITING_FONT_FAMILIES.map(font => ({ label: font.label, value: font.value })),
 ];
 
 const FONT_SIZES = [12, 14, 15, 16, 17, 18, 20, 22, 24, 28, 32];
 
 // ==================== 工具栏 ====================
-function EditorToolbar({ editor, margins, setMargins, chapterNumberingIgnored = false, onToggleSpecialChapter }) {
+function EditorToolbar({ editor, margins, setMargins, chapterNumberingIgnored = false, onToggleSpecialChapter, onSplitChapter, onMergeNextChapter }) {
     const [showFontColor, setShowFontColor] = useState(false);
     const [showBgColor, setShowBgColor] = useState(false);
     const [showFontFamily, setShowFontFamily] = useState(false);
@@ -2217,6 +2267,33 @@ function EditorToolbar({ editor, margins, setMargins, chapterNumberingIgnored = 
                             <Flag size={15} strokeWidth={2.4} />
                             <span>特殊章节</span>
                         </button>
+                    </div>
+
+                    <div className="toolbar-divider" />
+                </>
+            )}
+
+            {(onSplitChapter || onMergeNextChapter) && (
+                <>
+                    <div className="toolbar-group">
+                        {onSplitChapter && (
+                            <button
+                                className="toolbar-btn"
+                                onClick={onSplitChapter}
+                                title="从当前光标处拆分为两章"
+                            >
+                                拆分
+                            </button>
+                        )}
+                        {onMergeNextChapter && (
+                            <button
+                                className="toolbar-btn"
+                                onClick={onMergeNextChapter}
+                                title="把下一章节合并到当前章节"
+                            >
+                                合并
+                            </button>
+                        )}
                     </div>
 
                     <div className="toolbar-divider" />
