@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Cloud, CloudOff, LogOut, RefreshCw, CheckCircle2, User, ArrowRightLeft, Settings } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
+import { useI18n } from '../lib/useI18n';
 
 /**
  * 顶栏云同步状态指示器
@@ -12,6 +13,7 @@ import { useAppStore } from '../store/useAppStore';
  */
 export default function CloudSyncIndicator() {
     const { setShowAccountModal, setShowSettings } = useAppStore();
+    const { text } = useI18n();
     const [authUser, setAuthUser] = useState(null);
     const [syncStatus, setSyncStatus] = useState(null);
     const [firebaseAvailable, setFirebaseAvailable] = useState(false);
@@ -46,10 +48,10 @@ export default function CloudSyncIndicator() {
                 id="tour-cloud-sync"
                 className="cloud-sync-indicator cloud-sync-login"
                 onClick={openSyncSettings}
-                title="选择 Firebase、WebDAV 或局域网同步"
+                title={text('选择 Firebase、WebDAV 或局域网同步', 'Choose Firebase, WebDAV, or LAN sync', 'Выберите Firebase, WebDAV или LAN-синхронизацию')}
             >
                 <CloudOff size={15} />
-                <span className="cloud-sync-label">同步方式</span>
+                <span className="cloud-sync-label">{text('同步方式', 'Sync Method', 'Способ синхронизации')}</span>
             </button>
         );
     }
@@ -70,9 +72,9 @@ export default function CloudSyncIndicator() {
     // 同步状态文字
     const getSyncText = () => {
         if (!syncStatus) return null;
-        if (syncStatus.syncing) return '同步中...';
-        if (syncStatus.pending > 0) return `${syncStatus.pending} 项待同步`;
-        if (syncStatus.lastSync) return `已同步 ${new Date(syncStatus.lastSync).toLocaleTimeString()}`;
+        if (syncStatus.syncing) return text('同步中...', 'Syncing...', 'Синхронизация...');
+        if (syncStatus.pending > 0) return text(`${syncStatus.pending} 项待同步`, `${syncStatus.pending} pending`, `Ожидает синхронизации: ${syncStatus.pending}`);
+        if (syncStatus.lastSync) return text(`已同步 ${new Date(syncStatus.lastSync).toLocaleTimeString()}`, `Synced ${new Date(syncStatus.lastSync).toLocaleTimeString()}`, `Синхронизировано ${new Date(syncStatus.lastSync).toLocaleTimeString()}`);
         return null;
     };
 
@@ -83,10 +85,10 @@ export default function CloudSyncIndicator() {
                 id="tour-cloud-sync"
                 className="cloud-sync-indicator cloud-sync-login"
                 onClick={openSyncSettings}
-                title="选择 Firebase、WebDAV 或局域网同步"
+                title={text('选择 Firebase、WebDAV 或局域网同步', 'Choose Firebase, WebDAV, or LAN sync', 'Выберите Firebase, WebDAV или LAN-синхронизацию')}
             >
                 <CloudOff size={15} />
-                <span className="cloud-sync-label">同步方式</span>
+                <span className="cloud-sync-label">{text('同步方式', 'Sync Method', 'Способ синхронизации')}</span>
             </button>
         );
     }
@@ -101,7 +103,7 @@ export default function CloudSyncIndicator() {
                 ref={btnRef}
                 className="cloud-sync-indicator cloud-sync-active"
                 onClick={() => setMenuOpen(!menuOpen)}
-                title={`${authUser.displayName || authUser.email} · 点击查看同步状态和同步方式`}
+                title={`${authUser.displayName || authUser.email} · ${text('点击查看同步状态和同步方式', 'View sync status and method', 'Просмотреть статус и способ синхронизации')}`}
             >
                 {authUser.photoURL ? (
                     <img src={authUser.photoURL} alt="" className="cloud-sync-avatar" />
@@ -143,10 +145,10 @@ export default function CloudSyncIndicator() {
                         {syncStatus && (
                             <div className="cloud-sync-menu-status">
                                 {syncStatus.syncing ? (
-                                    <><RefreshCw size={12} className="spin" /> 正在同步...</>
+                                    <><RefreshCw size={12} className="spin" /> {text('正在同步...', 'Syncing...', 'Синхронизация...')}</>
                                 ) : syncStatus.pending > 0 ? (
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
-                                        <div>{syncStatus.pending} 项待同步</div>
+                                        <div>{text(`${syncStatus.pending} 项待同步`, `${syncStatus.pending} pending`, `Ожидает синхронизации: ${syncStatus.pending}`)}</div>
                                         {syncStatus.keys && syncStatus.keys.length > 0 && (
                                             <div style={{
                                                 maxHeight: 120, overflowY: 'auto',
@@ -163,9 +165,9 @@ export default function CloudSyncIndicator() {
                                         )}
                                     </div>
                                 ) : syncStatus.lastSync ? (
-                                    <><CheckCircle2 size={12} style={{ color: '#22c55e' }} /> 上次同步: {new Date(syncStatus.lastSync).toLocaleTimeString()}</>
+                                    <><CheckCircle2 size={12} style={{ color: '#22c55e' }} /> {text('上次同步', 'Last sync', 'Последняя синхронизация')}: {new Date(syncStatus.lastSync).toLocaleTimeString()}</>
                                 ) : (
-                                    <><Cloud size={12} style={{ color: 'var(--accent)' }} /> 云同步已开启</>
+                                    <><Cloud size={12} style={{ color: 'var(--accent)' }} /> {text('云同步已开启', 'Cloud sync enabled', 'Облачная синхронизация включена')}</>
                                 )}
                             </div>
                         )}
@@ -176,25 +178,25 @@ export default function CloudSyncIndicator() {
                             className="cloud-sync-menu-item"
                             onClick={openSyncSettings}
                         >
-                            <Settings size={14} /> 同步方式
+                            <Settings size={14} /> {text('同步方式', 'Sync Method', 'Способ синхронизации')}
                         </button>
                         <button
                             className="cloud-sync-menu-item"
                             onClick={() => { setShowAccountModal(true); setMenuOpen(false); }}
                         >
-                            <User size={14} /> 账户设置
+                            <User size={14} /> {text('账户设置', 'Account Settings', 'Настройки аккаунта')}
                         </button>
                         <button
                             className="cloud-sync-menu-item"
                             onClick={() => { setShowAccountModal(true, true); setMenuOpen(false); }}
                         >
-                            <ArrowRightLeft size={14} /> 切换账号
+                            <ArrowRightLeft size={14} /> {text('切换账号', 'Switch Account', 'Сменить аккаунт')}
                         </button>
                         <button
                             className="cloud-sync-menu-item cloud-sync-menu-logout"
                             onClick={handleSignOut}
                         >
-                            <LogOut size={14} /> 退出登录
+                            <LogOut size={14} /> {text('退出登录', 'Sign Out', 'Выйти')}
                         </button>
                     </div>
                 </>,

@@ -12,7 +12,7 @@ import { useI18n } from '../lib/useI18n';
  * @param {Function} onConfirm 确认回调
  */
 export default function SyncConfirmModal({ isOpen, onClose, onConfirm }) {
-    const { t } = useI18n();
+    const { text } = useI18n();
     const [mounted, setMounted] = useState(false);
     const [skipToday, setSkipToday] = useState(false);
 
@@ -81,7 +81,7 @@ export default function SyncConfirmModal({ isOpen, onClose, onConfirm }) {
                     </div>
                     
                     <h2 style={{ fontSize: 20, fontWeight: 600, margin: 0, color: 'var(--text-primary)' }}>
-                        高危操作确认
+                        {text('高危操作确认', 'High-Risk Operation', 'Опасная операция')}
                     </h2>
                 </div>
                 
@@ -94,13 +94,13 @@ export default function SyncConfirmModal({ isOpen, onClose, onConfirm }) {
                         marginBottom: 20
                     }}>
                         <p style={{ margin: 0, fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.6 }}>
-                            您即将执行 <strong>“从云端同步”</strong> 操作。<br/>
-                            这将使用云端存储的稿件数据<strong>永久覆盖并替换</strong>当前设备所有的本地内容！
+                            {text('您即将执行', 'You are about to run', 'Вы собираетесь выполнить')} <strong>{text('“从云端同步”', '"Sync from Cloud"', '"Синхронизация из облака"')}</strong> {text('操作。', 'operation.', 'операцию.')}<br/>
+                            {text('这将使用云端存储的稿件数据', 'This will use manuscript data stored in the cloud to', 'Данные рукописи из облака будут использованы, чтобы')}<strong>{text('永久覆盖并替换', 'permanently overwrite and replace', 'навсегда перезаписать и заменить')}</strong>{text('当前设备所有的本地内容！', 'all local content on this device.', 'всё локальное содержимое на этом устройстве.')}
                         </p>
                     </div>
 
                     <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 24, lineHeight: 1.5 }}>
-                        如果当前设备中存在未同步到云端的新撰写内容，此操作将导致它们<strong style={{ color: '#ef4444' }}>永远丢失且无法恢复</strong>。在继续前，请您务必确认是否需要拉取云端数据。
+                        {text('如果当前设备中存在未同步到云端的新撰写内容，此操作将导致它们', 'If this device has newly written content that has not been synced to the cloud, this action will cause it to be', 'Если на этом устройстве есть новый текст, ещё не синхронизированный с облаком, это действие приведёт к его ')}<strong style={{ color: '#ef4444' }}>{text('永远丢失且无法恢复', 'lost permanently and unrecoverably', 'безвозвратной потере')}</strong>{text('。在继续前，请您务必确认是否需要拉取云端数据。', '. Please confirm that you really need to pull cloud data before continuing.', '. Перед продолжением убедитесь, что вам действительно нужно загрузить данные из облака.')}
                     </p>
 
                     <label style={{ 
@@ -131,7 +131,7 @@ export default function SyncConfirmModal({ isOpen, onClose, onConfirm }) {
                                 accentColor: '#ef4444'
                             }}
                         />
-                        今日内不再弹出此警告
+                        {text('今日内不再弹出此警告', 'Do not show this warning again today', 'Не показывать это предупреждение сегодня')}
                     </label>
 
                     <div style={{ display: 'flex', gap: 12 }}>
@@ -140,7 +140,7 @@ export default function SyncConfirmModal({ isOpen, onClose, onConfirm }) {
                             onClick={onClose}
                             style={{ flex: 1, height: 44, justifyContent: 'center', fontWeight: 500 }}
                         >
-                            取消
+                            {text('取消', 'Cancel', 'Отмена')}
                         </button>
                         <button 
                             className="btn btn-primary" 
@@ -155,7 +155,7 @@ export default function SyncConfirmModal({ isOpen, onClose, onConfirm }) {
                                 boxShadow: '0 4px 12px rgba(239, 68, 68, 0.2)'
                             }}
                         >
-                            确认覆盖本地
+                            {text('确认覆盖本地', 'Overwrite Local Data', 'Перезаписать локальные данные')}
                         </button>
                     </div>
                 </div>

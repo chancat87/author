@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
     Library, KeyRound, Settings, BookOpen, User, MapPin, Globe, Gem,
@@ -79,6 +79,15 @@ const CAT_STYLES = {
     rules: { color: 'var(--cat-rules)', bg: 'var(--cat-rules-bg)' },
 };
 
+const BUILT_IN_CATEGORY_NAMES_ZH = {
+    character: '人物设定',
+    location: '空间/地点',
+    world: '世界观/设定',
+    object: '物品/道具',
+    plot: '大纲',
+    rules: '写作规则',
+};
+
 // 图标映射（与 CategorySettingsModal 共用同一套图标）
 const ICON_MAP = {
     FolderOpen, User, MapPin, Globe, Gem, ClipboardList, Ruler,
@@ -142,7 +151,16 @@ export default function SettingsPanel() {
     const [activeWorkId, setActiveWorkIdState] = useState(null);
     const [showNewWorkInput, setShowNewWorkInput] = useState(false);
     const [newWorkName, setNewWorkName] = useState('');
-    const { t } = useI18n();
+    const { t, text } = useI18n();
+    const categoryText = useCallback((category) => ({
+        character: text('人物设定', 'Characters', 'Персонажи'),
+        location: text('空间/地点', 'Places', 'Места'),
+        world: text('世界观/设定', 'Worldbuilding', 'Мир'),
+        object: text('物品/道具', 'Items / Props', 'Предметы / реквизит'),
+        plot: text('大纲', 'Outline', 'План'),
+        rules: text('写作规则', 'Writing Rules', 'Правила письма'),
+        custom: text('自定义设定', 'Custom Settings', 'Пользовательские настройки'),
+    }[category] || t(`settings.categories.${category}`) || category), [text, t]);
 
     const [expandedCategory, setExpandedCategory] = useState(null);
     const [showExportFormat, setShowExportFormat] = useState(false);
@@ -207,10 +225,12 @@ export default function SettingsPanel() {
         // 内置分类（排除 bookInfo — 已移至独立面板）
         const builtIn = Object.entries(CAT_STYLES).filter(([cat]) => cat !== 'work').map(([cat, style]) => {
             const rf = visibleNodes.find(n => n.type === 'folder' && n.category === cat && n.parentId && n.parentId.startsWith('work-') && !visibleNodes.some(p => p.id === n.parentId));
+            const defaultName = BUILT_IN_CATEGORY_NAMES_ZH[cat];
+            const label = rf?.name && rf.name !== defaultName ? rf.name : categoryText(cat);
             return {
                 category: cat,
                 count: items.filter(n => n.category === cat).length,
-                label: rf?.name || t(`settings.categories.${cat}`),
+                label,
                 customIcon: rf?.icon || null,
                 rootFolderId: rf?.id || null,
                 ...style,
@@ -243,7 +263,7 @@ export default function SettingsPanel() {
             isCustom: true,
         }));
         return [...builtIn, ...custom];
-    }, [visibleNodes, t]);
+    }, [visibleNodes, categoryText]);
 
     // 更换分类图标
     const handleChangeCatIcon = async (category, iconName) => {
@@ -380,18 +400,18 @@ export default function SettingsPanel() {
         const workEntry = works.find(w => w.id === activeWorkId);
         if (!workEntry) return;
         const workNodes = getWorkNodes();
-        const baseName = workEntry.name || '设定集';
+        const baseName = workEntry.name || text('设定集', 'Settings', 'Настройки');
         setShowExportFormat(false);
 
         if (format === 'txt') {
             const txt = exportNodesToTxt(workNodes);
-            await downloadFile(txt, `${baseName}-设定集.txt`, 'text/plain');
+            await downloadFile(txt, `${baseName}${text('-设定集', '-settings', '-settings')}.txt`, 'text/plain');
         } else if (format === 'md') {
             const md = exportNodesToMarkdown(workNodes);
-            await downloadFile(md, `${baseName}-设定集.md`, 'text/markdown');
+            await downloadFile(md, `${baseName}${text('-设定集', '-settings', '-settings')}.md`, 'text/markdown');
         } else if (format === 'docx') {
             const blob = await exportNodesToDocx(workNodes);
-            await downloadBlob(blob, `${baseName}-设定集.docx`, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+            await downloadBlob(blob, `${baseName}${text('-设定集', '-settings', '-settings')}.docx`, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
         } else if (format === 'pdf') {
             exportSettingsAsPdf(workNodes);
         } else {
@@ -413,7 +433,7 @@ export default function SettingsPanel() {
                 nodes: exportNodes,
                 writingMode: projectSettings.writingMode || 'webnovel',
             };
-            await downloadFile(JSON.stringify(data, null, 2), `${baseName}-设定集.json`, 'application/json');
+            await downloadFile(JSON.stringify(data, null, 2), `${baseName}${text('-设定集', '-settings', '-settings')}.json`, 'application/json');
         }
     };
 
@@ -430,7 +450,7 @@ export default function SettingsPanel() {
                 if (!activeWorkId) { alert(t('settings.importNoWork')); return; }
                 const importedItems = await parsePmpxFile(file);
                 if (importedItems.length === 0) {
-                    alert(t('settings.importEmpty') || '未能从文件中解析出任何设定条目');
+                    alert(t('settings.importEmpty') || text('未能从文件中解析出任何设定条目', 'No settings entries could be parsed from the file.', 'Не удалось извлечь записи настроек из файла.'));
                     return;
                 }
                 // 检测冲突
@@ -493,7 +513,7 @@ export default function SettingsPanel() {
                     // ===== items 格式（新版 / 用户手写） =====
                     if (!activeWorkId) { alert(t('settings.importNoWork')); return; }
                     const importedItems = data.items.map(item => ({
-                        name: item.name || '导入条目',
+                        name: item.name || text('导入条目', 'Imported Entry', 'Импортированная запись'),
                         category: item.category || 'character',
                         content: item.content || {},
                     }));
@@ -522,7 +542,7 @@ export default function SettingsPanel() {
                     // ===== nodes 格式（旧版兼容） =====
                     const importedNodes = data.nodes;
                     const importedWorkNode = importedNodes.find(n => n.type === 'work');
-                    const workName = importedWorkNode?.name || data.workName || '导入作品';
+                    const workName = importedWorkNode?.name || data.workName || text('导入作品', 'Imported Work', 'Импортированное произведение');
                     const importedSubNodes = importedNodes.filter(n => n.type !== 'work');
 
                     // 兼容旧版 bookInfo
@@ -565,7 +585,7 @@ export default function SettingsPanel() {
                 const parsedEntries = parseStructuredText(text);
                 for (const entry of parsedEntries) {
                     const mapped = mapFieldsToContent(entry.fields, entry.category);
-                    const nodeName = mapped.name || entry.name || '导入条目';
+                    const nodeName = mapped.name || entry.name || text('导入条目', 'Imported Entry', 'Импортированная запись');
                     if (Object.keys(mapped.content).length === 0) continue;
                     importedItems.push({ name: nodeName, category: entry.category, content: mapped.content });
                 }
@@ -576,13 +596,13 @@ export default function SettingsPanel() {
                     if (Object.keys(parsed).length === 0) continue;
                     const category = detectCategory(block);
                     const mapped = mapFieldsToContent(parsed, category);
-                    const nodeName = mapped.name || Object.values(parsed)[0]?.substring(0, 20) || '导入条目';
+                    const nodeName = mapped.name || Object.values(parsed)[0]?.substring(0, 20) || text('导入条目', 'Imported Entry', 'Импортированная запись');
                     importedItems.push({ name: nodeName, category, content: mapped.content });
                 }
             }
 
             if (importedItems.length === 0) {
-                alert(t('settings.importEmpty') || '未能从文件中解析出任何设定条目');
+                alert(t('settings.importEmpty') || text('未能从文件中解析出任何设定条目', 'No settings entries could be parsed from the file.', 'Не удалось извлечь записи настроек из файла.'));
                 return;
             }
 
@@ -665,7 +685,7 @@ export default function SettingsPanel() {
         await saveSettingsNodes(updatedNodes);
         setNodes(updatedNodes);
         const totalCount = items.length + updates.length;
-        alert((t('settings.importTextSuccess') || '成功导入 {count} 个设定条目').replace('{count}', totalCount));
+        alert((t('settings.importTextSuccess') || text('成功导入 {count} 个设定条目', 'Imported {count} settings entries', 'Импортировано записей настроек: {count}')).replace('{count}', totalCount));
     };
 
     // 冲突解决确认
@@ -777,7 +797,7 @@ export default function SettingsPanel() {
                         {currentPanel.subtitle && <span className="subtitle">— {currentPanel.subtitle}</span>}
                     </h2>
                     <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                        {open === 'settings' && <button className="btn btn-ghost btn-icon" onClick={() => setIsFullscreen(!isFullscreen)} title={isFullscreen ? '退出全屏' : '全屏'}>
+                        {open === 'settings' && <button className="btn btn-ghost btn-icon" onClick={() => setIsFullscreen(!isFullscreen)} title={isFullscreen ? text('退出全屏', 'Exit fullscreen', 'Выйти из полноэкранного режима') : text('全屏', 'Fullscreen', 'Во весь экран')}>
                             {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
                         </button>}
                         <button className="btn btn-ghost btn-icon" onClick={onClose}><X size={16} /></button>
@@ -842,13 +862,13 @@ export default function SettingsPanel() {
                             )}
                             {works.length > 1 && (
                                 <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 11, padding: '4px 6px', opacity: 0.7, transition: 'opacity 0.15s' }}
-                                    onClick={() => handleDeleteWork(activeWorkId)} title={t('common.delete') + '作品'}
+                                    onClick={() => handleDeleteWork(activeWorkId)} title={text('删除作品', 'Delete Work', 'Удалить произведение')}
                                     onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = '#ef4444'; }}
                                     onMouseLeave={e => { e.currentTarget.style.opacity = '0.7'; e.currentTarget.style.color = 'var(--text-muted)'; }}
                                 ><X size={14} /></button>
                             )}
                             <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 11, padding: '4px 6px', opacity: 0.7, transition: 'all 0.15s' }}
-                                onClick={() => { onClose(); setTimeout(() => useAppStore.getState().setShowBookInfo(true), 80); }} title="作品管理"
+                                onClick={() => { onClose(); setTimeout(() => useAppStore.getState().setShowBookInfo(true), 80); }} title={text('作品管理', 'Work Management', 'Управление произведениями')}
                                 onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = 'var(--accent)'; }}
                                 onMouseLeave={e => { e.currentTarget.style.opacity = '0.7'; e.currentTarget.style.color = 'var(--text-muted)'; }}
                             ><BookOpen size={14} /></button>
@@ -862,7 +882,13 @@ export default function SettingsPanel() {
                                     ><Upload size={13} /></button>
                                     {showExportFormat && (
                                         <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--bg-primary)', border: '1px solid var(--border-light)', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 20, overflow: 'hidden', minWidth: 120 }}>
-                                            {[{ key: 'json', label: 'JSON (完整)' }, { key: 'txt', label: 'TXT (纯文本)' }, { key: 'md', label: 'Markdown' }, { key: 'docx', label: 'Word (.docx)' }, { key: 'pdf', label: 'PDF (打印)' }].map(f => (
+                                            {[
+                                                { key: 'json', label: text('JSON (完整)', 'JSON (Complete)', 'JSON (полный)') },
+                                                { key: 'txt', label: text('TXT (纯文本)', 'TXT (Plain Text)', 'TXT (простой текст)') },
+                                                { key: 'md', label: 'Markdown' },
+                                                { key: 'docx', label: 'Word (.docx)' },
+                                                { key: 'pdf', label: text('PDF (打印)', 'PDF (Print)', 'PDF (печать)') },
+                                            ].map(f => (
                                                 <button key={f.key} style={{ display: 'block', width: '100%', padding: '8px 14px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--text-primary)', textAlign: 'left', transition: 'background 0.1s' }}
                                                     onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
                                                     onMouseLeave={e => e.currentTarget.style.background = 'none'}
@@ -892,17 +918,17 @@ export default function SettingsPanel() {
                             {/* 统计摘要 */}
                             <div style={{ display: 'flex', gap: 12, marginBottom: 20, maxWidth: 880, margin: '0 auto 20px' }}>
                                 <div style={{ padding: '10px 16px', borderRadius: 12, background: 'var(--bg-secondary)', border: '1px solid var(--border-light)', flex: 1 }}>
-                                    <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 700, marginBottom: 4 }}>词条总数</div>
+                                    <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 700, marginBottom: 4 }}>{text('词条总数', 'Total Entries', 'Всего записей')}</div>
                                     <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>
                                         {stats.reduce((s, c) => s + c.count, 0)}
-                                        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400, marginLeft: 6 }}>条设定</span>
+                                        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400, marginLeft: 6 }}>{text('条设定', 'settings', 'настроек')}</span>
                                     </div>
                                 </div>
                                 <div style={{ padding: '10px 16px', borderRadius: 12, background: 'var(--bg-secondary)', border: '1px solid var(--border-light)', flex: 1 }}>
-                                    <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 700, marginBottom: 4 }}>分类数</div>
+                                    <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 700, marginBottom: 4 }}>{text('分类数', 'Categories', 'Категории')}</div>
                                     <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>
                                         {stats.length}
-                                        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400, marginLeft: 6 }}>个分类</span>
+                                        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400, marginLeft: 6 }}>{text('个分类', 'categories', 'категорий')}</span>
                                     </div>
                                 </div>
                             </div>
@@ -926,7 +952,7 @@ export default function SettingsPanel() {
                                         type="text"
                                         value={searchQuery}
                                         onChange={e => setSearchQuery(e.target.value)}
-                                        placeholder="搜索设定条目（名称、内容或 ID）..."
+                                        placeholder={text('搜索设定条目（名称、内容或 ID）...', 'Search settings entries by name, content, or ID...', 'Искать записи настроек по имени, содержимому или ID...')}
                                         style={{
                                             flex: 1, border: 'none', outline: 'none',
                                             background: 'transparent', color: 'var(--text-primary)',
@@ -962,15 +988,15 @@ export default function SettingsPanel() {
                                     return (
                                         <div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--text-muted)' }}>
                                             <Search size={36} style={{ opacity: 0.2, marginBottom: 12 }} />
-                                            <div style={{ fontSize: 14, fontWeight: 500 }}>未找到匹配的设定条目</div>
-                                            <div style={{ fontSize: 12, marginTop: 6, opacity: 0.7 }}>试试更换关键词</div>
+                                            <div style={{ fontSize: 14, fontWeight: 500 }}>{text('未找到匹配的设定条目', 'No matching settings entries found', 'Подходящие записи не найдены')}</div>
+                                            <div style={{ fontSize: 12, marginTop: 6, opacity: 0.7 }}>{text('试试更换关键词', 'Try a different keyword', 'Попробуйте другой запрос')}</div>
                                         </div>
                                     );
                                 }
                                 return (
                                     <div style={{ maxWidth: 880, margin: '0 auto' }}>
                                         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
-                                            找到 <strong style={{ color: 'var(--text-primary)' }}>{results.length}</strong> 个匹配结果
+                                            {text('找到', 'Found', 'Найдено')} <strong style={{ color: 'var(--text-primary)' }}>{results.length}</strong> {text('个匹配结果', 'matches', 'совпадений')}
                                         </div>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                                             {results.map(node => {
@@ -1012,7 +1038,7 @@ export default function SettingsPanel() {
                                                             </div>
                                                             {matchField && (
                                                                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                                    匹配字段: {matchField[1]?.substring(0, 60)}{matchField[1]?.length > 60 ? '...' : ''}
+                                                                    {text('匹配字段', 'Matched field', 'Совпавшее поле')}: {matchField[1]?.substring(0, 60)}{matchField[1]?.length > 60 ? '...' : ''}
                                                                 </div>
                                                             )}
                                                         </div>
@@ -1072,8 +1098,16 @@ export default function SettingsPanel() {
                                         }
 
                                         const message = isCustom
-                                            ? `确认删除分类「${catLabel}」及其下所有 ${cat.count} 条设定？此操作不可撤销。`
-                                            : `确认清空「${catLabel}」下的所有 ${cat.count} 条设定？分类本身会保留，此操作不可撤销。`;
+                                            ? text(
+                                                `确认删除分类「${catLabel}」及其下所有 ${cat.count} 条设定？此操作不可撤销。`,
+                                                `Delete category "${catLabel}" and all ${cat.count} settings under it? This cannot be undone.`,
+                                                `Удалить категорию "${catLabel}" и все настройки внутри (${cat.count})? Это действие нельзя отменить.`
+                                            )
+                                            : text(
+                                                `确认清空「${catLabel}」下的所有 ${cat.count} 条设定？分类本身会保留，此操作不可撤销。`,
+                                                `Clear all ${cat.count} settings under "${catLabel}"? The category itself will be kept. This cannot be undone.`,
+                                                `Очистить все настройки в "${catLabel}" (${cat.count})? Сама категория сохранится. Это действие нельзя отменить.`
+                                            );
 
                                         setDeleteConfirm({
                                             message,
@@ -1153,7 +1187,7 @@ export default function SettingsPanel() {
                                             {/* 顶部：图标 + 计数 */}
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, width: '100%' }}>
                                                 <span
-                                                    title="点击更换图标"
+                                                    title={text('点击更换图标', 'Change icon', 'Сменить значок')}
                                                     onClick={e => {
                                                         e.stopPropagation();
                                                         const rect = e.currentTarget.getBoundingClientRect();
@@ -1177,12 +1211,12 @@ export default function SettingsPanel() {
                                                         {cat.count}
                                                     </div>
                                                     <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 2, fontWeight: 700, marginTop: 2 }}>
-                                                        ITEMS
+                                                        {text('条目', 'ITEMS', 'ЗАПИСИ')}
                                                     </div>
                                                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 3, marginTop: 4 }}>
                                                         <span
                                                             data-rename-btn
-                                                            title="重命名分类"
+                                                            title={text('重命名分类', 'Rename category', 'Переименовать категорию')}
                                                             onClick={e => startRenameCategory(e, cat)}
                                                             style={{
                                                                 width: 28, height: 28, borderRadius: 8,
@@ -1198,7 +1232,7 @@ export default function SettingsPanel() {
                                                         </span>
                                                         <span
                                                             data-delete-btn
-                                                            title={cat.isCustom ? '删除此分类' : '清空此分类'}
+                                                            title={cat.isCustom ? text('删除此分类', 'Delete this category', 'Удалить эту категорию') : text('清空此分类', 'Clear this category', 'Очистить эту категорию')}
                                                             onClick={handleDeleteCategory}
                                                             style={{
                                                                 width: 28, height: 28, borderRadius: 8,
@@ -1251,14 +1285,14 @@ export default function SettingsPanel() {
                                                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
                                                     </div>
                                                 )) : (
-                                                    <div style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic', opacity: 0.6 }}>暂无条目</div>
+                                                    <div style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic', opacity: 0.6 }}>{text('暂无条目', 'No entries yet', 'Пока нет записей')}</div>
                                                 )}
                                             </div>
 
                                             {/* 底部 */}
                                             <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
                                                 <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                                                    {cat.count > 0 ? `共 ${cat.count} 条` : '点击创建'}
+                                                    {cat.count > 0 ? text(`共 ${cat.count} 条`, `${cat.count} total`, `Всего: ${cat.count}`) : text('点击创建', 'Click to create', 'Нажмите, чтобы создать')}
                                                 </span>
                                                 <span style={{ width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-secondary)' }}>
                                                     <span style={{ fontSize: 14, color: 'var(--text-muted)', lineHeight: 1 }}>›</span>
@@ -1284,7 +1318,7 @@ export default function SettingsPanel() {
                                                 }}
                                                 onClick={e => e.stopPropagation()}
                                             >
-                                                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 10, padding: '0 2px' }}>选择图标</div>
+                                                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 10, padding: '0 2px' }}>{text('选择图标', 'Choose Icon', 'Выберите значок')}</div>
                                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4 }}>
                                                     {ICON_GRID.map(name => {
                                                         const IcoComp = ICON_MAP[name];
@@ -1335,7 +1369,7 @@ export default function SettingsPanel() {
                                         // 每个自定义分类需要唯一的 category ID，否则会被 stats 去重合并为一张卡片
                                         const uniqueCat = 'custom-' + Date.now().toString(36) + Math.random().toString(36).substr(2, 4);
                                         const newNode = await addSettingsNode({
-                                            name: '新分类',
+                                            name: text('新分类', 'New Category', 'Новая категория'),
                                             type: 'folder',
                                             category: uniqueCat,
                                             parentId: workId,
@@ -1365,7 +1399,7 @@ export default function SettingsPanel() {
                                     }}>
                                         <Plus size={22} />
                                     </span>
-                                    <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-muted)' }}>新建分类</span>
+                                    <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-muted)' }}>{text('新建分类', 'New Category', 'Новая категория')}</span>
                                 </button>
                             </div>
                             </>
@@ -1458,6 +1492,55 @@ export const PROVIDERS = [
     { key: 'custom-claude', label: '自定义 (Claude格式)', baseUrl: '', models: [] },
 ];
 
+const PROVIDER_LABELS = {
+    zhipu: ['智谱AI (GLM)', 'ZhipuAI (GLM)', 'ZhipuAI (GLM)'],
+    deepseek: ['DeepSeek', 'DeepSeek', 'DeepSeek'],
+    bailian: ['阿里云百炼 (千问)', 'Alibaba Cloud Bailian (Qwen)', 'Alibaba Cloud Bailian (Qwen)'],
+    volcengine: ['火山引擎 (豆包)', 'Volcengine (Doubao)', 'Volcengine (Doubao)'],
+    moonshot: ['Moonshot (Kimi)', 'Moonshot (Kimi)', 'Moonshot (Kimi)'],
+    stepfun: ['阶跃星辰 (Step)', 'StepFun (Step)', 'StepFun (Step)'],
+    yi: ['零一万物 (Yi)', '01.AI (Yi)', '01.AI (Yi)'],
+    baichuan: ['百川 (Baichuan)', 'Baichuan', 'Baichuan'],
+    hunyuan: ['腾讯混元', 'Tencent Hunyuan', 'Tencent Hunyuan'],
+    baidu: ['百度文心', 'Baidu Wenxin', 'Baidu Wenxin'],
+    minimax: ['MiniMax', 'MiniMax', 'MiniMax'],
+    siliconflow: ['SiliconFlow (硅基流动)', 'SiliconFlow', 'SiliconFlow'],
+    openai: ['OpenAI', 'OpenAI', 'OpenAI'],
+    claude: ['Claude (Anthropic)', 'Claude (Anthropic)', 'Claude (Anthropic)'],
+    gemini: ['Gemini (OpenAI兼容)', 'Gemini (OpenAI-compatible)', 'Gemini (OpenAI-compatible)'],
+    'gemini-native': ['Gemini（原生格式）', 'Gemini (Native)', 'Gemini (Native)'],
+    'openai-responses': ['OpenAI Responses', 'OpenAI Responses', 'OpenAI Responses'],
+    groq: ['Groq', 'Groq', 'Groq'],
+    mistral: ['Mistral', 'Mistral', 'Mistral'],
+    cohere: ['Cohere', 'Cohere', 'Cohere'],
+    together: ['Together AI', 'Together AI', 'Together AI'],
+    perplexity: ['Perplexity', 'Perplexity', 'Perplexity'],
+    xai: ['xAI (Grok)', 'xAI (Grok)', 'xAI (Grok)'],
+    cerebras: ['Cerebras', 'Cerebras', 'Cerebras'],
+    github: ['GitHub Models', 'GitHub Models', 'GitHub Models'],
+    openrouter: ['OpenRouter', 'OpenRouter', 'OpenRouter'],
+    custom: ['自定义 (OpenAI兼容)', 'Custom (OpenAI-compatible)', 'Custom (OpenAI-compatible)'],
+    'custom-gemini': ['自定义 (Gemini格式)', 'Custom (Gemini format)', 'Custom (Gemini format)'],
+    'custom-claude': ['自定义 (Claude格式)', 'Custom (Claude format)', 'Custom (Claude format)'],
+};
+
+export function getProviderLabel(provider, text = (zh) => zh) {
+    const key = typeof provider === 'string' ? provider : provider?.key;
+    const fallback = typeof provider === 'string' ? provider : provider?.label;
+    const labels = PROVIDER_LABELS[key];
+    return labels ? text(labels[0], labels[1], labels[2]) : (fallback || key || '');
+}
+
+function getProviderGroupLabel(group, text = (zh) => zh) {
+    const labels = {
+        cn: text('🇨🇳 国内', 'CN', 'Китай'),
+        global: text('国际', 'International', 'Международные'),
+        aggregate: text('聚合', 'Aggregators', 'Агрегаторы'),
+        custom: text('自定义', 'Custom', 'Пользовательские'),
+    };
+    return labels[group] || group;
+}
+
 function PreferencesForm() {
     const {
         language, setLanguage,
@@ -1469,7 +1552,7 @@ function PreferencesForm() {
         uiFontSize, setUiFontSize,
         setShowSyncGuideModal,
     } = useAppStore();
-    const { t } = useI18n();
+    const { t, text } = useI18n();
     const normalizedChatSendShortcutMode = chatSendShortcutMode === 'ctrlEnter' ? 'ctrlEnter' : 'enter';
     const rawUiFontSize = Number(uiFontSize);
     const normalizedUiFontSize = Number.isFinite(rawUiFontSize) ? Math.min(18, Math.max(12, Math.round(rawUiFontSize))) : 13;
@@ -1520,7 +1603,7 @@ function PreferencesForm() {
                 window.location.reload(); // 数据合并后刷新
             }
         } catch (err) {
-            setAuthError(err.message || '操作失败');
+            setAuthError(err.message || text('操作失败', 'Operation failed', 'Операция не удалась'));
         } finally {
             setAuthLoading(false);
         }
@@ -1536,7 +1619,7 @@ function PreferencesForm() {
             const merged = await syncFromCloud();
             if (merged > 0) window.location.reload();
         } catch (err) {
-            setAuthError(err.message || 'Google 登录失败');
+            setAuthError(err.message || text('Google 登录失败', 'Google sign-in failed', 'Не удалось войти через Google'));
         } finally {
             setAuthLoading(false);
         }
@@ -1558,7 +1641,21 @@ function PreferencesForm() {
     const [customPrompt, setCustomPrompt] = useState('');
     const [promptSaveTimer, setPromptSaveTimer] = useState(null);
     const writingMode = getWritingMode();
-    const defaultPrompt = getModeRolePrompt(writingMode);
+    const defaultPrompt = getModeRolePrompt(writingMode, language);
+    const writingModeCopy = (mode) => ({
+        webnovel: {
+            label: text('网络小说', 'Web Novel', 'Веб-роман'),
+            desc: text('适合日更连载、修仙玄幻、系统流等网文创作', 'For serialized web fiction, progression fantasy, system stories, and fast-paced genre work', 'Для серийной веб-прозы, прогрессии, системных историй и жанровых текстов'),
+        },
+        traditional: {
+            label: text('传统文学', 'Literary Fiction', 'Литературная проза'),
+            desc: text('适合严肃小说、纯文学、短篇、出版向作品', 'For serious fiction, literary prose, short stories, and publication-oriented work', 'Для серьёзной прозы, литературных текстов, рассказов и публикации'),
+        },
+        screenplay: {
+            label: text('剧本/脚本', 'Screenplay / Script', 'Сценарий'),
+            desc: text('适合影视剧本、舞台剧、广播剧等脚本创作', 'For film, TV, stage, audio drama, and other script writing', 'Для кино, ТВ, театра, аудиодрамы и других сценариев'),
+        },
+    }[mode.key] || { label: mode.label, desc: mode.desc });
 
     useEffect(() => {
         const settings = getProjectSettings();
@@ -1618,7 +1715,7 @@ function PreferencesForm() {
             <div style={{ marginBottom: 28, padding: '20px 24px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-light)', background: 'var(--bg-secondary)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
                     <Cloud size={16} style={{ color: 'var(--accent)' }} />
-                    <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>云同步</span>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{text('云同步', 'Cloud Sync', 'Облачная синхронизация')}</span>
                     {firebaseAvailable && authUser && (
                         <span style={{
                             fontSize: 11, padding: '2px 8px', borderRadius: 20,
@@ -1626,7 +1723,7 @@ function PreferencesForm() {
                             marginLeft: 'auto',
                         }}>
                             <CheckCircle2 size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
-                            已连接
+                            {text('已连接', 'Connected', 'Подключено')}
                         </span>
                     )}
                 </div>
@@ -1643,10 +1740,13 @@ function PreferencesForm() {
                                 <CloudOff size={20} />
                             </div>
                             <div>
-                                <h4 style={{ margin: '0 0 6px 0', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>本地离线模式</h4>
+                                <h4 style={{ margin: '0 0 6px 0', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{text('本地离线模式', 'Local Offline Mode', 'Локальный офлайн-режим')}</h4>
                                 <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                                    当前未配置云同步服务。您的所有数据都安全地保存在浏览器本地，不会上传到任何服务器。
-                                    配置云同步后，可开启多设备之间的自动同步功能。
+                                    {text(
+                                        '当前未配置云同步服务。您的所有数据都安全地保存在浏览器本地，不会上传到任何服务器。配置云同步后，可开启多设备之间的自动同步功能。',
+                                        'Cloud sync is not configured. All data is stored safely in this browser and is not uploaded to any server. Configure cloud sync to enable automatic syncing across devices.',
+                                        'Облачная синхронизация не настроена. Все данные безопасно хранятся в этом браузере и не отправляются на сервер. Настройте синхронизацию для автоматической работы между устройствами.'
+                                    )}
                                 </p>
                             </div>
                         </div>
@@ -1662,7 +1762,7 @@ function PreferencesForm() {
                                 onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
                                 onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
                             >
-                                了解如何开启云同步
+                                {text('了解如何开启云同步', 'Learn How to Enable Cloud Sync', 'Как включить облачную синхронизацию')}
                             </button>
                         </div>
                     </div>
@@ -1691,14 +1791,14 @@ function PreferencesForm() {
                             {syncStatus && (
                                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 12, padding: '6px 10px', background: 'var(--bg-primary)', borderRadius: 'var(--radius-sm)' }}>
                                     {syncStatus.syncing ? (
-                                        <><RefreshCw size={11} style={{ marginRight: 4, animation: 'spin 1s linear infinite' }} />正在同步...</>
+                                        <><RefreshCw size={11} style={{ marginRight: 4, animation: 'spin 1s linear infinite' }} />{text('正在同步...', 'Syncing...', 'Синхронизация...')}</>
                                     ) : syncStatus.pending > 0 ? (
-                                        <>{syncStatus.pending} 项待同步</>
+                                        <>{text(`${syncStatus.pending} 项待同步`, `${syncStatus.pending} pending`, `Ожидает синхронизации: ${syncStatus.pending}`)}</>
                                     ) : syncStatus.lastSync ? (
-                                        <><CheckCircle2 size={11} style={{ marginRight: 4, color: '#22c55e' }} />上次同步: {new Date(syncStatus.lastSync).toLocaleTimeString()}</>
+                                        <><CheckCircle2 size={11} style={{ marginRight: 4, color: '#22c55e' }} />{text('上次同步', 'Last synced', 'Последняя синхронизация')}: {new Date(syncStatus.lastSync).toLocaleTimeString()}</>
                                     ) : null}
                                     {syncStatus.error && (
-                                        <span style={{ color: '#ef4444', marginLeft: 8 }}>同步失败: {syncStatus.error}</span>
+                                        <span style={{ color: '#ef4444', marginLeft: 8 }}>{text('同步失败', 'Sync failed', 'Ошибка синхронизации')}: {syncStatus.error}</span>
                                     )}
                                 </div>
                             )}
@@ -1713,21 +1813,21 @@ function PreferencesForm() {
                                 onMouseEnter={e => { e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.color = '#ef4444'; }}
                                 onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-light)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
                             >
-                                退出登录
+                                {text('退出登录', 'Sign Out', 'Выйти')}
                             </button>
                         </div>
                     ) : (
                         /* 未登录状态 */
                         <div>
                             <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 14, lineHeight: 1.5 }}>
-                                登录后自动同步作品到云端，支持多设备访问。未登录时数据仅保存在本地。
+                                {text('登录后自动同步作品到云端，支持多设备访问。未登录时数据仅保存在本地。', 'Sign in to automatically sync works to the cloud and access them across devices. When signed out, data stays local.', 'Войдите, чтобы автоматически синхронизировать произведения с облаком и работать на разных устройствах. Без входа данные остаются локально.')}
                             </p>
 
                             {/* 邮箱/密码 */}
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
                                 <input
                                     type="email" value={authEmail} onChange={e => setAuthEmail(e.target.value)}
-                                    placeholder="邮箱" autoComplete="email"
+                                    placeholder={text('邮箱', 'Email', 'Email')} autoComplete="email"
                                     style={{
                                         padding: '8px 12px', border: '1px solid var(--border-light)',
                                         borderRadius: 'var(--radius-sm)', background: 'var(--bg-primary)',
@@ -1738,7 +1838,7 @@ function PreferencesForm() {
                                 />
                                 <input
                                     type="password" value={authPassword} onChange={e => setAuthPassword(e.target.value)}
-                                    placeholder="密码（至少6位）" autoComplete={authMode === 'register' ? 'new-password' : 'current-password'}
+                                    placeholder={text('密码（至少6位）', 'Password (at least 6 characters)', 'Пароль (минимум 6 символов)')} autoComplete={authMode === 'register' ? 'new-password' : 'current-password'}
                                     onKeyDown={e => { if (e.key === 'Enter') handleEmailAuth(); }}
                                     style={{
                                         padding: '8px 12px', border: '1px solid var(--border-light)',
@@ -1768,7 +1868,7 @@ function PreferencesForm() {
                                         transition: 'all 0.15s',
                                     }}
                                 >
-                                    {authLoading ? '处理中...' : authMode === 'register' ? '注册' : '登录'}
+                                    {authLoading ? text('处理中...', 'Processing...', 'Обработка...') : authMode === 'register' ? text('注册', 'Register', 'Регистрация') : text('登录', 'Sign In', 'Войти')}
                                 </button>
                                 <button
                                     onClick={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); setAuthError(''); }}
@@ -1778,14 +1878,14 @@ function PreferencesForm() {
                                         color: 'var(--text-muted)', transition: 'all 0.15s',
                                     }}
                                 >
-                                    {authMode === 'login' ? '没有账号？注册' : '已有账号？登录'}
+                                    {authMode === 'login' ? text('没有账号？注册', 'No account? Register', 'Нет аккаунта? Зарегистрироваться') : text('已有账号？登录', 'Already have an account? Sign in', 'Уже есть аккаунт? Войти')}
                                 </button>
                             </div>
 
                             {/* 分隔线 */}
                             <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '12px 0' }}>
                                 <div style={{ flex: 1, height: 1, background: 'var(--border-light)' }} />
-                                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>或</span>
+                                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{text('或', 'or', 'или')}</span>
                                 <div style={{ flex: 1, height: 1, background: 'var(--border-light)' }} />
                             </div>
 
@@ -1803,7 +1903,7 @@ function PreferencesForm() {
                                 onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
                                 onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-primary)'}
                             >
-                                <Globe2 size={15} /> 使用 Google 账号登录
+                                <Globe2 size={15} /> {text('使用 Google 账号登录', 'Sign in with Google', 'Войти через Google')}
                             </button>
                         </div>
                     )}
@@ -1812,25 +1912,28 @@ function PreferencesForm() {
 
             {/* 写作模式选择器 */}
             <div style={{ marginBottom: 28 }}>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 12 }}>写作模式</label>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 12 }}>{text('写作模式', 'Writing Mode', 'Режим письма')}</label>
                 <div style={{ display: 'flex', gap: 10 }}>
-                    {Object.values(WRITING_MODES).map(m => (
-                        <button
-                            key={m.key}
-                            className={`writing-mode-card ${writingModeState === m.key ? 'active' : ''}`}
-                            style={{
-                                border: writingModeState === m.key ? `2px solid ${m.color}` : '1px solid var(--border-light)',
-                                background: writingModeState === m.key ? `${m.color}10` : 'var(--bg-primary)',
-                            }}
-                            onClick={() => { setWritingModeLocalState(m.key); setWritingMode(m.key); setGlobalWritingMode(m.key); }}
-                        >
-                            <div style={{ fontSize: 18, marginBottom: 4 }}>
-                                {m.icon === 'smartphone' ? <Smartphone size={18} /> : m.icon === 'book-open' ? <BookOpen size={18} /> : m.icon === 'clapperboard' ? <Clapperboard size={18} /> : null}
-                            </div>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: writingModeState === m.key ? m.color : 'var(--text-primary)', marginBottom: 2 }}>{m.label}</div>
-                            <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.4 }}>{m.desc}</div>
-                        </button>
-                    ))}
+                    {Object.values(WRITING_MODES).map(m => {
+                        const copy = writingModeCopy(m);
+                        return (
+                            <button
+                                key={m.key}
+                                className={`writing-mode-card ${writingModeState === m.key ? 'active' : ''}`}
+                                style={{
+                                    border: writingModeState === m.key ? `2px solid ${m.color}` : '1px solid var(--border-light)',
+                                    background: writingModeState === m.key ? `${m.color}10` : 'var(--bg-primary)',
+                                }}
+                                onClick={() => { setWritingModeLocalState(m.key); setWritingMode(m.key); setGlobalWritingMode(m.key); }}
+                            >
+                                <div style={{ fontSize: 18, marginBottom: 4 }}>
+                                    {m.icon === 'smartphone' ? <Smartphone size={18} /> : m.icon === 'book-open' ? <BookOpen size={18} /> : m.icon === 'clapperboard' ? <Clapperboard size={18} /> : null}
+                                </div>
+                                <div style={{ fontSize: 13, fontWeight: 600, color: writingModeState === m.key ? m.color : 'var(--text-primary)', marginBottom: 2 }}>{copy.label}</div>
+                                <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.4 }}>{copy.desc}</div>
+                            </button>
+                        );
+                    })}
                 </div>
             </div>
 
@@ -2055,7 +2158,7 @@ function PreferencesForm() {
             <div style={{ marginBottom: 24 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                     <label style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)' }}>
-                        <Sparkles size={14} style={{ marginRight: 4 }} /> 自定义系统提示词
+                        <Sparkles size={14} style={{ marginRight: 4 }} /> {text('自定义系统提示词', 'Custom System Prompt', 'Пользовательский системный промпт')}
                     </label>
                     {customPrompt && (
                         <button
@@ -2069,12 +2172,16 @@ function PreferencesForm() {
                             onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
                             onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
                         >
-                            ↩ 恢复默认
+                            ↩ {text('恢复默认', 'Reset default', 'Сбросить')}
                         </button>
                     )}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8, lineHeight: 1.5 }}>
-                    自定义 AI 的角色设定和写作风格。留空则使用内置默认提示词（基于当前写作模式）。
+                    {text(
+                        '自定义 AI 的角色设定和写作风格。留空则使用内置默认提示词（基于当前写作模式）。',
+                        'Customize the AI role and writing style. Leave blank to use the built-in default prompt for the current writing mode.',
+                        'Настройте роль ИИ и стиль письма. Оставьте пустым, чтобы использовать встроенный промпт для текущего режима.'
+                    )}
                 </div>
                 <textarea
                     value={customPrompt}
@@ -2094,10 +2201,12 @@ function PreferencesForm() {
                 />
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
                     <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                        {customPrompt ? <><CheckCircle2 size={12} style={{ marginRight: 4, color: 'var(--success, #22c55e)' }} />使用自定义提示词</> : <><FileText size={12} style={{ marginRight: 4 }} />使用内置默认提示词</>}
+                        {customPrompt
+                            ? <><CheckCircle2 size={12} style={{ marginRight: 4, color: 'var(--success, #22c55e)' }} />{text('使用自定义提示词', 'Using custom prompt', 'Используется пользовательский промпт')}</>
+                            : <><FileText size={12} style={{ marginRight: 4 }} />{text('使用内置默认提示词', 'Using built-in default prompt', 'Используется встроенный промпт')}</>}
                     </span>
                     <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                        {customPrompt.length} 字
+                        {text(`${customPrompt.length} 字`, `${customPrompt.length} chars`, `${customPrompt.length} симв.`)}
                     </span>
                 </div>
             </div>
@@ -2136,7 +2245,7 @@ function ApiConfigForm({ data, onChange }) {
     const [showAddInstance, setShowAddInstance] = useState(null); // providerType key or null
     const [newInstanceName, setNewInstanceName] = useState('');
     const [editingModelParams, setEditingModelParams] = useState(null); // model id being edited
-    const { t } = useI18n();
+    const { t, text } = useI18n();
 
     // 根据 provider 和 apiFormat 获取正确的 baseUrl
     const getBaseUrl = (provider, apiFormat) => {
@@ -2340,10 +2449,10 @@ function ApiConfigForm({ data, onChange }) {
             if (res.ok && !result.error) {
                 setBalanceInfo(result);
             } else {
-                setBalanceInfo({ error: result.error || '查询失败' });
+                setBalanceInfo({ error: result.error || text('查询失败', 'Query failed', 'Запрос не удался') });
             }
         } catch (e) {
-            setBalanceInfo({ error: e.message || '网络错误' });
+            setBalanceInfo({ error: e.message || text('网络错误', 'Network error', 'Ошибка сети') });
         }
     };
 
@@ -2367,10 +2476,10 @@ function ApiConfigForm({ data, onChange }) {
                 if (res.ok && !result.error) {
                     setBalanceInfo(result);
                 } else {
-                    setBalanceInfo({ error: result.error || '查询失败' });
+                    setBalanceInfo({ error: result.error || text('查询失败', 'Query failed', 'Запрос не удался') });
                 }
             } catch (e) {
-                if (!cancelled) setBalanceInfo({ error: e.message || '网络错误' });
+                if (!cancelled) setBalanceInfo({ error: e.message || text('网络错误', 'Network error', 'Ошибка сети') });
             }
         }, 450);
 
@@ -2404,7 +2513,7 @@ function ApiConfigForm({ data, onChange }) {
                 <div className="provider-list">
                     <input
                         className="provider-search"
-                        placeholder="搜索供应商..."
+                        placeholder={text('搜索供应商...', 'Search providers...', 'Искать провайдеров...')}
                         value={providerSearch}
                         onChange={e => setProviderSearch(e.target.value)}
                         autoComplete="off"
@@ -2412,19 +2521,19 @@ function ApiConfigForm({ data, onChange }) {
                         data-1p-ignore="true"
                     />
                     {[
-                        { group: '🇨🇳 国内', keys: ['zhipu', 'deepseek', 'bailian', 'volcengine', 'moonshot', 'stepfun', 'yi', 'baichuan', 'hunyuan', 'baidu', 'minimax', 'siliconflow'] },
-                        { group: '国际', keys: ['openai', 'claude', 'gemini', 'gemini-native', 'openai-responses', 'groq', 'mistral', 'cohere', 'together', 'perplexity', 'xai', 'cerebras', 'github'] },
-                        { group: '聚合', keys: ['openrouter'] },
-                        { group: '自定义', keys: ['custom', 'custom-gemini', 'custom-claude'] },
+                        { group: 'cn', keys: ['zhipu', 'deepseek', 'bailian', 'volcengine', 'moonshot', 'stepfun', 'yi', 'baichuan', 'hunyuan', 'baidu', 'minimax', 'siliconflow'] },
+                        { group: 'global', keys: ['openai', 'claude', 'gemini', 'gemini-native', 'openai-responses', 'groq', 'mistral', 'cohere', 'together', 'perplexity', 'xai', 'cerebras', 'github'] },
+                        { group: 'aggregate', keys: ['openrouter'] },
+                        { group: 'custom', keys: ['custom', 'custom-gemini', 'custom-claude'] },
                     ].map(section => {
                         const items = section.keys
                             .map(k => PROVIDERS.find(p => p.key === k))
                             .filter(Boolean)
-                            .filter(p => !providerSearch || p.label.toLowerCase().includes(providerSearch.toLowerCase()) || p.key.includes(providerSearch.toLowerCase()));
+                            .filter(p => !providerSearch || getProviderLabel(p, text).toLowerCase().includes(providerSearch.toLowerCase()) || p.label.toLowerCase().includes(providerSearch.toLowerCase()) || p.key.includes(providerSearch.toLowerCase()));
                         if (items.length === 0) return null;
                         return (
                             <div key={section.group}>
-                                <div className="provider-group-header">{section.group}</div>
+                                <div className="provider-group-header">{getProviderGroupLabel(section.group, text)}</div>
                                 {items.map(p => {
                                     const hasKey = !!(data.providerConfigs?.[p.key]?.apiKey || (data.provider === p.key && data.apiKey));
                                     // 查找该 providerType 的用户实例
@@ -2439,7 +2548,7 @@ function ApiConfigForm({ data, onChange }) {
                                                     onClick={() => handleProviderChange(p.key)}
                                                     style={{ flex: 1 }}
                                                 >
-                                                    <span className="provider-item-name">{p.label}</span>
+                                                    <span className="provider-item-name">{getProviderLabel(p, text)}</span>
                                                     {hasKey && <span className="provider-item-check"><CheckCircle2 size={12} /></span>}
                                                 </button>
                                                 {/* 添加同类型端点按钮（始终显示） */}
@@ -2448,7 +2557,7 @@ function ApiConfigForm({ data, onChange }) {
                                                     onMouseEnter={e => e.currentTarget.style.opacity = '1'}
                                                     onMouseLeave={e => e.currentTarget.style.opacity = '0.5'}
                                                     onClick={(e) => { e.stopPropagation(); setShowAddInstance(p.key); setNewInstanceName(''); }}
-                                                    title="添加同类型端点"
+                                                    title={text('添加同类型端点', 'Add same-type endpoint', 'Добавить endpoint того же типа')}
                                                 >+</button>
                                             </div>
                                             {/* 用户创建的实例 */}
@@ -2477,27 +2586,30 @@ function ApiConfigForm({ data, onChange }) {
                     {showAddInstance && (
                         <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }} onClick={e => { if (e.target === e.currentTarget) setShowAddInstance(null); }}>
                             <div style={{ background: 'var(--bg-primary)', borderRadius: 'var(--radius-lg, 14px)', boxShadow: '0 16px 48px rgba(0,0,0,0.25)', width: 380, padding: 24 }}>
-                                <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>添加 {PROVIDERS.find(p => p.key === showAddInstance)?.label || showAddInstance} 端点</div>
-                                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>为同一供应商添加不同的 API 地址和密钥（如公司中转站、本地部署等）</div>
+                                <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>
+                                    {text(`添加 ${getProviderLabel(showAddInstance, text)} 端点`, `Add ${getProviderLabel(showAddInstance, text)} Endpoint`, `Добавить endpoint ${getProviderLabel(showAddInstance, text)}`)}
+                                </div>
+                                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>{text('为同一供应商添加不同的 API 地址和密钥（如公司中转站、本地部署等）', 'Add a different API address and key for the same provider, such as a company proxy or local deployment.', 'Добавьте другой адрес API и ключ для того же провайдера, например корпоративный прокси или локальное развертывание.')}</div>
                                 <input
                                     className="modal-input"
-                                    placeholder="端点名称，如：公司内部中转、本地部署..."
+                                    placeholder={text('端点名称，如：公司内部中转、本地部署...', 'Endpoint name, e.g. company proxy, local deployment...', 'Название endpoint, например корпоративный прокси, локальное развертывание...')}
                                     value={newInstanceName}
                                     onChange={e => setNewInstanceName(e.target.value)}
                                     autoFocus
                                     style={{ marginBottom: 12 }}
                                 />
                                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                                    <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => setShowAddInstance(null)}>取消</button>
+                                    <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => setShowAddInstance(null)}>{text('取消', 'Cancel', 'Отмена')}</button>
                                     <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={() => {
-                                        const name = newInstanceName.trim() || `${PROVIDERS.find(p => p.key === showAddInstance)?.label || showAddInstance} (新)`;
+                                        const providerLabel = getProviderLabel(showAddInstance, text);
+                                        const name = newInstanceName.trim() || text(`${providerLabel} (新)`, `${providerLabel} (New)`, `${providerLabel} (новый)`);
                                         const newKey = addProviderInstance(showAddInstance, name);
                                         setShowAddInstance(null);
                                         // 刷新 data 并切换到新实例
                                         const settings = getProjectSettings();
                                         onChange({ ...settings.apiConfig });
                                         setTimeout(() => handleProviderChange(newKey), 50);
-                                    }}>创建</button>
+                                    }}>{text('创建', 'Create', 'Создать')}</button>
                                 </div>
                             </div>
                         </div>
@@ -2508,7 +2620,7 @@ function ApiConfigForm({ data, onChange }) {
                 <div className="provider-detail">
                     <div className="provider-detail-header">
                         <div style={{ flex: 1 }}>
-                            <span style={{ fontSize: 15, fontWeight: 600 }}>{currentProvider.label}</span>
+                            <span style={{ fontSize: 15, fontWeight: 600 }}>{getProviderLabel(currentProvider, text)}</span>
                             {instanceCfg?.instanceName && (
                                 <span style={{ fontSize: 12, color: 'var(--accent)', marginLeft: 8, fontWeight: 500 }}>— {instanceCfg.instanceName}</span>
                             )}
@@ -2523,12 +2635,12 @@ function ApiConfigForm({ data, onChange }) {
                                 onMouseEnter={e => e.currentTarget.style.opacity = '1'}
                                 onMouseLeave={e => e.currentTarget.style.opacity = '0.7'}
                                 onClick={() => {
-                                    if (!confirm(`确认删除端点「${instanceCfg.instanceName || data.provider}」？`)) return;
+                                    if (!confirm(text(`确认删除端点「${instanceCfg.instanceName || data.provider}」？`, `Delete endpoint "${instanceCfg.instanceName || data.provider}"?`, `Удалить endpoint «${instanceCfg.instanceName || data.provider}»?`))) return;
                                     deleteProviderInstance(data.provider);
                                     const settings = getProjectSettings();
                                     onChange({ ...settings.apiConfig });
                                 }}
-                            >删除此端点</button>
+                            >{text('删除此端点', 'Delete Endpoint', 'Удалить endpoint')}</button>
                         )}
                     </div>
 
@@ -2537,31 +2649,31 @@ function ApiConfigForm({ data, onChange }) {
                         <div className="provider-hint">{t('apiConfig.geminiNativeHint')}</div>
                     )}
                     {resolvedProviderType === 'volcengine' && (
-                        <div className="provider-hint">火山引擎需要先在控制台创建「推理接入点」，然后将 endpoint_id（如 ep-xxxx）填入模型字段。支持豆包系列模型。</div>
+                        <div className="provider-hint">{text('火山引擎需要先在控制台创建「推理接入点」，然后将 endpoint_id（如 ep-xxxx）填入模型字段。支持豆包系列模型。', 'For Volcengine, create an inference endpoint in the console first, then enter its endpoint_id, such as ep-xxxx, in the model field. Doubao models are supported.', 'Для Volcengine сначала создайте inference endpoint в консоли, затем укажите endpoint_id, например ep-xxxx, в поле модели. Поддерживаются модели Doubao.')}</div>
                     )}
                     {resolvedProviderType === 'bailian' && (
-                        <div className="provider-hint">阿里云百炼平台 API Key 在「模型服务灵积」控制台获取，支持通义千问系列模型。</div>
+                        <div className="provider-hint">{text('阿里云百炼平台 API Key 在「模型服务灵积」控制台获取，支持通义千问系列模型。', 'Get the Alibaba Cloud Bailian API key from the Model Studio console. Qwen models are supported.', 'API-ключ Alibaba Cloud Bailian получите в консоли Model Studio. Поддерживаются модели Qwen.')}</div>
                     )}
                     {resolvedProviderType === 'minimax' && (
-                        <div className="provider-hint">MiniMax API Key 在开放平台获取，支持 abab 系列和 MiniMax-Text 系列模型。</div>
+                        <div className="provider-hint">{text('MiniMax API Key 在开放平台获取，支持 abab 系列和 MiniMax-Text 系列模型。', 'Get the MiniMax API key from the open platform. abab and MiniMax-Text model families are supported.', 'API-ключ MiniMax получите на открытой платформе. Поддерживаются семейства abab и MiniMax-Text.')}</div>
                     )}
                     {resolvedProviderType === 'deepseek' && (
-                        <div className="provider-hint">DeepSeek V4 使用 https://api.deepseek.com；余额接口为 GET https://api.deepseek.com/user/balance；deepseek-chat / deepseek-reasoner 将于 2026-07-24 停用，建议切换到 deepseek-v4-pro 或 deepseek-v4-flash。</div>
+                        <div className="provider-hint">{text('DeepSeek V4 使用 https://api.deepseek.com；余额接口为 GET https://api.deepseek.com/user/balance；deepseek-chat / deepseek-reasoner 将于 2026-07-24 停用，建议切换到 deepseek-v4-pro 或 deepseek-v4-flash。', 'DeepSeek V4 uses https://api.deepseek.com; the balance endpoint is GET https://api.deepseek.com/user/balance. deepseek-chat / deepseek-reasoner will be retired on 2026-07-24; switch to deepseek-v4-pro or deepseek-v4-flash.', 'DeepSeek V4 использует https://api.deepseek.com; endpoint баланса: GET https://api.deepseek.com/user/balance. deepseek-chat / deepseek-reasoner будут отключены 2026-07-24; рекомендуется deepseek-v4-pro или deepseek-v4-flash.')}</div>
                     )}
 
                     {/* API 格式选择（多格式供应商） */}
                     {(resolvedProviderType === 'bailian' || resolvedProviderType === 'minimax') && (
                         <div style={{ marginBottom: 12 }}>
-                            <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 4 }}>API 格式</label>
+                            <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 4 }}>{text('API 格式', 'API Format', 'Формат API')}</label>
                             <div style={{ display: 'flex', gap: 6 }}>
                                 {[
-                                    { key: 'openai', label: 'OpenAI 兼容' },
-                                    { key: 'anthropic', label: 'Anthropic 兼容' },
+                                    { key: 'openai', label: text('OpenAI 兼容', 'OpenAI Compatible', 'Совместимо с OpenAI') },
+                                    { key: 'anthropic', label: text('Anthropic 兼容', 'Anthropic Compatible', 'Совместимо с Anthropic') },
                                 ].map(opt => (
                                     <button key={opt.key} style={{ padding: '5px 12px', border: (data.apiFormat || 'openai') === opt.key ? '2px solid var(--accent)' : '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', background: (data.apiFormat || 'openai') === opt.key ? 'var(--accent-light)' : 'var(--bg-primary)', cursor: 'pointer', fontSize: 11, fontWeight: (data.apiFormat || 'openai') === opt.key ? 600 : 400, color: (data.apiFormat || 'openai') === opt.key ? 'var(--accent)' : 'var(--text-primary)', transition: 'all 0.15s' }} onClick={() => handleApiFormatChange(opt.key)}>{opt.label}</button>
                                 ))}
                             </div>
-                            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>Anthropic 格式可解锁 Claude 代码复用，OpenAI 格式兼容性更广</div>
+                            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>{text('Anthropic 格式可解锁 Claude 代码复用，OpenAI 格式兼容性更广', 'Anthropic format enables Claude code reuse; OpenAI format has broader compatibility.', 'Формат Anthropic включает повторное использование кода Claude; формат OpenAI более совместим.')}</div>
                         </div>
                     )}
 
@@ -2575,11 +2687,11 @@ function ApiConfigForm({ data, onChange }) {
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                                 <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}><Coins size={13} style={{ marginRight: 4, verticalAlign: 'text-bottom' }} />{t('apiConfig.balance') || 'API 余额'}</span>
                                 <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '3px 10px' }} onClick={handleQueryBalance} disabled={balanceInfo === 'loading'}>
-                                    {balanceInfo === 'loading' ? (t('apiConfig.balanceQuerying') || '查询中...') : (balanceInfo ? '刷新' : (t('apiConfig.balanceQuery') || '查询余额'))}
+                                    {balanceInfo === 'loading' ? (t('apiConfig.balanceQuerying') || text('查询中...', 'Querying...', 'Запрос...')) : (balanceInfo ? text('刷新', 'Refresh', 'Обновить') : (t('apiConfig.balanceQuery') || text('查询余额', 'Query Balance', 'Проверить баланс')))}
                                 </button>
                             </div>
                             {balanceInfo === 'loading' && (
-                                <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>正在查询余额…</div>
+                                <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>{text('正在查询余额…', 'Querying balance...', 'Запрос баланса...')}</div>
                             )}
                             {balanceInfo && balanceInfo !== 'loading' && (
                                 <div style={{ marginTop: 8 }}>
@@ -2605,17 +2717,17 @@ function ApiConfigForm({ data, onChange }) {
                     <FieldInput label={isCustom ? t('apiConfig.apiAddress') : t('apiConfig.apiAddressAuto')} value={data.baseUrl} onChange={v => update('baseUrl', v)} placeholder={resolvedProviderType === 'custom-gemini' ? 'https://generativelanguage.googleapis.com/v1beta' : resolvedProviderType === 'custom-claude' ? 'https://api.anthropic.com' : t('apiConfig.apiAddressPlaceholder')} />
 
                     {/* 代理地址 */}
-                    <FieldInput label={<><Globe size={13} style={{ marginRight: 4, verticalAlign: 'text-bottom' }} />代理地址（可选）</>} value={data.proxyUrl || ''} onChange={v => update('proxyUrl', v)} placeholder="http://127.0.0.1:7890" />
+                    <FieldInput label={<><Globe size={13} style={{ marginRight: 4, verticalAlign: 'text-bottom' }} />{text('代理地址（可选）', 'Proxy URL (optional)', 'Адрес прокси (необязательно)')}</>} value={data.proxyUrl || ''} onChange={v => update('proxyUrl', v)} placeholder="http://127.0.0.1:7890" />
                     {/* 模型选择 — 统一用弹窗管理，内联只显示当前模型 + 获取按钮 */}
                     <div style={{ marginBottom: 14 }}>
                         <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 5 }}>
                             {t('apiConfig.model')}
                         </label>
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                            <input className="modal-input" style={{ marginBottom: 0, flex: 1 }} value={data.model || ''} onChange={e => update('model', e.target.value)} placeholder={isCustom ? (resolvedProviderType === 'custom-gemini' ? '例如：gemini-2.0-flash' : resolvedProviderType === 'custom-claude' ? '例如：claude-sonnet-4-20250514' : '例如：gpt-4o-mini') : '选择或输入模型名称'} />
+                            <input className="modal-input" style={{ marginBottom: 0, flex: 1 }} value={data.model || ''} onChange={e => update('model', e.target.value)} placeholder={isCustom ? (resolvedProviderType === 'custom-gemini' ? text('例如：gemini-2.0-flash', 'e.g. gemini-2.0-flash', 'например: gemini-2.0-flash') : resolvedProviderType === 'custom-claude' ? text('例如：claude-sonnet-4-20250514', 'e.g. claude-sonnet-4-20250514', 'например: claude-sonnet-4-20250514') : text('例如：gpt-4o-mini', 'e.g. gpt-4o-mini', 'например: gpt-4o-mini')) : text('选择或输入模型名称', 'Select or enter a model name', 'Выберите или введите имя модели')} />
                             {(isCustom ? (data.apiKey && data.baseUrl) : data.apiKey) && (
                                 <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, whiteSpace: 'nowrap', flexShrink: 0 }} onClick={() => { if (Array.isArray(fetchedModels) && fetchedModels.length > 0) { setShowModelModal(true); setModelSearch(''); } else { handleFetchModels(); } }} disabled={fetchedModels === 'loading'}>
-                                    {fetchedModels === 'loading' ? '获取中…' : Array.isArray(fetchedModels) && fetchedModels.length > 0 ? `模型列表 (${fetchedModels.length})` : '获取模型列表'}
+                                    {fetchedModels === 'loading' ? text('获取中…', 'Fetching...', 'Загрузка...') : Array.isArray(fetchedModels) && fetchedModels.length > 0 ? text(`模型列表 (${fetchedModels.length})`, `Model List (${fetchedModels.length})`, `Список моделей (${fetchedModels.length})`) : text('获取模型列表', 'Fetch Model List', 'Получить список моделей')}
                                 </button>
                             )}
                         </div>
@@ -2637,9 +2749,9 @@ function ApiConfigForm({ data, onChange }) {
                                             configs[data.provider] = { ...configs[data.provider], models };
                                         }
                                         onChange({ ...data, providerConfigs: configs });
-                                    }}>{isInList ? '☑ 已在快切列表' : '☐ 加入快切列表'}</button>
+                                    }}>{isInList ? text('☑ 已在快切列表', '☑ In quick switch list', '☑ В списке быстрого выбора') : text('☐ 加入快切列表', '☐ Add to quick switch list', '☐ Добавить в быстрый список')}</button>
                                     {isDeprecatedDeepSeekModel && (
-                                        <div style={{ fontSize: 11, color: 'var(--warning, #b45309)', marginTop: 6 }}>当前 DeepSeek 旧模型名将于 2026-07-24 停用，建议改用 deepseek-v4-pro 或 deepseek-v4-flash。</div>
+                                        <div style={{ fontSize: 11, color: 'var(--warning, #b45309)', marginTop: 6 }}>{text('当前 DeepSeek 旧模型名将于 2026-07-24 停用，建议改用 deepseek-v4-pro 或 deepseek-v4-flash。', 'The current legacy DeepSeek model name will be retired on 2026-07-24. Use deepseek-v4-pro or deepseek-v4-flash instead.', 'Текущее устаревшее имя модели DeepSeek будет отключено 2026-07-24. Используйте deepseek-v4-pro или deepseek-v4-flash.')}</div>
                                     )}
                                 </>
                             );
@@ -2671,7 +2783,11 @@ function ApiConfigForm({ data, onChange }) {
                                     <div>
                                         <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>可用模型列表</div>
                                         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                                            {currentProvider.label} · 共 {mergedModels.length} 个模型，勾选加入快切列表{unavailableCount > 0 ? ` · ${unavailableCount} 个已保存但未返回` : ''}
+                                            {text(
+                                                `${getProviderLabel(currentProvider, text)} · 共 ${mergedModels.length} 个模型，勾选加入快切列表${unavailableCount > 0 ? ` · ${unavailableCount} 个已保存但未返回` : ''}`,
+                                                `${getProviderLabel(currentProvider, text)} · ${mergedModels.length} models · Check models to add them to quick switch${unavailableCount > 0 ? ` · ${unavailableCount} saved but not returned` : ''}`,
+                                                `${getProviderLabel(currentProvider, text)} · моделей: ${mergedModels.length} · Отметьте модели для быстрого переключения${unavailableCount > 0 ? ` · сохранено, но не возвращено: ${unavailableCount}` : ''}`,
+                                            )}
                                         </div>
                                     </div>
                                     <button style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--text-muted)', padding: '4px 8px', lineHeight: 1 }} onClick={() => setShowModelModal(false)}><X size={16} /></button>
@@ -2680,7 +2796,7 @@ function ApiConfigForm({ data, onChange }) {
                                 <div style={{ padding: '10px 20px 8px' }}>
                                     <input
                                         style={{ width: '100%', padding: '7px 12px', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm, 6px)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: 12, outline: 'none' }}
-                                        placeholder="搜索模型名称…"
+                                        placeholder={text('搜索模型名称…', 'Search model names...', 'Искать модели...')}
                                         value={modelSearch}
                                         onChange={e => setModelSearch(e.target.value)}
                                         autoFocus
@@ -2721,7 +2837,7 @@ function ApiConfigForm({ data, onChange }) {
                                                             onChange({ ...data, providerConfigs: configs });
                                                         }}>{isInList ? '✓' : ''}</button>
                                                         {/* 模型名 */}
-                                                        <span style={{ flex: 1, fontFamily: 'monospace', fontSize: 12, color: isActive ? 'var(--accent)' : 'var(--text-primary)', fontWeight: isActive ? 600 : 400, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }} onClick={() => { update('model', m.id); }} title={m.isUnavailable ? `${m.id}（已保存，但未在本次拉取结果中）` : `使用 ${m.id}`}>{m.id}</span>
+                                                        <span style={{ flex: 1, fontFamily: 'monospace', fontSize: 12, color: isActive ? 'var(--accent)' : 'var(--text-primary)', fontWeight: isActive ? 600 : 400, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }} onClick={() => { update('model', m.id); }} title={m.isUnavailable ? text(`${m.id}（已保存，但未在本次拉取结果中）`, `${m.id} (saved, but not returned in this fetch)`, `${m.id} (сохранено, но не найдено в текущем списке)`) : text(`使用 ${m.id}`, `Use ${m.id}`, `Использовать ${m.id}`)}>{m.id}</span>
                                                         {m.isUnavailable && <span style={{ fontSize: 9, color: 'var(--warning, #b45309)', background: 'color-mix(in srgb, var(--warning, #b45309) 12%, transparent)', padding: '1px 5px', borderRadius: 3, flexShrink: 0 }}>未返回</span>}
                                                         {isDeprecatedDeepSeekModel && <span style={{ fontSize: 9, color: 'var(--warning, #b45309)', background: 'color-mix(in srgb, var(--warning, #b45309) 12%, transparent)', padding: '1px 5px', borderRadius: 3, flexShrink: 0 }}>2026-07-24 停用</span>}
                                                         {/* 模型参数指示 */}
@@ -2732,7 +2848,7 @@ function ApiConfigForm({ data, onChange }) {
                                                             onMouseEnter={e => e.currentTarget.style.opacity = '1'}
                                                             onMouseLeave={e => { if (!isEditing) e.currentTarget.style.opacity = '0.5'; }}
                                                             onClick={() => setEditingModelParams(isEditing ? null : m.id)}
-                                                            title="模型独立参数"
+                                                            title={text('模型独立参数', 'Per-model parameters', 'Параметры отдельной модели')}
                                                         >⚙️</button>
                                                         {isActive && <span style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 600, flexShrink: 0 }}>当前</span>}
                                                     </div>
@@ -2755,27 +2871,27 @@ function ApiConfigForm({ data, onChange }) {
                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                                                                     <span style={{ fontSize: 11, color: 'var(--text-secondary)', minWidth: 70 }}>Temperature</span>
                                                                     <input type="range" min="0" max="2" step="0.05" value={mp.temperature ?? 1} onChange={e => updateParam('temperature', parseFloat(e.target.value))} style={{ flex: 1, accentColor: 'var(--accent)', height: 4 }} />
-                                                                    <input type="number" min="0" max="2" step="0.05" value={mp.temperature ?? ''} onChange={e => updateParam('temperature', parseFloat(e.target.value) || 0)} placeholder="默认" style={{ width: 52, padding: '2px 4px', border: '1px solid var(--border-light)', borderRadius: 3, background: 'var(--bg-primary)', fontSize: 11, color: 'var(--text-primary)', textAlign: 'center' }} />
-                                                                    {mp.temperature != null && <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 10, padding: 0 }} onClick={() => clearParam('temperature')} title="恢复默认">✕</button>}
+                                                                    <input type="number" min="0" max="2" step="0.05" value={mp.temperature ?? ''} onChange={e => updateParam('temperature', parseFloat(e.target.value) || 0)} placeholder={text('默认', 'Default', 'По умолчанию')} style={{ width: 52, padding: '2px 4px', border: '1px solid var(--border-light)', borderRadius: 3, background: 'var(--bg-primary)', fontSize: 11, color: 'var(--text-primary)', textAlign: 'center' }} />
+                                                                    {mp.temperature != null && <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 10, padding: 0 }} onClick={() => clearParam('temperature')} title={text('恢复默认', 'Reset to default', 'Сбросить')}>✕</button>}
                                                                 </div>
                                                                 {/* Top P */}
                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                                                                     <span style={{ fontSize: 11, color: 'var(--text-secondary)', minWidth: 70 }}>Top P</span>
                                                                     <input type="range" min="0" max="1" step="0.05" value={mp.topP ?? 0.95} onChange={e => updateParam('topP', parseFloat(e.target.value))} style={{ flex: 1, accentColor: 'var(--accent)', height: 4 }} />
-                                                                    <input type="number" min="0" max="1" step="0.05" value={mp.topP ?? ''} onChange={e => updateParam('topP', parseFloat(e.target.value) || 0)} placeholder="默认" style={{ width: 52, padding: '2px 4px', border: '1px solid var(--border-light)', borderRadius: 3, background: 'var(--bg-primary)', fontSize: 11, color: 'var(--text-primary)', textAlign: 'center' }} />
-                                                                    {mp.topP != null && <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 10, padding: 0 }} onClick={() => clearParam('topP')} title="恢复默认">✕</button>}
+                                                                    <input type="number" min="0" max="1" step="0.05" value={mp.topP ?? ''} onChange={e => updateParam('topP', parseFloat(e.target.value) || 0)} placeholder={text('默认', 'Default', 'По умолчанию')} style={{ width: 52, padding: '2px 4px', border: '1px solid var(--border-light)', borderRadius: 3, background: 'var(--bg-primary)', fontSize: 11, color: 'var(--text-primary)', textAlign: 'center' }} />
+                                                                    {mp.topP != null && <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 10, padding: 0 }} onClick={() => clearParam('topP')} title={text('恢复默认', 'Reset to default', 'Сбросить')}>✕</button>}
                                                                 </div>
                                                                 {/* 上下文长度 */}
                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                                                                     <span style={{ fontSize: 11, color: 'var(--text-secondary)', minWidth: 70 }}>上下文</span>
-                                                                    <input type="number" min="1024" step="1024" value={mp.maxContextLength ?? ''} onChange={e => updateParam('maxContextLength', parseInt(e.target.value) || 4096)} placeholder="默认" style={{ flex: 1, padding: '2px 6px', border: '1px solid var(--border-light)', borderRadius: 3, background: 'var(--bg-primary)', fontSize: 11, color: 'var(--text-primary)' }} />
-                                                                    {mp.maxContextLength != null && <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 10, padding: 0 }} onClick={() => clearParam('maxContextLength')} title="恢复默认">✕</button>}
+                                                                    <input type="number" min="1024" step="1024" value={mp.maxContextLength ?? ''} onChange={e => updateParam('maxContextLength', parseInt(e.target.value) || 4096)} placeholder={text('默认', 'Default', 'По умолчанию')} style={{ flex: 1, padding: '2px 6px', border: '1px solid var(--border-light)', borderRadius: 3, background: 'var(--bg-primary)', fontSize: 11, color: 'var(--text-primary)' }} />
+                                                                    {mp.maxContextLength != null && <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 10, padding: 0 }} onClick={() => clearParam('maxContextLength')} title={text('恢复默认', 'Reset to default', 'Сбросить')}>✕</button>}
                                                                 </div>
                                                                 {/* 输出 Token */}
                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                                                                     <span style={{ fontSize: 11, color: 'var(--text-secondary)', minWidth: 70 }}>输出Token</span>
-                                                                    <input type="number" min="256" step="256" value={mp.maxOutputTokens ?? ''} onChange={e => updateParam('maxOutputTokens', parseInt(e.target.value) || 4096)} placeholder="默认" style={{ flex: 1, padding: '2px 6px', border: '1px solid var(--border-light)', borderRadius: 3, background: 'var(--bg-primary)', fontSize: 11, color: 'var(--text-primary)' }} />
-                                                                    {mp.maxOutputTokens != null && <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 10, padding: 0 }} onClick={() => clearParam('maxOutputTokens')} title="恢复默认">✕</button>}
+                                                                    <input type="number" min="256" step="256" value={mp.maxOutputTokens ?? ''} onChange={e => updateParam('maxOutputTokens', parseInt(e.target.value) || 4096)} placeholder={text('默认', 'Default', 'По умолчанию')} style={{ flex: 1, padding: '2px 6px', border: '1px solid var(--border-light)', borderRadius: 3, background: 'var(--bg-primary)', fontSize: 11, color: 'var(--text-primary)' }} />
+                                                                    {mp.maxOutputTokens != null && <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 10, padding: 0 }} onClick={() => clearParam('maxOutputTokens')} title={text('恢复默认', 'Reset to default', 'Сбросить')}>✕</button>}
                                                                 </div>
                                                                 {/* 思考等级 */}
                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -2865,13 +2981,13 @@ function ApiConfigForm({ data, onChange }) {
                                             <button key={opt.key} style={{ padding: '4px 10px', border: (data.searchConfig?.tool || 'tavily') === opt.key ? '2px solid var(--accent)' : '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', background: (data.searchConfig?.tool || 'tavily') === opt.key ? 'var(--accent-light)' : 'var(--bg-primary)', cursor: 'pointer', fontSize: 11, fontWeight: (data.searchConfig?.tool || 'tavily') === opt.key ? 600 : 400, color: (data.searchConfig?.tool || 'tavily') === opt.key ? 'var(--accent)' : 'var(--text-primary)', transition: 'all 0.15s' }} onClick={() => onChange({ ...data, searchConfig: { ...(data.searchConfig || {}), tool: opt.key } })}>{opt.label}</button>
                                         ))}
                                     </div>
-                                    <FieldInput label={`${(data.searchConfig?.tool || 'Tavily').charAt(0).toUpperCase() + (data.searchConfig?.tool || 'tavily').slice(1)} API Key`} value={data.searchConfig?.apiKey || ''} onChange={v => onChange({ ...data, searchConfig: { ...(data.searchConfig || {}), apiKey: v } })} placeholder={`填入 ${data.searchConfig?.tool || 'Tavily'} API Key（多个用逗号分隔可轮询）`} secret />
+                                    <FieldInput label={`${(data.searchConfig?.tool || 'Tavily').charAt(0).toUpperCase() + (data.searchConfig?.tool || 'tavily').slice(1)} API Key`} value={data.searchConfig?.apiKey || ''} onChange={v => onChange({ ...data, searchConfig: { ...(data.searchConfig || {}), apiKey: v } })} placeholder={text(`填入 ${data.searchConfig?.tool || 'Tavily'} API Key（多个用逗号分隔可轮询）`, `Enter ${data.searchConfig?.tool || 'Tavily'} API keys. Use commas to rotate multiple keys.`, `Введите API key ${data.searchConfig?.tool || 'Tavily'}. Несколько ключей можно разделить запятыми.`)} secret />
                                     {!data.searchConfig?.apiKey && (
                                         <div style={{ fontSize: 11, color: 'var(--error)', marginTop: -8, marginBottom: 6, paddingLeft: 2 }}>
                                             <AlertTriangle size={12} style={{ marginRight: 4, verticalAlign: 'text-bottom' }} />当前供应商需要外部搜索 API Key 才能使用联网搜索（<a href={data.searchConfig?.tool === 'exa' ? 'https://exa.ai' : 'https://tavily.com'} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>点此获取</a>）
                                         </div>
                                     )}
-                                    <FieldInput label={`${(data.searchConfig?.tool || 'Tavily').charAt(0).toUpperCase() + (data.searchConfig?.tool || 'tavily').slice(1)} API 地址`} value={data.searchConfig?.baseUrl || ''} onChange={v => onChange({ ...data, searchConfig: { ...(data.searchConfig || {}), baseUrl: v } })} placeholder={data.searchConfig?.tool === 'exa' ? 'https://api.exa.ai（默认，可留空）' : 'https://api.tavily.com（默认，可留空）'} />
+                                    <FieldInput label={text(`${(data.searchConfig?.tool || 'Tavily').charAt(0).toUpperCase() + (data.searchConfig?.tool || 'tavily').slice(1)} API 地址`, `${(data.searchConfig?.tool || 'Tavily').charAt(0).toUpperCase() + (data.searchConfig?.tool || 'tavily').slice(1)} API URL`, `${(data.searchConfig?.tool || 'Tavily').charAt(0).toUpperCase() + (data.searchConfig?.tool || 'tavily').slice(1)} API URL`)} value={data.searchConfig?.baseUrl || ''} onChange={v => onChange({ ...data, searchConfig: { ...(data.searchConfig || {}), baseUrl: v } })} placeholder={data.searchConfig?.tool === 'exa' ? text('https://api.exa.ai（默认，可留空）', 'https://api.exa.ai (default, can be blank)', 'https://api.exa.ai (по умолчанию, можно оставить пустым)') : text('https://api.tavily.com（默认，可留空）', 'https://api.tavily.com (default, can be blank)', 'https://api.tavily.com (по умолчанию, можно оставить пустым)')} />
                                 </div>
                             )
                         )}
@@ -3034,7 +3150,7 @@ function ApiConfigForm({ data, onChange }) {
                     <div className="provider-list">
                         <input
                             className="provider-search"
-                            placeholder="搜索供应商..."
+                        placeholder={text('搜索供应商...', 'Search providers...', 'Искать провайдеров...')}
                             value={embedProviderSearch}
                             onChange={e => setEmbedProviderSearch(e.target.value)}
                             autoComplete="off"
@@ -3042,19 +3158,19 @@ function ApiConfigForm({ data, onChange }) {
                             data-1p-ignore="true"
                         />
                         {[
-                            { group: '🇨🇳 国内', keys: ['zhipu', 'bailian', 'hunyuan', 'baichuan', 'siliconflow'] },
-                            { group: '国际', keys: ['openai', 'claude', 'gemini', 'gemini-native'] },
-                            { group: '自定义', keys: ['custom', 'custom-gemini', 'custom-claude'] },
+                            { group: 'cn', keys: ['zhipu', 'bailian', 'hunyuan', 'baichuan', 'siliconflow'] },
+                            { group: 'global', keys: ['openai', 'claude', 'gemini', 'gemini-native'] },
+                            { group: 'custom', keys: ['custom', 'custom-gemini', 'custom-claude'] },
                         ].map(section => {
                             const items = section.keys
                                 .map(k => PROVIDERS.find(p => p.key === k))
                                 .filter(Boolean)
                                 .filter(p => !EMBED_EXCLUDED.includes(p.key))
-                                .filter(p => !embedProviderSearch || p.label.toLowerCase().includes(embedProviderSearch.toLowerCase()) || p.key.includes(embedProviderSearch.toLowerCase()));
+                                .filter(p => !embedProviderSearch || getProviderLabel(p, text).toLowerCase().includes(embedProviderSearch.toLowerCase()) || p.label.toLowerCase().includes(embedProviderSearch.toLowerCase()) || p.key.includes(embedProviderSearch.toLowerCase()));
                             if (items.length === 0) return null;
                             return (
                                 <div key={section.group}>
-                                    <div className="provider-group-header">{section.group}</div>
+                                    <div className="provider-group-header">{getProviderGroupLabel(section.group, text)}</div>
                                     {items.map(p => {
                                         const embedCfg = data.embedProviderConfigs?.[p.key];
                                         const hasKey = !!(embedCfg?.apiKey || (data.embedProvider === p.key && (data.embedApiKey || data.apiKey)));
@@ -3064,7 +3180,7 @@ function ApiConfigForm({ data, onChange }) {
                                                 className={`provider-item ${data.embedProvider === p.key ? 'active' : ''}`}
                                                 onClick={() => handleEmbedProviderChange(p.key)}
                                             >
-                                                <span className="provider-item-name">{p.label}</span>
+                                                <span className="provider-item-name">{getProviderLabel(p, text)}</span>
                                                 {hasKey && <span className="provider-item-check"><CheckCircle2 size={12} /></span>}
                                             </button>
                                         );
@@ -3077,7 +3193,7 @@ function ApiConfigForm({ data, onChange }) {
                     {/* 右侧：嵌入供应商配置 */}
                     <div className="provider-detail">
                         <div className="provider-detail-header">
-                            <span style={{ fontSize: 15, fontWeight: 600 }}>{currentEmbedProvider.label}</span>
+                            <span style={{ fontSize: 15, fontWeight: 600 }}>{getProviderLabel(currentEmbedProvider, text)}</span>
                             <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{currentEmbedProvider.key}</span>
                         </div>
 
@@ -3090,10 +3206,10 @@ function ApiConfigForm({ data, onChange }) {
                                 {t('apiConfig.embedModel')}
                             </label>
                             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                                <input className="modal-input" style={{ marginBottom: 0, flex: 1 }} value={data.embedModel || ''} onChange={e => update('embedModel', e.target.value)} placeholder="例如：text-embedding-v3-small" />
+                                <input className="modal-input" style={{ marginBottom: 0, flex: 1 }} value={data.embedModel || ''} onChange={e => update('embedModel', e.target.value)} placeholder={text('例如：text-embedding-v3-small', 'e.g. text-embedding-v3-small', 'например: text-embedding-v3-small')} />
                                 {(data.embedApiKey || data.apiKey) ? (
                                     <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, whiteSpace: 'nowrap', flexShrink: 0 }} onClick={() => { if (Array.isArray(fetchedEmbedModels) && fetchedEmbedModels.length > 0) { setShowEmbedModelModal(true); setEmbedModelSearch(''); } else { handleFetchEmbedModels(); } }} disabled={fetchedEmbedModels === 'loading'}>
-                                        {fetchedEmbedModels === 'loading' ? '获取中…' : Array.isArray(fetchedEmbedModels) && fetchedEmbedModels.length > 0 ? `模型列表 (${fetchedEmbedModels.length})` : '获取模型列表'}
+                                        {fetchedEmbedModels === 'loading' ? text('获取中…', 'Fetching...', 'Загрузка...') : Array.isArray(fetchedEmbedModels) && fetchedEmbedModels.length > 0 ? text(`模型列表 (${fetchedEmbedModels.length})`, `Model List (${fetchedEmbedModels.length})`, `Список моделей (${fetchedEmbedModels.length})`) : text('获取模型列表', 'Fetch Model List', 'Получить список моделей')}
                                     </button>
                                 ) : null}
                             </div>
@@ -3145,7 +3261,11 @@ function ApiConfigForm({ data, onChange }) {
                                         <div>
                                             <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>可用嵌入模型列表</div>
                                             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                                                {currentEmbedProvider.label} · 共 {mergedEmbedModels.length} 个模型，勾选加入快切列表{unavailableEmbedCount > 0 ? ` · ${unavailableEmbedCount} 个已保存但未返回` : ''}
+                                                {text(
+                                                    `${getProviderLabel(currentEmbedProvider, text)} · 共 ${mergedEmbedModels.length} 个模型，勾选加入快切列表${unavailableEmbedCount > 0 ? ` · ${unavailableEmbedCount} 个已保存但未返回` : ''}`,
+                                                    `${getProviderLabel(currentEmbedProvider, text)} · ${mergedEmbedModels.length} models · Check models to add them to quick switch${unavailableEmbedCount > 0 ? ` · ${unavailableEmbedCount} saved but not returned` : ''}`,
+                                                    `${getProviderLabel(currentEmbedProvider, text)} · моделей: ${mergedEmbedModels.length} · Отметьте модели для быстрого переключения${unavailableEmbedCount > 0 ? ` · сохранено, но не возвращено: ${unavailableEmbedCount}` : ''}`,
+                                                )}
                                             </div>
                                         </div>
                                         <button style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--text-muted)', padding: '4px 8px', lineHeight: 1 }} onClick={() => setShowEmbedModelModal(false)}><X size={16} /></button>
@@ -3153,7 +3273,7 @@ function ApiConfigForm({ data, onChange }) {
                                     <div style={{ padding: '10px 20px 8px' }}>
                                         <input
                                             style={{ width: '100%', padding: '7px 12px', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm, 6px)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: 12, outline: 'none' }}
-                                            placeholder="搜索模型名称…"
+                                            placeholder={text('搜索模型名称…', 'Search model names...', 'Искать модели...')}
                                             value={embedModelSearch}
                                             onChange={e => setEmbedModelSearch(e.target.value)}
                                             autoFocus
@@ -3188,7 +3308,7 @@ function ApiConfigForm({ data, onChange }) {
                                                             onChange({ ...data, embedProviderConfigs: configs });
                                                         }}>{isInList ? '✓' : ''}</button>
                                                         {/* 模型名 */}
-                                                        <span style={{ flex: 1, fontFamily: 'monospace', fontSize: 12, color: isActive ? 'var(--accent)' : 'var(--text-primary)', fontWeight: isActive ? 600 : 400, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }} onClick={() => { update('embedModel', m.id); }} title={m.isUnavailable ? `${m.id}（已保存，但未在本次拉取结果中）` : `使用 ${m.id}`}>{m.id}</span>
+                                                        <span style={{ flex: 1, fontFamily: 'monospace', fontSize: 12, color: isActive ? 'var(--accent)' : 'var(--text-primary)', fontWeight: isActive ? 600 : 400, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }} onClick={() => { update('embedModel', m.id); }} title={m.isUnavailable ? text(`${m.id}（已保存，但未在本次拉取结果中）`, `${m.id} (saved, but not returned in this fetch)`, `${m.id} (сохранено, но не найдено в текущем списке)`) : text(`使用 ${m.id}`, `Use ${m.id}`, `Использовать ${m.id}`)}>{m.id}</span>
                                                         {m.isUnavailable && <span style={{ fontSize: 9, color: 'var(--warning, #b45309)', background: 'color-mix(in srgb, var(--warning, #b45309) 12%, transparent)', padding: '1px 5px', borderRadius: 3, flexShrink: 0 }}>未返回</span>}
                                                         {isActive && <span style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 600, flexShrink: 0 }}>当前</span>}
                                                     </div>
@@ -3239,7 +3359,7 @@ function ApiConfigForm({ data, onChange }) {
             {data.apiKey && (
                 <div style={{ marginBottom: 14 }}>
                     {!showSaveInput ? (
-                        <button style={{ padding: '8px 16px', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', background: 'var(--bg-primary)', cursor: 'pointer', fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }} onClick={() => { const pl = PROVIDERS.find(p => p.key === data.provider)?.label || data.provider; setProfileName(`${pl} - ${data.model || t('common.confirm')}`); setShowSaveInput(true); }}>
+                        <button style={{ padding: '8px 16px', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', background: 'var(--bg-primary)', cursor: 'pointer', fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }} onClick={() => { const pl = getProviderLabel(data.provider, text); setProfileName(`${pl} - ${data.model || t('common.confirm')}`); setShowSaveInput(true); }}>
                             {t('apiConfig.saveProfileBtn')}
                         </button>
                     ) : (
@@ -3261,6 +3381,7 @@ function ApiConfigForm({ data, onChange }) {
 }
 
 function FieldInput({ label, value, onChange, placeholder, multiline, rows, secret }) {
+    const { text } = useI18n();
     const [showSecret, setShowSecret] = useState(false);
     const Component = multiline ? 'textarea' : 'input';
     return (
@@ -3286,7 +3407,7 @@ function FieldInput({ label, value, onChange, placeholder, multiline, rows, secr
                             fontSize: 14, color: 'var(--text-muted)', padding: '2px 4px',
                             opacity: 0.7, lineHeight: 1,
                         }}
-                        title={showSecret ? '隐藏' : '显示'}
+                        title={showSecret ? text('隐藏', 'Hide', 'Скрыть') : text('显示', 'Show', 'Показать')}
                     >
                         {showSecret ? <EyeOff size={14} /> : <Eye size={14} />}
                     </button>

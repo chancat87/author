@@ -30,6 +30,22 @@ const CAT_COLORS = {
     custom: { color: '#64748b', bg: 'rgba(100,116,139,0.1)' },
 };
 
+const DEFAULT_BUILT_IN_CATEGORY_NAMES = {
+    character: ['人物', '人物设定', 'Characters', 'Character Settings', 'Персонажи'],
+    location: ['地点', '空间', '空间/地点', '空间地点', 'Places', 'Locations', 'Места'],
+    world: ['世界', '世界观', '世界观/设定', 'Worldbuilding', 'World', 'Мир'],
+    object: ['物品', '物品/道具', 'Items', 'Objects', 'Предметы'],
+    plot: ['大纲', 'Outline', 'План'],
+    rules: ['规则', '写作规则', 'Writing Rules', 'Rules', 'Правила'],
+    bookInfo: ['作品信息', 'Book Info', 'Информация'],
+};
+
+function isDefaultBuiltInCategoryName(category, name) {
+    if (!name) return true;
+    const normalize = (value) => String(value || '').replace(/\s+/g, '').toLowerCase();
+    return (DEFAULT_BUILT_IN_CATEGORY_NAMES[category] || []).some(defaultName => normalize(defaultName) === normalize(name));
+}
+
 // FieldInput 组件 — 非受控 input + ref 同步，完美支持 IME 中文输入
 function FieldInput({ label, value, onChange, placeholder, multiline, rows }) {
     const editableRef = useRef(null);
@@ -119,7 +135,7 @@ function FieldInput({ label, value, onChange, placeholder, multiline, rows }) {
 
 // SVG Activity Chart — 按时间窗口统计字数
 // 时=60分钟, 天=24时, 周=7天, 月=30天, 季=3月, 年=12月
-function ActivityChart({ chapters, period = 'day' }) {
+function ActivityChart({ chapters, period = 'day', text = (zh) => zh, language = 'zh' }) {
     const data = useMemo(() => {
         const now = Date.now();
         const realChapters = (chapters || [])
@@ -129,12 +145,12 @@ function ActivityChart({ chapters, period = 'day' }) {
 
         // 每种period的配置: slots数量, 每slot毫秒数, label格式
         const cfg = {
-            hour:    { slots: 60, stepMs: 60000,     label: (d) => `${d.getMinutes()}分` },
+            hour:    { slots: 60, stepMs: 60000,     label: (d) => text(`${d.getMinutes()}分`, `${d.getMinutes()}m`, `${d.getMinutes()} мин`) },
             day:     { slots: 24, stepMs: 3600000,   label: (d) => `${d.getHours()}:00` },
-            week:    { slots: 7,  stepMs: 86400000,  label: (d) => `${['日','一','二','三','四','五','六'][d.getDay()]}` },
+            week:    { slots: 7,  stepMs: 86400000,  label: (d) => text(['日','一','二','三','四','五','六'][d.getDay()], ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()], ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'][d.getDay()]) },
             month:   { slots: 30, stepMs: 86400000,  label: (d) => `${d.getMonth()+1}/${d.getDate()}` },
-            quarter: { slots: 3,  stepMs: 0,         label: (d) => `${d.getMonth()+1}月` },
-            year:    { slots: 12, stepMs: 0,          label: (d) => `${d.getMonth()+1}月` },
+            quarter: { slots: 3,  stepMs: 0,         label: (d) => d.toLocaleString(language === 'ru' ? 'ru-RU' : language === 'en' ? 'en-US' : 'zh-CN', { month: 'short' }) },
+            year:    { slots: 12, stepMs: 0,          label: (d) => d.toLocaleString(language === 'ru' ? 'ru-RU' : language === 'en' ? 'en-US' : 'zh-CN', { month: 'short' }) },
         };
         const c = cfg[period] || cfg.day;
 
@@ -172,12 +188,12 @@ function ActivityChart({ chapters, period = 'day' }) {
             slots.push({ label: c.label(d), value: wordsInSlot });
         }
         return slots;
-    }, [chapters, period]);
+    }, [chapters, language, period, text]);
 
     if (data.length < 1) {
         return (
             <div style={{ height: 240, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
-                暂无写作数据
+                {text('暂无写作数据', 'No writing data yet', 'Пока нет данных о письме')}
             </div>
         );
     }
@@ -197,7 +213,7 @@ function ActivityChart({ chapters, period = 'day' }) {
         return `${acc} C ${cpx} ${prev.y}, ${cpx} ${p.y}, ${p.x} ${p.y}`;
     }, '');
     const areaPath = `${smoothPath} L ${points[points.length - 1].x} ${H - PY} L ${points[0].x} ${H - PY} Z`;
-    const fmtVal = (v) => v >= 10000 ? `${(v/10000).toFixed(1)}万` : v >= 1000 ? `${(v/1000).toFixed(1)}k` : v > 0 ? v : '';
+    const fmtVal = (v) => v >= 10000 ? text(`${(v/10000).toFixed(1)}万`, `${(v/1000).toFixed(1)}k`, `${(v/1000).toFixed(1)} тыс.`) : v >= 1000 ? `${(v/1000).toFixed(1)}k` : v > 0 ? v : '';
     const maxLabels = 10;
     const labelStep = Math.max(1, Math.ceil(chartData.length / maxLabels));
 
@@ -224,7 +240,7 @@ function ActivityChart({ chapters, period = 'day' }) {
             {points.map((p, i) => (
                 <g key={i}>
                     <circle cx={p.x} cy={p.y} r="3.5" fill="var(--bg-primary)" stroke="var(--accent, #6366f1)" strokeWidth="2" />
-                    <title>{chartData[i].label}: {chartData[i].value.toLocaleString()}字</title>
+                    <title>{chartData[i].label}: {chartData[i].value.toLocaleString()}{text('字', ' words', ' слов')}</title>
                 </g>
             ))}
             {points.map((p, i) => (
@@ -239,19 +255,26 @@ function ActivityChart({ chapters, period = 'day' }) {
 }
 
 // 统计卡片 — 紧凑数字格式
-function fmtStatValue(v) {
+function fmtStatValue(v, language = 'zh') {
     if (typeof v === 'string') {
         const n = Number(v.replace(/,/g, ''));
         if (!isNaN(n)) v = n; else return v;
     }
     if (typeof v !== 'number') return v;
-    if (v >= 100000000) return (v / 100000000).toFixed(1).replace(/\.0$/, '') + '亿';
-    if (v >= 10000) return (v / 10000).toFixed(1).replace(/\.0$/, '') + '万';
-    return v.toLocaleString();
+    if (language === 'zh') {
+        if (v >= 100000000) return (v / 100000000).toFixed(1).replace(/\.0$/, '') + '亿';
+        if (v >= 10000) return (v / 10000).toFixed(1).replace(/\.0$/, '') + '万';
+    }
+    const locale = language === 'ru' ? 'ru-RU' : language === 'en' ? 'en-US' : 'zh-CN';
+    if (v >= 10000) {
+        return new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 1 }).format(v);
+    }
+    return v.toLocaleString(locale);
 }
 
-function StatCard({ label, value, icon: Icon, color, bg, onClick, onDelete }) {
-    const displayValue = fmtStatValue(value);
+function StatCard({ label, value, icon: Icon, color, bg, onClick, onDelete, deleteTitle }) {
+    const { text, language } = useI18n();
+    const displayValue = fmtStatValue(value, language);
     return (
         <div style={{
             padding: '14px 16px', borderRadius: 14,
@@ -286,7 +309,7 @@ function StatCard({ label, value, icon: Icon, color, bg, onClick, onDelete }) {
             {onDelete && (
                 <span
                     data-del
-                    title="删除"
+                    title={deleteTitle || text('删除', 'Delete', 'Удалить')}
                     onClick={e => { e.stopPropagation(); onDelete(); }}
                     style={{
                         width: 24, height: 24, borderRadius: 7,
@@ -309,6 +332,7 @@ function StatCard({ label, value, icon: Icon, color, bg, onClick, onDelete }) {
 // ===== 图片裁剪器 =====
 const COVER_RATIO = 5 / 7; // 封面宽高比
 function ImageCropper({ imageSrc, onConfirm, onCancel }) {
+    const { text } = useI18n();
     const containerRef = useRef(null);
     const imgRef = useRef(null);
     const [imgSize, setImgSize] = useState({ w: 0, h: 0, naturalW: 0, naturalH: 0 });
@@ -387,8 +411,8 @@ function ImageCropper({ imageSrc, onConfirm, onCancel }) {
                 onClick={e => e.stopPropagation()}
             >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>裁剪封面</h3>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>拖动选框调整区域，拖动角点缩放</span>
+                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{text('裁剪封面', 'Crop Cover', 'Обрезать обложку')}</h3>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{text('拖动选框调整区域，拖动角点缩放', 'Drag the selection to reposition it; drag corners to resize', 'Перетащите область для перемещения, углы - для изменения размера')}</span>
                 </div>
                 <div ref={containerRef} style={{ position: 'relative', display: 'inline-block', maxHeight: '65vh', overflow: 'hidden', borderRadius: 8, lineHeight: 0 }}>
                     <img ref={imgRef} src={imageSrc} onLoad={onImgLoad}
@@ -426,8 +450,8 @@ function ImageCropper({ imageSrc, onConfirm, onCancel }) {
                     )}
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-                    <button onClick={onCancel} style={{ padding: '8px 20px', border: '1px solid var(--border-light)', borderRadius: 8, background: 'var(--bg-secondary)', cursor: 'pointer', fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>取消</button>
-                    <button onClick={handleConfirm} style={{ padding: '8px 20px', border: 'none', borderRadius: 8, background: 'var(--accent, #6366f1)', cursor: 'pointer', fontSize: 13, color: '#fff', fontWeight: 600, boxShadow: '0 2px 8px rgba(99,102,241,0.3)' }}>确认裁剪</button>
+                    <button onClick={onCancel} style={{ padding: '8px 20px', border: '1px solid var(--border-light)', borderRadius: 8, background: 'var(--bg-secondary)', cursor: 'pointer', fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>{text('取消', 'Cancel', 'Отмена')}</button>
+                    <button onClick={handleConfirm} style={{ padding: '8px 20px', border: 'none', borderRadius: 8, background: 'var(--accent, #6366f1)', cursor: 'pointer', fontSize: 13, color: '#fff', fontWeight: 600, boxShadow: '0 2px 8px rgba(99,102,241,0.3)' }}>{text('确认裁剪', 'Apply Crop', 'Применить')}</button>
                 </div>
             </div>
         </div>,
@@ -436,9 +460,9 @@ function ImageCropper({ imageSrc, onConfirm, onCancel }) {
 }
 
 export default function BookInfoPanel() {
-    const { t } = useI18n();
+    const { t, text, language } = useI18n();
     const { showBookInfo, setShowBookInfo, settingsVersion, incrementSettingsVersion, chapters } = useAppStore();
-    const [isFullscreen, setIsFullscreen] = useState(true);
+    const [isFullscreen, setIsFullscreen] = useState(false);
     const [nodes, setNodes] = useState([]);
     const [selectedChapters, setSelectedChapters] = useState([]);
     const [bookInfoNode, setBookInfoNode] = useState(null);
@@ -460,6 +484,12 @@ export default function BookInfoPanel() {
     const safeWorks = useMemo(() => Array.isArray(works) ? works : [], [works]);
     const safeGoals = useMemo(() => Array.isArray(goals) ? goals : normalizeBookInfoGoals(goals), [goals]);
 
+    useEffect(() => {
+        if (showBookInfo) {
+            setIsFullscreen(false);
+        }
+    }, [showBookInfo]);
+
     // 检查是否跳过删除确认（与 SettingsPanel 共用同一套 localStorage Key）
     const shouldSkipDeleteConfirm = () => {
         try {
@@ -477,8 +507,8 @@ export default function BookInfoPanel() {
             return;
         }
         const message = isCustomFolder
-            ? `确认删除分类「${catLabel}」及其下所有 ${count} 条设定？此操作不可撤销。`
-            : `确认清空「${catLabel}」下的所有 ${count} 条设定？分类本身会保留，此操作不可撤销。`;
+            ? text(`确认删除分类「${catLabel}」及其下所有 ${count} 条设定？此操作不可撤销。`, `Delete category "${catLabel}" and all ${count} settings under it? This cannot be undone.`, `Удалить категорию «${catLabel}» и все настройки в ней (${count})? Это действие нельзя отменить.`)
+            : text(`确认清空「${catLabel}」下的所有 ${count} 条设定？分类本身会保留，此操作不可撤销。`, `Clear all ${count} settings under "${catLabel}"? The category itself will remain. This cannot be undone.`, `Очистить все настройки в «${catLabel}» (${count})? Сама категория останется. Это действие нельзя отменить.`);
         setDeleteConfirm({
             message,
             onConfirm: async () => { setDeleteConfirm(null); await doDeleteCat(catKey, isCustomFolder, rootFolderId); },
@@ -638,7 +668,7 @@ export default function BookInfoPanel() {
         customFolders.forEach(f => {
             const key = `custom__${f.id}`;
             catCounts[key] = 0;
-            customFolderLabels[key] = f.name || '自定义';
+            customFolderLabels[key] = f.name || text('自定义', 'Custom', 'Пользовательское');
         });
         
         // Helper: trace an item to its root folder
@@ -702,7 +732,7 @@ export default function BookInfoPanel() {
             orderedCatEntries.push({ key, count: catCounts[key] || 0 });
         });
         return { catCounts, customFolderLabels, builtInFolderLabels, orderedCatEntries, recentItems: recentItems.slice(0, 5), totalItems, totalWords, chapterCount, recentChapters };
-    }, [nodes, selectedChapters]);
+    }, [nodes, selectedChapters, text]);
 
     const onClose = () => setShowBookInfo(false);
 
@@ -711,12 +741,12 @@ export default function BookInfoPanel() {
         if (!dateStr) return '';
         const diff = Date.now() - new Date(dateStr).getTime();
         const mins = Math.floor(diff / 60000);
-        if (mins < 1) return '刚刚';
-        if (mins < 60) return `${mins}分钟前`;
+        if (mins < 1) return text('刚刚', 'Just now', 'Только что');
+        if (mins < 60) return text(`${mins}分钟前`, `${mins}m ago`, `${mins} мин назад`);
         const hrs = Math.floor(mins / 60);
-        if (hrs < 24) return `${hrs}小时前`;
+        if (hrs < 24) return text(`${hrs}小时前`, `${hrs}h ago`, `${hrs} ч назад`);
         const days = Math.floor(hrs / 24);
-        return `${days}天前`;
+        return text(`${days}天前`, `${days}d ago`, `${days} дн назад`);
     };
 
     return (
@@ -757,12 +787,12 @@ export default function BookInfoPanel() {
                             <BookOpen size={18} />
                         </div>
                         <div>
-                            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>作品管理</h2>
-                            <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)' }}>管理作品信息与创作数据</p>
+                            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>{text('作品管理', 'Book Management', 'Управление произведением')}</h2>
+                            <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)' }}>{text('管理作品信息与创作数据', 'Manage book info and writing data', 'Управление сведениями о произведении и данными письма')}</p>
                         </div>
                     </div>
                     <div style={{ display: 'flex', gap: 4 }}>
-                        <button className="btn btn-ghost btn-icon" onClick={() => setIsFullscreen(!isFullscreen)} title={isFullscreen ? '窗口化' : '全屏'}>
+                        <button className="btn btn-ghost btn-icon" onClick={() => setIsFullscreen(!isFullscreen)} title={isFullscreen ? text('窗口化', 'Windowed', 'Оконный режим') : text('全屏', 'Fullscreen', 'Полный экран')}>
                             {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
                         </button>
                         <button className="btn btn-ghost btn-icon" onClick={onClose}><X size={16} /></button>
@@ -780,10 +810,10 @@ export default function BookInfoPanel() {
                         background: 'var(--bg-primary)',
                     }}>
                         <div style={{ padding: '12px 14px', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid var(--border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            作品列表
+                            {text('作品列表', 'Works', 'Произведения')}
                             <button
                                 onClick={async () => {
-                                    const name = await promptInput('新作品名称：');
+                                    const name = await promptInput(text('新作品名称：', 'New work name:', 'Название нового произведения:'));
                                     if (!name || !name.trim()) return;
                                     const workNode = await addWork(name.trim());
                                     const allWorks = await getAllWorks();
@@ -793,7 +823,7 @@ export default function BookInfoPanel() {
                                 style={{ width: 22, height: 22, borderRadius: 6, border: '1px solid var(--border-light)', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', transition: 'all 0.15s' }}
                                 onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; e.currentTarget.style.background = 'rgba(99,102,241,0.08)'; }}
                                 onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-light)'; e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'transparent'; }}
-                                title="新建作品"
+                                title={text('新建作品', 'New Work', 'Новое произведение')}
                             ><Plus size={12} /></button>
                         </div>
                         <div style={{ flex: 1, overflowY: 'auto', padding: '6px 8px' }}>
@@ -827,7 +857,7 @@ export default function BookInfoPanel() {
                                                     position: 'absolute', bottom: -2, right: -2,
                                                     width: 10, height: 10, borderRadius: '50%',
                                                     background: '#10b981', border: '2px solid var(--bg-primary)',
-                                                }} title="当前写作中" />
+                                                }} title={text('当前写作中', 'Current writing work', 'Текущее произведение')} />
                                             )}
                                         </div>
                                         <div style={{ flex: 1, minWidth: 0 }}>
@@ -837,7 +867,7 @@ export default function BookInfoPanel() {
                                                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                                             }}>{w.name}</p>
                                             {isGlobalActive && (
-                                                <span style={{ fontSize: 10, color: '#10b981', fontWeight: 500 }}>写作中</span>
+                                                <span style={{ fontSize: 10, color: '#10b981', fontWeight: 500 }}>{text('写作中', 'Writing', 'В работе')}</span>
                                             )}
                                         </div>
                                         {!isGlobalActive && (
@@ -851,13 +881,13 @@ export default function BookInfoPanel() {
                                                 }}
                                                 onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; }}
                                                 onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-light)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
-                                            >切换</button>
+                                            >{text('切换', 'Switch', 'Переключить')}</button>
                                         )}
                                         {!isGlobalActive && (
                                             <button
                                                 onClick={async e => {
                                                     e.stopPropagation();
-                                                    if (!confirm(`确定要删除作品「${w.name}」吗？\n此操作不可撤销！`)) return;
+                                                    if (!confirm(text(`确定要删除作品「${w.name}」吗？\n此操作不可撤销！`, `Delete work "${w.name}"?\nThis cannot be undone!`, `Удалить произведение «${w.name}»?\nЭто действие нельзя отменить!`))) return;
                                                     await removeWork(w.id);
                                                     const allWorks = await getAllWorks();
                                                     setWorks(allWorks);
@@ -873,7 +903,7 @@ export default function BookInfoPanel() {
                                                 }}
                                                 onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; }}
                                                 onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'transparent'; }}
-                                                title="删除作品"
+                                                title={text('删除作品', 'Delete Work', 'Удалить произведение')}
                                             ><Trash2 size={12} /></button>
                                         )}
                                     </div>
@@ -890,7 +920,7 @@ export default function BookInfoPanel() {
                             borderBottom: '1px solid var(--border-light)',
                             background: 'var(--bg-primary)', flexShrink: 0,
                         }}>
-                            {[{ key: 'overview', label: '创作概览', icon: Layers }, { key: 'info', label: '作品信息', icon: FileText }].map(tab => (
+                            {[{ key: 'overview', label: text('创作概览', 'Overview', 'Обзор'), icon: Layers }, { key: 'info', label: text('作品信息', 'Book Info', 'Информация'), icon: FileText }].map(tab => (
                                 <button
                                     key={tab.key}
                                     onMouseDown={e => e.preventDefault()} // 阻止按钮抢焦点，避免打断 IME 组合导致 Chrome IME 崩溃
@@ -935,11 +965,11 @@ export default function BookInfoPanel() {
                                         onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-medium, #d1d5db)'; e.currentTarget.style.transform = 'none'; }}
                                     >
                                         {bookData.coverImage ? (
-                                            <img src={bookData.coverImage} alt="封面" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 14 }} />
+                                            <img src={bookData.coverImage} alt={text('封面', 'Cover', 'Обложка')} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 14 }} />
                                         ) : (
                                             <>
                                                 <ImageIcon size={24} style={{ color: 'var(--text-muted)' }} />
-                                                <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>上传封面</span>
+                                                <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>{text('上传封面', 'Upload Cover', 'Загрузить обложку')}</span>
                                             </>
                                         )}
                                         {bookData.coverImage && (
@@ -951,17 +981,17 @@ export default function BookInfoPanel() {
                                                 onMouseEnter={e => e.currentTarget.style.opacity = '1'}
                                                 onMouseLeave={e => e.currentTarget.style.opacity = '0'}
                                             >
-                                                <span style={{ color: '#fff', fontSize: 12, fontWeight: 600 }}>更换封面</span>
+                                                <span style={{ color: '#fff', fontSize: 12, fontWeight: 600 }}>{text('更换封面', 'Change Cover', 'Сменить обложку')}</span>
                                             </div>
                                         )}
                                     </div>
                                     <input ref={coverInputRef} type="file" accept="image/*" onChange={handleCoverUpload} style={{ display: 'none' }} />
                                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                                         <h3 style={{ margin: '0 0 4px', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
-                                            {bookData.title || workName || '未命名作品'}
+                                            {bookData.title || workName || text('未命名作品', 'Untitled Work', 'Безымянное произведение')}
                                         </h3>
                                         <p style={{ margin: '0 0 12px', fontSize: 12, color: 'var(--text-muted)' }}>
-                                            这些信息帮助AI理解你的作品定位和风格
+                                            {t('bookInfo.intro')}
                                         </p>
                                         {bookData.coverImage && (
                                             <button
@@ -969,7 +999,7 @@ export default function BookInfoPanel() {
                                                 style={{ alignSelf: 'flex-start', padding: '4px 12px', border: '1px solid var(--border-light)', borderRadius: 8, background: 'var(--bg-primary)', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 11, transition: 'all 0.15s' }}
                                                 onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.borderColor = '#ef4444'; }}
                                                 onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border-light)'; }}
-                                            >删除封面</button>
+                                            >{text('删除封面', 'Remove Cover', 'Удалить обложку')}</button>
                                         )}
                                     </div>
                                 </div>
@@ -993,7 +1023,7 @@ export default function BookInfoPanel() {
                                     }}>
                                         <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', gap: 6 }}>
                                             <Eye size={14} style={{ color: 'var(--accent)' }} />
-                                            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>读者预览</span>
+                                            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{text('读者预览', 'Reader Preview', 'Предпросмотр читателя')}</span>
                                         </div>
                                         <div style={{ padding: 18 }}>
                                             <div style={{ display: 'flex', gap: 14, marginBottom: 14 }}>
@@ -1006,7 +1036,7 @@ export default function BookInfoPanel() {
                                                 )}
                                                 <div>
                                                     <h4 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.3 }}>
-                                                        {bookData.title || '未命名作品'}
+                                                        {bookData.title || text('未命名作品', 'Untitled Work', 'Безымянное произведение')}
                                                     </h4>
                                                     {bookData.genre && <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, background: 'rgba(99,102,241,0.1)', color: 'var(--accent)', fontSize: 10, fontWeight: 600, marginBottom: 6 }}>{bookData.genre}</span>}
                                                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
@@ -1019,7 +1049,7 @@ export default function BookInfoPanel() {
                                             {bookData.synopsis ? (
                                                 <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.7, display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{bookData.synopsis}</p>
                                             ) : (
-                                                <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>暂无简介，填写后将在此预览</p>
+                                                <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>{text('暂无简介，填写后将在此预览', 'No synopsis yet. It will preview here after you fill it in.', 'Пока нет описания. После заполнения оно появится здесь.')}</p>
                                             )}
                                             {bookData.targetAudience && (
                                                 <p style={{ margin: '10px 0 0', fontSize: 10, color: 'var(--text-muted)' }}>🎯 {bookData.targetAudience}</p>
@@ -1036,34 +1066,46 @@ export default function BookInfoPanel() {
                                         <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                                 <Sparkles size={14} style={{ color: '#f59e0b' }} />
-                                                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>AI 评价</span>
+                                                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{text('AI 评价', 'AI Review', 'AI-оценка')}</span>
                                             </div>
                                             <button
                                                 onClick={async () => {
                                                     setAiEvalLoading(true);
                                                     try {
                                                         const apiConfig = getChatApiConfig();
-                                                        if (!apiConfig?.apiKey) { setAiEval({ _error: '请先在设置中配置AI API' }); return; }
+                                                        if (!apiConfig?.apiKey) { setAiEval({ _error: text('请先在设置中配置 AI API', 'Configure the AI API in Settings first', 'Сначала настройте AI API в настройках') }); return; }
                                                         const pType = apiConfig?.providerType || apiConfig?.provider;
                                                         const apiEndpoint = ['gemini-native', 'custom-gemini'].includes(pType) ? '/api/ai/gemini'
                                                             : pType === 'openai-responses' ? '/api/ai/responses'
                                                                 : (['claude', 'custom-claude'].includes(pType) || apiConfig?.apiFormat === 'anthropic') ? '/api/ai/claude'
                                                                     : '/api/ai';
                                                         const fields = [
-                                                            { key: 'title', label: '作品名称', value: bookData.title },
-                                                            { key: 'genre', label: '题材类型', value: bookData.genre },
-                                                            { key: 'synopsis', label: '故事简介', value: bookData.synopsis },
-                                                            { key: 'style', label: '写作风格', value: bookData.style },
-                                                            { key: 'tone', label: '整体基调', value: bookData.tone },
-                                                            { key: 'pov', label: '叙事视角', value: bookData.pov },
-                                                            { key: 'targetAudience', label: '目标读者', value: bookData.targetAudience },
+                                                            { key: 'title', label: text('作品名称', 'Title', 'Название'), value: bookData.title },
+                                                            { key: 'genre', label: text('题材类型', 'Genre', 'Жанр'), value: bookData.genre },
+                                                            { key: 'synopsis', label: text('故事简介', 'Synopsis', 'Синопсис'), value: bookData.synopsis },
+                                                            { key: 'style', label: text('写作风格', 'Writing Style', 'Стиль письма'), value: bookData.style },
+                                                            { key: 'tone', label: text('整体基调', 'Overall Tone', 'Общий тон'), value: bookData.tone },
+                                                            { key: 'pov', label: text('叙事视角', 'Point of View', 'Точка зрения'), value: bookData.pov },
+                                                            { key: 'targetAudience', label: text('目标读者', 'Target Reader', 'Целевая аудитория'), value: bookData.targetAudience },
                                                         ];
                                                         const filledFields = fields.filter(f => f.value?.trim());
-                                                        if (filledFields.length === 0) { setAiEval({ _error: '请先填写至少一个字段' }); return; }
-                                                        const prompt = '你是一位资深网文编辑，请对以下作品信息进行专业评价。对每个已填写的字段给出1-5星评分、简短评价（一句话）、和具体修改建议。注意评分标准：1星=非常糟糕 2星=待改进 3星=可以 4星=优秀 5星=极佳。\n\n作品信息如下：\n' + filledFields.map(f => f.label + ': ' + f.value).join('\n') + '\n\n请以以下JSON格式回复，不要加任何其他文字：\n{\n' + filledFields.map(f => '  "' + f.key + '": { "score": 评分, "feedback": "一句话评价", "suggestion": "建议的内容，如果当前已经很好则保持原文" }').join(',\n') + '\n}';
+                                                        if (filledFields.length === 0) { setAiEval({ _error: text('请先填写至少一个字段', 'Fill in at least one field first', 'Сначала заполните хотя бы одно поле') }); return; }
+                                                        const prompt = text(
+                                                            '你是一位资深网文编辑，请对以下作品信息进行专业评价。对每个已填写的字段给出1-5星评分、简短评价（一句话）、和具体修改建议。注意评分标准：1星=非常糟糕 2星=待改进 3星=可以 4星=优秀 5星=极佳。\n\n作品信息如下：\n',
+                                                            'You are a senior fiction editor. Professionally review the following book information. For every filled field, give a 1-5 star score, a brief one-sentence comment, and concrete revision advice. Scoring: 1=very poor, 2=needs work, 3=acceptable, 4=excellent, 5=outstanding.\n\nBook information:\n',
+                                                            'Ты опытный редактор художественной прозы. Профессионально оцени следующую информацию о произведении. Для каждого заполненного поля дай оценку 1-5, краткий комментарий одним предложением и конкретный совет по улучшению. Шкала: 1=очень плохо, 2=нужна доработка, 3=приемлемо, 4=отлично, 5=превосходно.\n\nИнформация о произведении:\n'
+                                                        ) + filledFields.map(f => f.label + ': ' + f.value).join('\n') + text(
+                                                            '\n\n请以以下JSON格式回复，不要加任何其他文字：\n{\n',
+                                                            '\n\nReply only in the following JSON format, with no extra text:\n{\n',
+                                                            '\n\nОтветь только в следующем JSON-формате, без лишнего текста:\n{\n'
+                                                        ) + filledFields.map(f => text(
+                                                            `  "${f.key}": { "score": 评分, "feedback": "一句话评价", "suggestion": "建议的内容，如果当前已经很好则保持原文" }`,
+                                                            `  "${f.key}": { "score": score, "feedback": "one-sentence comment", "suggestion": "revision advice, or keep the original if it is already strong" }`,
+                                                            `  "${f.key}": { "score": оценка, "feedback": "комментарий одним предложением", "suggestion": "совет по улучшению или оставить как есть, если уже хорошо" }`
+                                                        )).join(',\n') + '\n}';
                                                         const res = await fetch(apiEndpoint, {
                                                             method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                                            body: JSON.stringify({ systemPrompt: '你是一位专业的网文编辑，只输出JSON。', userPrompt: prompt, apiConfig }),
+                                                            body: JSON.stringify({ systemPrompt: text('你是一位专业的网文编辑，只输出 JSON。', 'You are a professional fiction editor. Output JSON only.', 'Ты профессиональный редактор прозы. Выводи только JSON.'), userPrompt: prompt, apiConfig }),
                                                         });
                                                         const contentType = res.headers.get('content-type') || '';
                                                         let fullText = '';
@@ -1091,10 +1133,10 @@ export default function BookInfoPanel() {
                                                         }
                                                         const jsonMatch = fullText.match(/\{[\s\S]*\}/);
                                                         if (jsonMatch) {
-                                                            try { setAiEval(JSON.parse(jsonMatch[0])); } catch (_e) { setAiEval({ _error: 'AI返回格式异常，请重试' }); }
-                                                        } else { setAiEval({ _error: 'AI返回格式异常，请重试' }); }
+                                                            try { setAiEval(JSON.parse(jsonMatch[0])); } catch (_e) { setAiEval({ _error: text('AI 返回格式异常，请重试', 'AI returned an invalid format. Please retry.', 'ИИ вернул неверный формат. Повторите попытку.') }); }
+                                                        } else { setAiEval({ _error: text('AI 返回格式异常，请重试', 'AI returned an invalid format. Please retry.', 'ИИ вернул неверный формат. Повторите попытку.') }); }
                                                     } catch (err) {
-                                                        setAiEval({ _error: err.message || '请求失败' });
+                                                        setAiEval({ _error: err.message || text('请求失败', 'Request failed', 'Запрос не удался') });
                                                     } finally { setAiEvalLoading(false); }
                                                 }}
                                                 disabled={aiEvalLoading}
@@ -1108,7 +1150,7 @@ export default function BookInfoPanel() {
                                                 onMouseEnter={e => { if (!aiEvalLoading) { e.currentTarget.style.borderColor = '#f59e0b'; e.currentTarget.style.color = '#f59e0b'; } }}
                                                 onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-light)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
                                             >
-                                                {aiEvalLoading ? <><RefreshCw size={11} style={{ animation: 'spin 1s linear infinite' }} /> 评价中...</> : <><Sparkles size={11} /> {aiEval ? '重新评价' : '开始评价'}</>}
+                                                {aiEvalLoading ? <><RefreshCw size={11} style={{ animation: 'spin 1s linear infinite' }} /> {text('评价中...', 'Reviewing...', 'Оценка...')}</> : <><Sparkles size={11} /> {aiEval ? text('重新评价', 'Review Again', 'Оценить снова') : text('开始评价', 'Start Review', 'Начать оценку')}</>}
                                             </button>
                                         </div>
                                         <div style={{ padding: '12px 18px' }}>
@@ -1116,7 +1158,7 @@ export default function BookInfoPanel() {
                                                 <p style={{ margin: '0 0 12px', fontSize: 12, color: '#ef4444' }}>{aiEval._error}</p>
                                             )}
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                                                {[{ key: 'title', label: '作品名称' }, { key: 'genre', label: '题材类型' }, { key: 'synopsis', label: '故事简介' }, { key: 'style', label: '写作风格' }, { key: 'tone', label: '整体基调' }, { key: 'pov', label: '叙事视角' }, { key: 'targetAudience', label: '目标读者' }].map(field => {
+                                                {[{ key: 'title', label: text('作品名称', 'Title', 'Название') }, { key: 'genre', label: text('题材类型', 'Genre', 'Жанр') }, { key: 'synopsis', label: text('故事简介', 'Synopsis', 'Синопсис') }, { key: 'style', label: text('写作风格', 'Writing Style', 'Стиль письма') }, { key: 'tone', label: text('整体基调', 'Overall Tone', 'Общий тон') }, { key: 'pov', label: text('叙事视角', 'Point of View', 'Точка зрения') }, { key: 'targetAudience', label: text('目标读者', 'Target Reader', 'Целевая аудитория') }].map(field => {
                                                     const ev = aiEval?.[field.key];
                                                     const hasValue = bookData[field.key]?.trim();
                                                     return (
@@ -1124,7 +1166,7 @@ export default function BookInfoPanel() {
                                                             {/* 栏目标题 */}
                                                             <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', marginBottom: ev ? 8 : 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                                                 <span>{field.label}</span>
-                                                                {!hasValue && <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 400 }}>未填写</span>}
+                                                                {!hasValue && <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 400 }}>{text('未填写', 'Empty', 'Пусто')}</span>}
                                                             </div>
                                                             {ev ? (
                                                                 <>
@@ -1140,30 +1182,30 @@ export default function BookInfoPanel() {
                                                                     {/* 3. 修改意见 */}
                                                                     {ev.suggestion && (
                                                                         <div style={{ marginBottom: 6 }}>
-                                                                            <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>修改意见</span>
-                                                                            <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{ev.suggestion !== bookData[field.key] ? ev.suggestion : '当前内容已很好，无需修改'}</p>
+                                                                            <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>{text('修改意见', 'Revision Advice', 'Совет по улучшению')}</span>
+                                                                            <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{ev.suggestion !== bookData[field.key] ? ev.suggestion : text('当前内容已很好，无需修改', 'This content is already strong. No revision needed.', 'Текст уже удачный, правки не нужны.')}</p>
                                                                         </div>
                                                                     )}
                                                                     {/* 4. 修改结果（可采纳） */}
                                                                     {ev.suggestion && ev.suggestion !== bookData[field.key] && (
                                                                         <div style={{ padding: '8px 10px', borderRadius: 8, background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.15)' }}>
                                                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                                                                                <span style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 600 }}>修改结果</span>
+                                                                                <span style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 600 }}>{text('修改结果', 'Revision Result', 'Результат правки')}</span>
                                                                                 <button
                                                                                     onClick={() => handleFieldChange(field.key, ev.suggestion)}
                                                                                     style={{ padding: '3px 10px', border: 'none', borderRadius: 5, background: 'var(--accent, #6366f1)', color: '#fff', fontSize: 10, fontWeight: 600, cursor: 'pointer' }}
                                                                                     onMouseEnter={e => e.currentTarget.style.filter = 'brightness(1.15)'}
                                                                                     onMouseLeave={e => e.currentTarget.style.filter = 'none'}
-                                                                                >采纳</button>
+                                                                                >{text('采纳', 'Apply', 'Применить')}</button>
                                                                             </div>
                                                                             <p style={{ margin: 0, fontSize: 12, color: 'var(--accent)', lineHeight: 1.6, fontWeight: 500 }}>{ev.suggestion}</p>
                                                                         </div>
                                                                     )}
                                                                 </>
                                                             ) : !aiEval && !aiEvalLoading ? (
-                                                                <span style={{ fontSize: 10, color: 'var(--text-muted)', fontStyle: 'italic' }}>等待评价</span>
+                                                                <span style={{ fontSize: 10, color: 'var(--text-muted)', fontStyle: 'italic' }}>{text('等待评价', 'Waiting for review', 'Ожидает оценки')}</span>
                                                             ) : aiEvalLoading ? (
-                                                                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>评估中...</span>
+                                                                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{text('评估中...', 'Reviewing...', 'Оценка...')}</span>
                                                             ) : null}
                                                         </div>
                                                     );
@@ -1179,21 +1221,24 @@ export default function BookInfoPanel() {
                         {/* 统计卡片 */}
                         <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
                             <Layers size={16} style={{ color: 'var(--accent)' }} />
-                            创作概览
+                            {text('创作概览', 'Overview', 'Обзор')}
                         </h3>
                         <div style={{
                             display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
                             gap: 12, marginBottom: 28,
                         }}>
-                            <StatCard label="总设定条目" value={stats.totalItems} icon={Layers} color="#6366f1" bg="rgba(99,102,241,0.1)" onClick={() => { setShowBookInfo(false); setTimeout(() => useAppStore.getState().setShowSettings('settings'), 80); }} />
-                            <StatCard label="总字数" value={stats.totalWords.toLocaleString()} icon={FileText} color="#10b981" bg="rgba(16,185,129,0.1)" />
-                            <StatCard label="章节数" value={stats.chapterCount} icon={BookOpen} color="#8b5cf6" bg="rgba(139,92,246,0.1)" />
+                            <StatCard label={text('总设定条目', 'Total Settings', 'Всего настроек')} value={stats.totalItems} icon={Layers} color="#6366f1" bg="rgba(99,102,241,0.1)" onClick={() => { setShowBookInfo(false); setTimeout(() => useAppStore.getState().setShowSettings('settings'), 80); }} />
+                            <StatCard label={text('总字数', 'Total Words', 'Всего слов')} value={stats.totalWords.toLocaleString()} icon={FileText} color="#10b981" bg="rgba(16,185,129,0.1)" />
+                            <StatCard label={text('章节数', 'Chapters', 'Главы')} value={stats.chapterCount} icon={BookOpen} color="#8b5cf6" bg="rgba(139,92,246,0.1)" />
                             {stats.orderedCatEntries.map(({ key: cat, count }) => {
                                 const isCustomFolder = cat.startsWith('custom__');
                                 const Icon = isCustomFolder ? SettingsIcon : (CAT_ICONS[cat] || SettingsIcon);
                                 const c = isCustomFolder ? CAT_COLORS.custom : (CAT_COLORS[cat] || CAT_COLORS.custom);
-                                const builtInLabels = { character: '人物', location: '地点', world: '世界观', object: '物品', plot: '大纲', rules: '规则', custom: '自定义', bookInfo: '作品信息' };
-                                const label = isCustomFolder ? (stats.customFolderLabels[cat] || '自定义') : (stats.builtInFolderLabels?.[cat] || builtInLabels[cat] || cat);
+                                const builtInLabels = { character: text('人物设定', 'Characters', 'Персонажи'), location: text('空间/地点', 'Places', 'Места'), world: text('世界观/设定', 'Worldbuilding', 'Мир'), object: text('物品/道具', 'Items', 'Предметы'), plot: text('大纲', 'Outline', 'План'), rules: text('写作规则', 'Writing Rules', 'Правила'), custom: text('自定义设定', 'Custom Settings', 'Пользовательские настройки'), bookInfo: text('作品信息', 'Book Info', 'Информация') };
+                                const storedLabel = stats.builtInFolderLabels?.[cat];
+                                const label = isCustomFolder
+                                    ? (stats.customFolderLabels[cat] || text('自定义设定', 'Custom Settings', 'Пользовательские настройки'))
+                                    : (!storedLabel || isDefaultBuiltInCategoryName(cat, storedLabel) ? (builtInLabels[cat] || cat) : storedLabel);
                                 // 获取该分类的根文件夹 ID
                                 const workId = getActiveWorkId();
                                 const rootFolder = isCustomFolder
@@ -1208,6 +1253,7 @@ export default function BookInfoPanel() {
                                 };
                                 return (
                                     <StatCard key={cat} label={label} value={count} icon={Icon} color={c.color} bg={c.bg} onClick={handleClick}
+                                        deleteTitle={text('删除', 'Delete', 'Удалить')}
                                         onDelete={() => handleDeleteCat(cat, label, count, isCustomFolder, rootFolder?.id)}
                                     />
                                 );
@@ -1221,7 +1267,7 @@ export default function BookInfoPanel() {
                                     display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: 4,
                                 }}
                                 onClick={async () => {
-                                    const name = await promptInput('新分类名称：');
+                                    const name = await promptInput(text('新分类名称：', 'New category name:', 'Название новой категории:'));
                                     if (!name || !name.trim()) return;
                                     const workId = getActiveWorkId();
                                     if (!workId) return;
@@ -1244,7 +1290,7 @@ export default function BookInfoPanel() {
                                 <div style={{ width: 32, height: 32, borderRadius: 9, background: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
                                     <Plus size={16} />
                                 </div>
-                                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0, fontWeight: 500 }}>新建分类</p>
+                                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0, fontWeight: 500 }}>{text('新建分类', 'New Category', 'Новая категория')}</p>
                             </div>
                         </div>
 
@@ -1255,10 +1301,17 @@ export default function BookInfoPanel() {
                         }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                                 <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
-                                    创作热度
+                                    {text('创作热度', 'Writing Activity', 'Активность письма')}
                                 </h4>
                                 <div style={{ display: 'flex', gap: 3 }}>
-                                    {[{ v: 'hour', l: '时' }, { v: 'day', l: '天' }, { v: 'week', l: '周' }, { v: 'month', l: '月' }, { v: 'quarter', l: '季' }, { v: 'year', l: '年' }].map(opt => (
+                                    {[
+                                        { v: 'hour', l: text('时', 'Hour', 'Час') },
+                                        { v: 'day', l: text('天', 'Day', 'День') },
+                                        { v: 'week', l: text('周', 'Week', 'Нед.') },
+                                        { v: 'month', l: text('月', 'Month', 'Мес.') },
+                                        { v: 'quarter', l: text('季', 'Quarter', 'Кв.') },
+                                        { v: 'year', l: text('年', 'Year', 'Год') },
+                                    ].map(opt => (
                                         <button key={opt.v} onClick={() => setChartPeriod(opt.v)} style={{
                                             padding: '3px 7px', border: 'none', borderRadius: 6, cursor: 'pointer',
                                             fontSize: 11, fontWeight: chartPeriod === opt.v ? 600 : 400,
@@ -1269,7 +1322,7 @@ export default function BookInfoPanel() {
                                     ))}
                                 </div>
                             </div>
-                            <ActivityChart chapters={selectedChapters} period={chartPeriod} />
+                            <ActivityChart chapters={selectedChapters} period={chartPeriod} text={text} language={language} />
                         </div>
 
                         {/* 最近编辑 + 最近章节 — 左右并排 */}
@@ -1282,10 +1335,10 @@ export default function BookInfoPanel() {
                             }}>
                                 <h4 style={{ margin: '0 0 12px', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
                                     <Clock size={13} style={{ color: 'var(--accent)' }} />
-                                    最近编辑
+                                    {text('最近编辑', 'Recent Edits', 'Недавние правки')}
                                 </h4>
                                 {stats.recentItems.length === 0 ? (
-                                    <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '16px 0' }}>暂无设定条目</p>
+                                    <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '16px 0' }}>{text('暂无设定条目', 'No settings yet', 'Пока нет настроек')}</p>
                                 ) : (
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 1, flex: 1, overflowY: 'auto' }}>
                                         {stats.recentItems.map(item => {
@@ -1330,7 +1383,7 @@ export default function BookInfoPanel() {
                             }}>
                                 <h4 style={{ margin: '0 0 12px', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
                                     <Target size={13} style={{ color: '#8b5cf6' }} />
-                                    创作目标
+                                    {text('创作目标', 'Writing Goals', 'Цели письма')}
                                 </h4>
                                 {/* 添加目标 */}
                                 <div style={{ display: 'flex', gap: 6, marginBottom: safeGoals.length > 0 ? 10 : 0 }}>
@@ -1349,7 +1402,7 @@ export default function BookInfoPanel() {
                                                 }
                                             }
                                         }}
-                                        placeholder="输入目标按回车添加…"
+                                        placeholder={text('输入目标按回车添加…', 'Type a goal and press Enter...', 'Введите цель и нажмите Enter...')}
                                         style={{
                                             flex: 1, padding: '6px 10px', border: '1.5px solid var(--border-light)',
                                             borderRadius: 8, background: 'var(--bg-secondary)', color: 'var(--text-primary)',
@@ -1384,7 +1437,7 @@ export default function BookInfoPanel() {
                                 </div>
                                 {/* 目标列表 */}
                                 {safeGoals.length === 0 ? (
-                                    <p style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: '12px 0', margin: 0 }}>设定你的创作目标…</p>
+                                    <p style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: '12px 0', margin: 0 }}>{text('设定你的创作目标…', 'Set your writing goals...', 'Задайте цели письма...')}</p>
                                 ) : (
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, overflowY: 'auto' }}>
                                         {safeGoals.map(goal => (
@@ -1488,6 +1541,7 @@ export default function BookInfoPanel() {
 
 // 删除确认弹窗（与 SettingsPanel 的 DeleteConfirmModal 相同逻辑）
 function BookInfoDeleteModal({ message, onConfirm, onCancel }) {
+    const { text } = useI18n();
     const [skipToday, setSkipToday] = useState(false);
     const [neverRemind, setNeverRemind] = useState(false);
     const handleConfirm = () => {
@@ -1502,22 +1556,22 @@ function BookInfoDeleteModal({ message, onConfirm, onCancel }) {
             <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-light)', borderRadius: 12, padding: '24px 28px', minWidth: 340, maxWidth: 440, boxShadow: '0 12px 40px rgba(0,0,0,0.25)', animation: 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }} onClick={e => e.stopPropagation()}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
                     <span style={{ fontSize: 20 }}>⚠️</span>
-                    <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>确认删除</span>
+                    <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>{text('确认删除', 'Confirm Delete', 'Подтвердите удаление')}</span>
                 </div>
                 <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, margin: '0 0 20px' }}>{message}</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text-secondary)' }}>
                         <input type="checkbox" checked={skipToday} disabled={neverRemind} onChange={e => setSkipToday(e.target.checked)} style={{ accentColor: 'var(--accent)', width: 15, height: 15, cursor: 'pointer' }} />
-                        今日不再提醒
+                        {text('今日不再提醒', "Don't remind me again today", 'Больше не напоминать сегодня')}
                     </label>
                     <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text-secondary)' }}>
                         <input type="checkbox" checked={neverRemind} onChange={e => { setNeverRemind(e.target.checked); if (e.target.checked) setSkipToday(false); }} style={{ accentColor: 'var(--accent)', width: 15, height: 15, cursor: 'pointer' }} />
-                        不再提醒
+                        {text('不再提醒', "Don't remind me again", 'Больше не напоминать')}
                     </label>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-                    <button onClick={onCancel} style={{ padding: '8px 20px', border: '1px solid var(--border-light)', borderRadius: 8, background: 'var(--bg-secondary)', cursor: 'pointer', fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>取消</button>
-                    <button onClick={handleConfirm} style={{ padding: '8px 20px', border: 'none', borderRadius: 8, background: '#e53e3e', cursor: 'pointer', fontSize: 13, color: '#fff', fontWeight: 600, boxShadow: '0 2px 8px rgba(229,62,62,0.3)' }}>删除</button>
+                    <button onClick={onCancel} style={{ padding: '8px 20px', border: '1px solid var(--border-light)', borderRadius: 8, background: 'var(--bg-secondary)', cursor: 'pointer', fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>{text('取消', 'Cancel', 'Отмена')}</button>
+                    <button onClick={handleConfirm} style={{ padding: '8px 20px', border: 'none', borderRadius: 8, background: '#e53e3e', cursor: 'pointer', fontSize: 13, color: '#fff', fontWeight: 600, boxShadow: '0 2px 8px rgba(229,62,62,0.3)' }}>{text('删除', 'Delete', 'Удалить')}</button>
                 </div>
             </div>
         </div>,

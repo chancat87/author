@@ -8,6 +8,7 @@ import {
     Highlighter, RemoveFormatting, Sparkles, MessageSquareText
 } from 'lucide-react';
 import { promptForRemark } from './RemarkMark';
+import { useI18n } from '../lib/useI18n';
 
 /**
  * 气泡菜单 — 选中文字时在选区上方浮现的格式工具栏
@@ -18,6 +19,7 @@ export default function EditorBubbleMenu({ editor }) {
     const [pos, setPos] = useState({ x: 0, y: 0 });
     const menuRef = useRef(null);
     const [mounted, setMounted] = useState(false);
+    const { text } = useI18n();
 
     useEffect(() => { setMounted(true); }, []);
 
@@ -117,22 +119,22 @@ export default function EditorBubbleMenu({ editor }) {
         >
             {/* 格式按钮组 */}
             <div className="bubble-group">
-                <button className={btnClass(editor.isActive('bold'))} onClick={execCmd(() => editor.chain().focus().toggleBold().run())} title="加粗 (Ctrl+B)">
+                <button className={btnClass(editor.isActive('bold'))} onClick={execCmd(() => editor.chain().focus().toggleBold().run())} title={text('加粗 (Ctrl+B)', 'Bold (Ctrl+B)', 'Жирный (Ctrl+B)')}>
                     <Bold size={15} />
                 </button>
-                <button className={btnClass(editor.isActive('italic'))} onClick={execCmd(() => editor.chain().focus().toggleItalic().run())} title="斜体 (Ctrl+I)">
+                <button className={btnClass(editor.isActive('italic'))} onClick={execCmd(() => editor.chain().focus().toggleItalic().run())} title={text('斜体 (Ctrl+I)', 'Italic (Ctrl+I)', 'Курсив (Ctrl+I)')}>
                     <Italic size={15} />
                 </button>
-                <button className={btnClass(editor.isActive('underline'))} onClick={execCmd(() => editor.chain().focus().toggleUnderline().run())} title="下划线 (Ctrl+U)">
+                <button className={btnClass(editor.isActive('underline'))} onClick={execCmd(() => editor.chain().focus().toggleUnderline().run())} title={text('下划线 (Ctrl+U)', 'Underline (Ctrl+U)', 'Подчёркивание (Ctrl+U)')}>
                     <UnderlineIcon size={15} />
                 </button>
-                <button className={btnClass(editor.isActive('strike'))} onClick={execCmd(() => editor.chain().focus().toggleStrike().run())} title="删除线">
+                <button className={btnClass(editor.isActive('strike'))} onClick={execCmd(() => editor.chain().focus().toggleStrike().run())} title={text('删除线', 'Strikethrough', 'Зачёркивание')}>
                     <Strikethrough size={15} />
                 </button>
-                <button className={btnClass(editor.isActive('highlight'))} onClick={execCmd(() => editor.chain().focus().toggleHighlight().run())} title="高亮">
+                <button className={btnClass(editor.isActive('highlight'))} onClick={execCmd(() => editor.chain().focus().toggleHighlight().run())} title={text('高亮', 'Highlight', 'Выделение')}>
                     <Highlighter size={15} />
                 </button>
-                <button className={btnClass(editor.isActive('remark'))} onClick={execCmd(() => promptForRemark(editor))} title="备注 / 批注">
+                <button className={btnClass(editor.isActive('remark'))} onClick={execCmd(() => promptForRemark(editor))} title={text('备注 / 批注', 'Note / Comment', 'Заметка / комментарий')}>
                     <MessageSquareText size={15} />
                 </button>
             </div>
@@ -141,13 +143,13 @@ export default function EditorBubbleMenu({ editor }) {
 
             {/* 标题组 */}
             <div className="bubble-group">
-                <button className={btnClass(editor.isActive('heading', { level: 1 }))} onClick={execCmd(() => editor.chain().focus().toggleHeading({ level: 1 }).run())} title="一级标题">
+                <button className={btnClass(editor.isActive('heading', { level: 1 }))} onClick={execCmd(() => editor.chain().focus().toggleHeading({ level: 1 }).run())} title={text('一级标题', 'Heading 1', 'Заголовок 1')}>
                     <Heading1 size={15} />
                 </button>
-                <button className={btnClass(editor.isActive('heading', { level: 2 }))} onClick={execCmd(() => editor.chain().focus().toggleHeading({ level: 2 }).run())} title="二级标题">
+                <button className={btnClass(editor.isActive('heading', { level: 2 }))} onClick={execCmd(() => editor.chain().focus().toggleHeading({ level: 2 }).run())} title={text('二级标题', 'Heading 2', 'Заголовок 2')}>
                     <Heading2 size={15} />
                 </button>
-                <button className={btnClass(editor.isActive('heading', { level: 3 }))} onClick={execCmd(() => editor.chain().focus().toggleHeading({ level: 3 }).run())} title="三级标题">
+                <button className={btnClass(editor.isActive('heading', { level: 3 }))} onClick={execCmd(() => editor.chain().focus().toggleHeading({ level: 3 }).run())} title={text('三级标题', 'Heading 3', 'Заголовок 3')}>
                     <Heading3 size={15} />
                 </button>
             </div>
@@ -155,7 +157,7 @@ export default function EditorBubbleMenu({ editor }) {
             <div className="bubble-divider" />
 
             {/* 清除格式 */}
-            <button className="bubble-btn" onClick={execCmd(() => editor.chain().focus().clearNodes().unsetAllMarks().run())} title="清除格式">
+            <button className="bubble-btn" onClick={execCmd(() => editor.chain().focus().clearNodes().unsetAllMarks().run())} title={text('清除格式', 'Clear formatting', 'Очистить форматирование')}>
                 <RemoveFormatting size={15} />
             </button>
 
@@ -164,7 +166,7 @@ export default function EditorBubbleMenu({ editor }) {
             {/* AI 助手 */}
             <button
                 className="bubble-btn bubble-btn-ai"
-                title="AI 助手 (Ctrl+J)"
+                title={text('AI 助手 (Ctrl+J)', 'AI Assistant (Ctrl+J)', 'ИИ-ассистент (Ctrl+J)')}
                 onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();

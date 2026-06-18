@@ -659,9 +659,1119 @@ Author 支持 Firebase、WebDAV 和局域网临时分享三种同步方式，让
     },
 ];
 
+const HELP_SECTIONS_EN = [
+    {
+        id: 'quickstart',
+        title: '🚀 Quick Start',
+        content: `
+## Welcome to Author
+
+Author is an **AI-assisted writing platform** for fiction writers. It integrates intelligent continuation, lore management, context awareness, import/export, snapshots, and cloud sync into an immersive writing workspace.
+
+### Step 1: Configure AI
+1. Click the **Settings** button at the bottom of the left sidebar.
+2. Fill in your AI service information under **API Config**.
+3. Author supports **OpenAI-compatible APIs** and **Google Gemini native APIs**.
+4. Click **Test Connection** to confirm the configuration.
+
+### Step 2: Start Writing
+1. Click **+ New** in the left sidebar to create a chapter.
+2. Write directly in the editor.
+3. Use the top toolbar to adjust formatting.
+
+### Step 3: Use AI
+- **Inline AI**: press **Ctrl+J** at the cursor to continue or edit inside the editor.
+- **AI Chat**: click **✦ AI** in the upper-right corner to open the sidebar and discuss plot.
+- AI automatically references your lore, previous context, and writing mode.
+
+### Interface Overview
+| Area | Function |
+|------|----------|
+| **Left Sidebar** | Chapter management, word count, token cache hits, export, archive/load, import, lore, cloud sync, theme |
+| **Top Toolbar** | Text style, alignment, lists, formulas, layout, auto format |
+| **Editor** | WYSIWYG rich-text editing with paged preview |
+| **Right AI Sidebar** | AI chat, reference context management, web search |
+| **Bottom Status Bar** | Writing mode, page count, total word count |
+| **Lower-left Navigation** | Cloud sync status and community/GitHub entry |
+| **Upper-right** | Account management, multi-device login, avatar indicator |
+        `,
+    },
+    {
+        id: 'ai-inline',
+        title: '✦ Inline AI Writing',
+        content: `
+## Inline AI Writing Assistant
+
+Use AI directly inside the editor, similar to a Cursor-style writing flow.
+
+### How to Open
+Press **Ctrl+J** (Mac: **⌘+J**) at the cursor to open the inline AI panel.
+
+### AI Modes
+
+| Mode | Function | Requires Selection |
+|------|----------|:--:|
+| ✦ Continue | Naturally continue the story from the cursor | ✗ |
+| ✎ Polish | Improve quality and fluency | ✓ |
+| ⊕ Expand | Add details and description | ✓ |
+| ⊖ Condense | Compress to the core meaning | ✓ |
+
+### Steps
+1. Place the cursor where you want continuation, or select text to revise.
+2. Press **Ctrl+J** to open the AI panel.
+3. Choose the mode you need.
+4. Optionally add instructions, such as "write a fight scene".
+5. Press **Enter** or click **✦ Generate**.
+6. AI appears in the editor as **Ghost Text**.
+7. Click **✓ Accept** to keep it, or **✕ Reject** to discard it.
+
+Accepted, rejected, or abandoned regenerated AI text is saved to the AI Assistant **Archive** tab. You can later reinsert, copy, or delete archived generations.
+
+### Context Awareness
+AI automatically references:
+- **Previous text**: collected from earlier context.
+- **Lore**: characters, worldbuilding, plot outline, and more.
+- **Writing mode**: web novel, literary prose, or screenplay style.
+
+> Tip: Configure characters and worldbuilding in the lore system so AI output fits your story more closely.
+        `,
+    },
+    {
+        id: 'ai-chat',
+        title: '💬 AI Chat Sidebar',
+        content: `
+## AI Chat Sidebar
+
+Use multi-turn AI chat to discuss plot, characters, worldbuilding, and even let AI help manage your lore database.
+
+### How to Open
+Click the **✦ AI** button in the upper-right corner of the editor, or use the shortcut.
+
+### Core Features
+
+#### Multi-turn Dialogue
+- Keeps full conversation history.
+- AI replies support **Markdown rendering** including code blocks, tables, and lists.
+- Sent messages can be edited and regenerated.
+
+#### Context Reference (Reference Tab)
+Switch to the **Reference** tab and check the context you want to inject:
+- Characters, worldbuilding, places, items, outline, writing rules.
+- Checked entries become background knowledge for AI.
+
+#### Session Management
+- **New Session**: start a clean conversation.
+- **Switch Session**: move between multiple conversations.
+- **Rename/Delete**: right-click to manage sessions.
+
+#### AI-managed Lore
+AI can generate **setting action cards** in chat. You can apply them with one click:
+- **Add**: AI suggests a new character or setting, then writes it into the lore database.
+- **Update**: AI modifies an existing entry, matched by name.
+- **Delete**: tell AI to delete an item; it finds the matching entry and proposes an action.
+- **Search**: ask what characters/settings exist; AI can see all entries, including disabled ones.
+- Click **▼** on the card header to view the full content.
+
+#### Message Variants
+- Click **Regenerate** on an AI reply to get another version.
+- Use **< 1/3 >** navigation to switch between variants.
+- **Immersive fullscreen input**: click the expand icon in the lower-right of the input box to write long prompts comfortably.
+- **Send shortcut**: in **Lore -> Preferences -> AI chat send shortcut**, choose Enter to send or Ctrl/⌘+Enter to send. The setting applies to both compact and fullscreen input.
+        `,
+    },
+    {
+        id: 'settings',
+        title: '⚙️ Lore System',
+        content: `
+## Lore Management
+
+The lore system is AI's "memory" for your work. It helps AI understand your story world and generate more consistent output.
+
+### How to Open
+Click the **Settings** button at the bottom of the sidebar.
+
+### API Config and Model Settings
+This is the foundation of the AI assistant. API keys are stored in **local browser storage**.
+
+| Setting | Description |
+|--------|-------------|
+| **API Provider** | Supports Zhipu, DeepSeek, OpenAI, Gemini, SiliconFlow, Moonshot, and custom providers |
+| **API Key** | Your model service credential. Required and stored locally. **Load balancing / key pool**: enter multiple keys separated by English commas, such as \`sk-1,sk-2\`, and Author will randomly rotate requests to avoid rate limits |
+| **Base URL** | API endpoint. Switching provider fills the default address automatically |
+| **Model Selection** | Click **Fetch model list from API** to refresh available models. Saved models missing from the latest response are marked **Not returned** and can be cleared manually |
+| **Independent Vector API** | Enable a dedicated embedding model for precise RAG retrieval in very long works |
+| **Advanced Model Params** | Independently override Temperature, Top P, Reasoning Effort, and other advanced parameters |
+
+### Token-level Smart Cache
+Author integrates provider prompt caching where supported (currently Anthropic and Gemini). Lore and previous context are automatically included in the cache flow.
+
+Open the **Stats** tab next to the AI chat, or hover over the word-count area, to view **cached hit tokens** in real time. This can reduce cost and speed up responses.
+
+### Preferences
+In the last lore panel, you can:
+- Switch UI language: Simplified Chinese, English, Russian.
+- Switch workspace visual theme: Warm Classic / Modern Glass.
+- Set AI chat send shortcut: Enter or Ctrl/⌘+Enter.
+
+### Multi-work Management
+- Manage multiple works in one project.
+- Each work has an independent lore tree.
+- Switch the current work from the left dropdown.
+- Deleting a work also deletes all of its setting nodes.
+
+### Book Info
+Set title, genre, and synopsis so AI understands the overall direction.
+
+### Lore Tree
+Add and manage settings in a tree structure:
+- **Rename top-level categories**: in the full lore panel category cards, or in edit mode from the sidebar lore popover, click the pencil to rename a top-level category for the current work only.
+
+| Category | Icon | Fields |
+|----------|------|--------|
+| **Characters** | User | Type, gender, age, appearance, personality, speaking style, background, motivation, abilities, relationships |
+| **Worldbuilding** | Globe | Description, notes |
+| **Places / Spaces** | MapPin | Description, scene title, sensory details (visual/audio/smell), atmosphere |
+| **Items / Props** | Gem | Description, type, grade, holder, numeric attributes, symbolism |
+| **Plot Outline** | ClipboardList | Status (planned/writing/done), description, notes |
+| **Writing Rules** | Ruler | Rule description that AI must strictly follow |
+
+### Extra Fields
+Non-standard fields generated by AI are placed under **AI-generated extra fields**, where you can view and edit them.
+
+### Lore Import / Export
+Supported formats:
+- **Export**: JSON, TXT, Markdown, DOCX, PDF
+- **Import**: JSON (full data), TXT / MD / DOCX / PDF (intelligent parsing of categories and entries)
+
+#### Import Conflict Resolution
+When an imported entry has the same name as an existing one, Author opens a **conflict resolution modal**:
+- **Keep Existing**: preserve the current version.
+- **Use Imported**: overwrite with the imported version.
+- **AI Smart Merge**: AI merges both versions and preserves valuable information.
+- AI merge supports **result carousel**: when merging multiple times, use ◀ 1/N ▶ to switch between generated versions.
+
+### Writing Modes
+| Mode | Style |
+|------|-------|
+| 📱 Web Novel | Fast pacing, more dialogue, dense payoff beats |
+| 📖 Literary | Delicate narration, richer description, mood and imagery |
+| 🎬 Screenplay | Standard screenplay format |
+        `,
+    },
+    {
+        id: 'chapters',
+        title: '📚 Chapter Management',
+        content: `
+## Chapter Management
+
+### Create Chapters
+Click **+ New Chapter** in the sidebar to create a chapter with an incrementing title, such as "Chapter 1" -> "Chapter 2".
+
+When hovering over a chapter row, click the **+** on the right to insert a blank chapter immediately after it.
+
+### Special Chapters
+Use **Special Chapter** in the editor toolbar, or the **S** button on the chapter row, to mark the current chapter as special. Renumbering skips special chapters automatically.
+
+### Switch Chapters
+Click a chapter title in the sidebar to load it in the editor.
+
+### Right-click Actions
+Right-click a chapter title to:
+- **Rename**: edit the chapter title.
+- **Export Markdown**: export the current chapter as a .md file.
+- **Special Chapter**: toggle whether renumbering ignores this chapter.
+- **Delete Chapter**: delete it after confirmation.
+
+### Drag Sort
+Hold and drag a chapter title to reorder chapters.
+
+### Word Count
+- Each chapter row shows the chapter word count.
+- The sidebar footer shows total book word count.
+
+### Paged Preview
+The editor uses a Word / Google Docs-like paged layout: white paper cards on a gray canvas, with current page count shown in the bottom status bar.
+        `,
+    },
+    {
+        id: 'toolbar',
+        title: '🎨 Toolbar',
+        content: `
+## Toolbar Overview
+
+### Undo / Redo
+Undo the latest operation, or restore an undone operation.
+
+### Font and Size
+- Font dropdown: Default, Songti, Heiti, Kaiti, Fangsong, Serif, Monospace.
+- Size dropdown: 12px to 32px.
+
+### Text Formatting
+| Button | Function | Shortcut |
+|--------|----------|----------|
+| **B** | Bold | Ctrl+B |
+| *I* | Italic | Ctrl+I |
+| U | Underline | Ctrl+U |
+| ~~S~~ | Strikethrough | — |
+| X² | Superscript | — |
+| X₂ | Subscript | — |
+| Remark | Add a side note / comment to selected text | — |
+
+### Colors
+- **A▾**: text color picker.
+- **Highlight▾**: background highlight picker.
+
+### Remarks / Comments
+Select text and click **Remark** in the toolbar or bubble menu to add a page-side note. Remarks do not mix into the body text. During export, choose body-only or annotated output. DOCX annotated export creates native Word / WPS comments.
+
+### Headings and Alignment
+- H1/H2/H3: heading levels.
+- Align left / center / right / justify.
+
+### Layout Adjustment
+Click **Aa▾** to adjust global editor font size (14-24px) and line height (1.4-2.6), or reset to defaults.
+
+### Lists and Blocks
+| Button | Function |
+|--------|----------|
+| Bullets | Unordered list |
+| 1. List | Ordered list |
+| Task | Task list |
+| Quote | Blockquote |
+| </> | Code block |
+| ∑ | LaTeX formula |
+| — | Horizontal rule |
+
+### Auto Format
+Click the **magic wand** button on the right side of the toolbar to tidy document format:
+- Remove extra leading spaces and full-width spaces.
+- Clear empty paragraphs.
+- Preserve formatting marks such as bold and italic.
+- Undoable with Ctrl+Z.
+        `,
+    },
+    {
+        id: 'data',
+        title: '💾 Data Management',
+        content: `
+## Data Management
+
+### Auto Save
+Editor content is **auto-saved in real time** to browser localStorage. No manual save is required.
+
+### Left Navigation Buttons
+| Icon | Function |
+|------|----------|
+| Sun / Eye / Moon | Cycle through Light, Eye Comfort, and Dark mode |
+| History | **Time Machine**: version history and snapshots |
+| Folder | **Load**: restore a full project from JSON |
+| Save | **Archive**: export the full project as JSON; API config and AI chat are not included |
+| Import | **Import Work**: import chapters from files |
+| Export | Export current chapter as TXT / Markdown / DOCX / EPUB / PDF, or open **More Export** for batch selection |
+| Cloud | **Cloud Sync** after sign-in |
+| More | API config, preferences, help, community |
+
+### Multi-format Import
+Supported formats:
+- **TXT**
+- **Markdown (.md)**
+- **EPUB**
+- **DOCX**
+- **DOC**
+- **PDF**
+
+#### Smart Chapter Merge
+When importing into an existing work, Author compares chapter numbers intelligently:
+- Recognizes multiple numbering styles as the same chapter.
+- **No conflict**: merge and sort by number automatically.
+- **Conflict**: show a conflict modal where you choose which chapters to keep.
+- Importing into an empty work imports directly.
+
+### Multi-format Export
+From the export menu:
+- **Export current chapter** as TXT / Markdown / DOCX / EPUB / PDF.
+- **More Export** opens a modal where you freely select chapters and formats.
+
+The More Export modal supports batch selection by group. Content can be exported as **Body** or **Annotated**. Body removes remarks; annotated output preserves them, and DOCX uses native Word comments.
+
+### Desktop Client (Electron)
+On the Windows desktop client:
+- Built-in official cloud sync server; no manual Firebase setup.
+- One-click update check and automatic installation.
+- Data is stored in the system user directory, not affected by browser cleanup.
+- Debug log: \`%APPDATA%\\author-app\\author-debug.log\`
+
+### Diagnostic Logs
+If the app white-screens, freezes, or crashes:
+- Open **Help -> About -> Export Diagnostic Logs** to download \`author-diagnostic-*.json\`.
+- Desktop client can open the local log folder from **Help -> About -> Open Log Folder**.
+- The white-screen/crash page also includes **Export Diagnostic Logs**.
+- Main desktop log: \`%APPDATA%\\author-app\\author-debug.log\`
+- If the desktop app crashed and exited, crash reports are written to \`%APPDATA%\\author-app\\crash-reports\\author-crash-*.json\`.
+- Browser / source / Vercel deployments do not have a desktop log directory, but can still export the current browser diagnostic report.
+- Logs include recent errors, warnings, clicks/drags, top overlays, long tasks, and desktop main-process clues.
+- API keys, tokens, Authorization headers, public IPs, and similar sensitive fields are automatically redacted.
+
+### Important Notes
+- Creative content is stored **locally in your browser** unless cloud sync is enabled.
+- **Clearing browser data** deletes unexported content. Desktop client data is not affected in the same way.
+- **API keys** are stored in localStorage.
+- Regularly archive your work, or enable **Cloud Sync** for chapters and lore.
+
+### AI Privacy Notice
+When using AI features such as continuation, rewriting, and chat, your **API key** and **text sent to AI** pass through the deployment server before being forwarded to the AI provider.
+
+If you are using someone else's public deployment:
+- Try features briefly if needed.
+- Destroy your key on the provider website after testing.
+- For serious use, fork and deploy your own private instance.
+        `,
+    },
+    {
+        id: 'markdown',
+        title: '📝 Markdown',
+        content: `
+## Markdown Auto-rendering
+
+Markdown syntax typed in the editor is **automatically converted** into rich text.
+
+### Supported Syntax
+| Input | Result |
+|------|--------|
+| \`**bold**\` | **bold** |
+| \`*italic*\` | *italic* |
+| \`~~strike~~\` | ~~strike~~ |
+| \`# Heading\` | H1 |
+| \`## Heading\` | H2 |
+| \`### Heading\` | H3 |
+| \`- List\` | Unordered list |
+| \`1. List\` | Ordered list |
+| \`> Quote\` | Blockquote |
+| \`---\` | Divider |
+
+### Markdown in AI Chat
+AI replies in the sidebar support full Markdown rendering, including code blocks, tables, links, and more.
+        `,
+    },
+    {
+        id: 'shortcuts',
+        title: '⌨️ Shortcuts',
+        content: `
+## Keyboard Shortcuts
+
+### Editing
+| Shortcut | Function |
+|----------|----------|
+| Ctrl+Z | Undo |
+| Ctrl+Y | Redo |
+| Ctrl+A | Select all |
+
+### Formatting
+| Shortcut | Function |
+|----------|----------|
+| Ctrl+B | Bold |
+| Ctrl+I | Italic |
+| Ctrl+U | Underline |
+
+### AI
+| Shortcut | Function |
+|----------|----------|
+| Ctrl+J | Open / close inline AI panel |
+| Enter | Start AI generation |
+| Esc | Close AI panel / cancel generation |
+
+### Markdown Quick Input
+| Input | Trigger |
+|------|---------|
+| \`# \` + Space | H1 |
+| \`## \` + Space | H2 |
+| \`- \` + Space | Unordered list |
+| \`1. \` + Space | Ordered list |
+| \`> \` + Space | Quote |
+| \`---\` + Enter | Divider |
+
+### Slash Commands
+Type \`/\` in the editor to open the command menu:
+| Command | Function |
+|---------|----------|
+| /h1, /h2, /h3 | Insert headings |
+| /bullet | Unordered list |
+| /ordered | Ordered list |
+| /todo | Task list |
+| /quote | Quote block |
+| /code | Code block |
+| /hr | Horizontal rule |
+| /math | LaTeX formula |
+        `,
+    },
+    {
+        id: 'theme',
+        title: '🎭 Theme & Layout',
+        content: `
+## Theme and Typography Preferences
+
+### Two Flagship Theme Engines
+Author currently provides two polished theme families, switchable in **Preferences**:
+- **Warm Classic**: an eye-friendly warm-gray paper tone with tangible diary-like cards.
+- **Modern Glass**: macOS-inspired white/cool-gray base with translucent glass layers.
+
+You can always click the theme button in the lower-right sidebar to cycle through Light, Eye Comfort, and Dark modes.
+
+### Typography Engine
+Click **Aa▾** in the toolbar:
+- **Font size**: 14px - 24px, default 17px.
+- **Line height**: 1.4 - 2.6, default 1.9.
+- **Reset default**: restore typography parameters.
+
+### Font Selection
+| Font | Best For |
+|------|----------|
+| Default | Follow the default body font in Preferences |
+| Songti | Body writing |
+| Heiti | Headings |
+| Kaiti | Classical style |
+| Fangsong | Formal document style |
+| Serif | English serif text |
+| Monospace | Fixed-width text |
+
+To change the default font for the whole body, use **Preferences -> Default body font**. The toolbar font dropdown only applies explicit font styling to the current selection or following input.
+
+### Layout Suggestions
+These settings affect editor reading comfort only. They do not change body text, word count, or exported chapter structure.
+
+| Scenario | Recommended Setting | Notes |
+|----------|---------------------|-------|
+| Long daily writing | 17px, line height 1.9 | Balanced default for long sessions |
+| Dense proofreading | 15-16px, line height 1.6-1.8 | More text on screen for checking |
+| Immersive reading / large screen | 18-20px, line height 2.0-2.2 | More breathing room for rereading and polishing |
+        `,
+    },
+    {
+        id: 'about',
+        title: 'ℹ️ About',
+        content: `
+## About Author
+
+**Author** is an AI-driven fiction writing tool designed to provide a professional and efficient writing experience for web novel authors and literary creators.
+
+### Core Features
+- **AI writing**: inline continuation plus chat discussion.
+- **Context awareness**: AI references characters, worldbuilding, and previous text.
+- **Lore management**: tree-structured characters, worldbuilding, outline, and writing rules.
+- **Ghost Text engine**: Cursor-like preview with accept/reject actions.
+- **Paged view**: Word / Google Docs-like white paper layout.
+- **Dark mode**: eye-friendly dark theme.
+- **Local-first**: data is stored locally for privacy.
+- **Cloud sync**: optional multi-device sync after sign-in.
+- **Vector retrieval (RAG)**: intelligent retrieval for large lore databases.
+- **Web search**: AI chat can fetch real-time information.
+- **Auto format**: clean spaces and empty paragraphs.
+- **Archive / load**: import/export full projects.
+- **Mobile**: native Android app with Google-login cloud sync.
+- **Desktop**: Windows installer with built-in official cloud sync server.
+
+### Data Safety
+- Creative content is stored locally in your browser.
+- API keys are stored in your local browser.
+- All data can be exported with one click.
+
+### Privacy Notice
+When using AI, API keys and text content pass through the **deployment server** and are forwarded to the AI provider. If using someone else's deployment, destroy your key after testing and deploy your own instance for serious use.
+
+### Tech Stack
+Next.js + Tiptap editor + AI APIs (OpenAI-compatible / Gemini)
+
+### Acknowledgements and References
+
+#### AI Partners
+- [ChatGPT 5.5](https://openai.com/chatgpt/) (xhigh): main reasoning and coding model.
+- [Claude Opus 4.6](https://www.anthropic.com/) (Thinking): architecture, implementation, and debugging.
+- [Gemini 3.1 Pro](https://deepmind.google/technologies/gemini/) (High): UI review, screenshot analysis, design iteration.
+- [Gemini 3 Flash](https://deepmind.google/technologies/gemini/): built-in browser automation tools.
+
+#### AI Coding IDEs
+- [Antigravity](https://antigravity.google/): AI coding partner.
+- [Codex](https://openai.com/codex/): main AI coding tool.
+
+#### MCP Tools
+- [Chrome DevTools MCP](https://developer.chrome.com/): browser testing, performance analysis, DOM inspection.
+- [Firebase MCP](https://firebase.google.com/): cloud database management and security-rule validation.
+- [GitHub MCP](https://github.com/): repository management and automated releases.
+
+#### Inspiration
+Author's multi-provider API configuration experience references product ideas from open-source AI clients such as RikkaHub and Cherry Studio around providers, models, Base URL, and local key management.
+
+- Cherry Studio: [github.com/CherryHQ/cherry-studio](https://github.com/CherryHQ/cherry-studio)
+- RikkaHub: [github.com/rikkahub/rikkahub](https://github.com/rikkahub/rikkahub)
+- This project does not include source code, assets, or binaries from RikkaHub or Cherry Studio. Any future direct code use should comply with their current licenses or obtain authorization.
+
+### Open Source
+Author is open source under **AGPL-3.0**.
+
+GitHub: [github.com/YuanShiJiLoong/author](${REPO.github})
+
+Stars, issues, and contributions are welcome.
+
+### Legal Documents
+By using Author, you agree to the privacy policy and terms of service:
+
+| Document | GitHub | Gitee Mirror |
+|----------|--------|--------------|
+${LEGAL_LANGUAGES.map(l => [
+`| ${l.privacy} ${l.label.split(' ')[0]} | [GitHub](${legalDocUrl('github', 'PRIVACY', l.code)}) | [Gitee](${legalDocUrl('gitee', 'PRIVACY', l.code)}) |`,
+`| ${l.terms} ${l.label.split(' ')[0]} | [GitHub](${legalDocUrl('github', 'TERMS', l.code)}) | [Gitee](${legalDocUrl('gitee', 'TERMS', l.code)}) |`,
+].join('\n')).join('\n')}
+
+> If GitHub is inaccessible, use the Gitee mirror. Legal documents are also distributed with the desktop installer.
+        `,
+    },
+    {
+        id: 'cloud-sync',
+        title: '☁️ Cloud Sync',
+        content: `
+## Multi-device Cloud Sync
+
+Author supports Firebase, WebDAV, and temporary LAN sharing so you can switch between devices. Sync uses a privacy-first allowlist.
+
+### Quick Start
+1. Click the **Cloud Sync** icon in the lower-left navigation.
+2. Sign in with a **Google account**.
+3. After login, data syncs to the cloud automatically.
+
+You can also enable WebDAV in **Preferences -> Cloud Sync** and fill in a WebDAV address from Jianguoyun, 123 cloud drive, NAS, or Nextcloud. LAN sync is suitable for temporary migration on the same Wi-Fi.
+
+### Sync Scope
+| Data Type | Synced |
+|-----------|:--:|
+| Chapters | ✓ |
+| Lore | ✓ |
+| AI chat history | ✗ local only |
+| Snapshot history | ✗ local only |
+| API keys / preferences | ✗ local only |
+
+AI chats, snapshots, API config, token stats, and local preferences stay on the current device and are not included in cloud sync.
+
+### Account Management
+- Click the **avatar** in the upper-right corner to view login status.
+- Supports account switching and logout.
+- Multiple Google accounts can manage different projects.
+
+### Desktop Client vs Self-hosted
+| Feature | Desktop Client | Self-hosted (Vercel / source) |
+|---------|:--:|:--:|
+| Firebase sync | Built in | Requires Firebase setup |
+| WebDAV sync | Optional | Optional |
+| LAN sync | Optional | Optional |
+| Setup difficulty | No setup | Create Firebase project |
+| Data ownership | Firebase or your WebDAV | Your Firebase or WebDAV |
+
+The desktop client includes the official cloud sync server. No extra Firebase setup is needed.
+
+### Conflict Handling
+Sync uses a **last write wins** strategy. Edit on one device at a time when possible to avoid overwriting.
+        `,
+    },
+    {
+        id: 'embedding',
+        title: '🧠 Vector Retrieval',
+        content: `
+## Vector Retrieval (Embedding / RAG)
+
+When you have many lore entries (more than 20), vector retrieval lets AI receive only the most relevant settings and avoids exceeding context limits.
+
+### How It Works
+1. Each lore entry is converted into a mathematical vector.
+2. During AI chat, the user input is also embedded.
+3. Author uses **cosine similarity** to retrieve the most relevant Top-K entries and inject them into context.
+
+### When to Enable
+| Scenario | Recommendation |
+|----------|----------------|
+| Fewer than 20 entries | Not needed |
+| 20-100 entries | Recommended |
+| More than 100 entries | Strongly recommended |
+
+### Configuration
+1. Open **Lore -> API Config**.
+2. Enable **Independent Vector API**.
+3. Fill in Embedding API Key, Base URL, and model name.
+
+### Recommended Models
+| Provider | Model | Notes |
+|----------|-------|-------|
+| OpenAI | text-embedding-3-small | Cost-effective |
+| OpenAI | text-embedding-3-large | Highest accuracy |
+| Zhipu AI | embedding-3 | Optimized for Chinese |
+| SiliconFlow | BAAI/bge-m3 | Multilingual and free tier |
+
+### Automatic Mechanism
+- After a setting entry changes, embedding starts automatically after a 3-second debounce.
+- Only changed entries are updated incrementally.
+- Vector data is stored locally in IndexedDB.
+
+### Manual Rebuild
+After changing the embedding model, click **Rebuild Vector Index** in API Config.
+        `,
+    },
+];
+
+const HELP_SECTIONS_RU = [
+    {
+        id: 'quickstart',
+        title: '🚀 Быстрый старт',
+        content: `
+## Добро пожаловать в Author
+
+Author — **платформа письма с ИИ** для авторов прозы. Она объединяет умное продолжение, управление лором, контекстный ИИ, импорт/экспорт, снимки и облачную синхронизацию.
+
+### Шаг 1: настройте ИИ
+1. Нажмите **Настройки** внизу левой панели.
+2. В разделе **API** заполните данные сервиса ИИ.
+3. Поддерживаются **OpenAI-совместимые API** и **нативный Google Gemini API**.
+4. Нажмите **Проверить соединение**.
+
+### Шаг 2: начните писать
+1. Нажмите **+ Новая** в левой панели, чтобы создать главу.
+2. Пишите прямо в редакторе.
+3. Используйте верхнюю панель для форматирования.
+
+### Шаг 3: помощь ИИ
+- **Встроенный ИИ**: **Ctrl+J** у курсора.
+- **AI Assistant**: кнопка **✦ AI** справа сверху для обсуждения сюжета.
+- ИИ автоматически учитывает лор, предыдущий контекст и режим письма.
+
+### Обзор интерфейса
+| Область | Функция |
+|--------|---------|
+| **Левая панель** | Главы, статистика слов, token cache, экспорт, архив/загрузка, импорт, лор, синхронизация, тема |
+| **Верхняя панель** | Формат текста, выравнивание, списки, формулы, макет, автоформат |
+| **Редактор** | WYSIWYG-редактор с постраничным предпросмотром |
+| **Правая панель ИИ** | Чат, управление справочным контекстом, веб-поиск |
+| **Нижняя строка** | Режим письма, страницы, общий счетчик слов |
+| **Нижняя левая навигация** | Статус синхронизации, сообщество/GitHub |
+| **Верхний правый угол** | Аккаунт, вход на нескольких устройствах, аватар |
+        `,
+    },
+    {
+        id: 'ai-inline',
+        title: '✦ Встроенный ИИ',
+        content: `
+## Встроенный ИИ для письма
+
+Используйте ИИ прямо в редакторе, в стиле Cursor.
+
+### Открытие
+Нажмите **Ctrl+J** (Mac: **⌘+J**) у курсора.
+
+### Режимы
+| Режим | Функция | Нужно выделение |
+|------|---------|:--:|
+| ✦ Продолжить | Естественно продолжает текст от курсора | ✗ |
+| ✎ Полировка | Улучшает качество и плавность текста | ✓ |
+| ⊕ Расширить | Добавляет детали и описание | ✓ |
+| ⊖ Сжать | Сокращает до сути | ✓ |
+
+### Шаги
+1. Поставьте курсор в место продолжения или выделите текст.
+2. Нажмите **Ctrl+J**.
+3. Выберите режим.
+4. При необходимости добавьте инструкцию, например "напиши сцену боя".
+5. Нажмите **Enter** или **✦ Сгенерировать**.
+6. ИИ появится в редакторе как **Ghost Text**.
+7. Нажмите **✓ Принять** или **✕ Отклонить**.
+
+Принятый, отклоненный или брошенный при регенерации текст попадает во вкладку **Архив** AI Assistant. Его можно вставить снова, скопировать или удалить.
+
+### Контекст
+ИИ автоматически учитывает:
+- **Предыдущий текст**.
+- **Лор**: персонажи, мир, план и т.д.
+- **Режим письма**: веб-роман, литературная проза, сценарий.
+        `,
+    },
+    {
+        id: 'ai-chat',
+        title: '💬 AI Assistant',
+        content: `
+## Боковая панель AI Assistant
+
+Многоходовой чат для обсуждения сюжета, персонажей, мира и управления базой лора.
+
+### Открытие
+Нажмите **✦ AI** в правом верхнем углу редактора.
+
+### Основные возможности
+#### Диалог
+- Полная история диалога.
+- Ответы ИИ рендерятся как **Markdown**: код, таблицы, списки.
+- Отправленные сообщения можно редактировать и генерировать заново.
+
+#### Reference
+Во вкладке **Reference** выберите, какой контекст отправлять ИИ:
+- Персонажи, мир, места, предметы, план, правила письма.
+- Отмеченные элементы становятся фоновыми знаниями ИИ.
+
+#### Сессии
+- **Новая сессия**: чистый диалог.
+- **Переключение**: несколько параллельных диалогов.
+- **Переименовать/удалить**: управление через правый клик.
+
+#### Управление лором через ИИ
+ИИ может создавать **карточки действий**:
+- **Добавить**: новый персонаж/элемент.
+- **Обновить**: изменить существующий элемент по имени.
+- **Удалить**: найти и предложить удаление.
+- **Поиск**: ИИ знает все элементы, включая отключенные.
+- Нажмите **▼**, чтобы открыть полное содержимое карточки.
+
+#### Варианты сообщений
+- **Regenerate** создает другой вариант ответа.
+- Навигация **< 1/3 >** переключает варианты.
+- Полноэкранный ввод удобен для длинных prompt.
+- Горячую клавишу отправки можно выбрать в **Лор -> Предпочтения**.
+        `,
+    },
+    {
+        id: 'settings',
+        title: '⚙️ Система лора',
+        content: `
+## Управление лором
+
+Лор — это "память" ИИ о произведении. Он помогает ИИ понимать мир и писать согласованнее.
+
+### API и модели
+| Параметр | Описание |
+|---------|----------|
+| **Провайдер API** | Zhipu, DeepSeek, OpenAI, Gemini, SiliconFlow, Moonshot и пользовательские провайдеры |
+| **API Key** | Ключ сервиса. Хранится локально. Можно ввести несколько ключей через запятую, например \`sk-1,sk-2\`, для ротации |
+| **Base URL** | Адрес API; при смене провайдера заполняется автоматически |
+| **Модель** | Список моделей можно подтянуть из API; сохраненные, но не вернувшиеся модели помечаются отдельно |
+| **Отдельный Vector API** | Embedding-модель для RAG-поиска в больших произведениях |
+| **Расширенные параметры** | Temperature, Top P, Reasoning Effort и другие настройки |
+
+### Token cache
+Author использует prompt caching там, где провайдер поддерживает это (Anthropic и Gemini). Лор и предыдущий контекст автоматически включаются в механизм кэша. Во вкладке **Stats** можно видеть cached hit tokens.
+
+### Предпочтения
+- Язык интерфейса: 中文 / English / Русский.
+- Тема: Warm Classic / Modern Glass.
+- Горячая клавиша отправки в AI-чате.
+
+### Несколько произведений
+- У каждого произведения отдельное дерево лора.
+- Переключение через левый список.
+- Удаление произведения удаляет его узлы.
+
+### Дерево лора
+| Категория | Поля |
+|----------|------|
+| **Персонажи** | Тип, пол, возраст, внешность, характер, речь, биография, мотивация, способности, отношения |
+| **Мир** | Описание, заметки |
+| **Места** | Описание, сенсорные детали, атмосфера |
+| **Предметы / реквизит** | Описание, тип, ранг, владелец, свойства, символика |
+| **План** | Статус, описание, заметки |
+| **Правила письма** | Правила, которые ИИ должен строго соблюдать |
+
+Верхние категории можно переименовать для текущего произведения. Нестандартные поля ИИ попадают в группу **AI-generated extra fields**.
+
+### Импорт / экспорт лора
+- **Экспорт**: JSON, TXT, Markdown, DOCX, PDF.
+- **Импорт**: JSON, TXT / MD / DOCX / PDF с умным разбором категорий.
+
+При конфликте имен можно сохранить текущую версию, использовать импортированную или выполнить **AI smart merge** с каруселью результатов.
+
+### Режимы письма
+| Режим | Особенности |
+|------|-------------|
+| 📱 Web Novel | Быстрый темп, больше диалогов, плотные payoff-сцены |
+| 📖 Literary | Тонкое повествование, богатое описание, атмосфера |
+| 🎬 Screenplay | Формат сценария |
+        `,
+    },
+    {
+        id: 'chapters',
+        title: '📚 Главы',
+        content: `
+## Управление главами
+
+### Создание
+Кнопка **+ Новая глава** создает главу с возрастающим номером. При наведении на строку главы кнопка **+** справа вставляет пустую главу после нее.
+
+### Особые главы
+Кнопка **Special Chapter** в панели редактора или **S** в строке главы отмечает главу как особую. При перенумерации такие главы пропускаются.
+
+### Переключение и действия
+Нажмите название главы для открытия. Правый клик позволяет переименовать, экспортировать Markdown, переключить особую главу или удалить.
+
+### Сортировка и статистика
+Главы можно перетаскивать. У каждой главы показывается счетчик слов, а внизу панели — общий счетчик книги.
+
+### Постраничный предпросмотр
+Редактор показывает страницы в стиле Word / Google Docs: белые листы на сером фоне и номер текущей страницы внизу.
+        `,
+    },
+    {
+        id: 'toolbar',
+        title: '🎨 Панель инструментов',
+        content: `
+## Панель инструментов
+
+### Отмена / повтор
+Отменяет последнее действие или возвращает отмененное.
+
+### Шрифт и размер
+Доступны Default, Songti, Heiti, Kaiti, Fangsong, Serif, Monospace и размеры 12-32px.
+
+### Форматирование
+| Кнопка | Функция | Горячая клавиша |
+|-------|---------|-----------------|
+| **B** | Жирный | Ctrl+B |
+| *I* | Курсив | Ctrl+I |
+| U | Подчеркивание | Ctrl+U |
+| ~~S~~ | Зачеркивание | — |
+| X² / X₂ | Верхний / нижний индекс | — |
+| Remark | Комментарий к выделению | — |
+
+### Цвета, заголовки и блоки
+Есть цвет текста, подсветка, H1/H2/H3, выравнивание, списки, задачи, цитаты, код, LaTeX и разделитель.
+
+### Комментарии
+Комментарии не смешиваются с основным текстом. При экспорте можно выбрать body-only или annotated; DOCX annotated создает нативные комментарии Word/WPS.
+
+### Aa и автоформат
+**Aa▾** меняет общий размер и межстрочный интервал. **Magic wand** очищает лишние пробелы и пустые абзацы, сохраняя форматирование; действие можно отменить.
+        `,
+    },
+    {
+        id: 'data',
+        title: '💾 Данные',
+        content: `
+## Управление данными
+
+### Автосохранение
+Текст сохраняется автоматически в localStorage.
+
+### Импорт и экспорт
+Импорт поддерживает TXT, Markdown, EPUB, DOCX, DOC и PDF. При импорте в существующее произведение Author распознает номера глав, объединяет без конфликтов и показывает окно выбора при конфликтах.
+
+Экспорт текущей главы доступен в TXT / Markdown / DOCX / EPUB / PDF. **More Export** позволяет выбрать несколько глав, формат и вариант: body или annotated.
+
+### Desktop Client
+В Windows-клиенте есть встроенный официальный сервер синхронизации, автообновление, хранение данных вне браузера и лог \`%APPDATA%\\author-app\\author-debug.log\`.
+
+### Диагностика
+При белом экране, зависании или crash:
+- **Help -> About -> Export Diagnostic Logs** скачивает \`author-diagnostic-*.json\`.
+- Desktop может открыть папку логов.
+- Crash reports пишутся в \`%APPDATA%\\author-app\\crash-reports\`.
+- API keys, tokens, Authorization, публичные IP и похожие поля автоматически маскируются.
+
+### Важно
+- Данные хранятся локально, если синхронизация не включена.
+- Очистка браузера может удалить неэкспортированную работу.
+- Регулярно архивируйте проект или включите Cloud Sync.
+
+### Приватность ИИ
+При использовании ИИ API Key и текст проходят через сервер развертывания и отправляются провайдеру. На чужих публичных инстансах тестируйте осторожно и затем уничтожайте ключ.
+        `,
+    },
+    {
+        id: 'markdown',
+        title: '📝 Markdown',
+        content: `
+## Автоматический Markdown
+
+Markdown в редакторе автоматически превращается в rich text.
+
+| Ввод | Результат |
+|-----|-----------|
+| \`**bold**\` | жирный |
+| \`*italic*\` | курсив |
+| \`~~strike~~\` | зачеркивание |
+| \`# Heading\` | H1 |
+| \`## Heading\` | H2 |
+| \`- List\` | список |
+| \`> Quote\` | цитата |
+| \`---\` | разделитель |
+
+Ответы ИИ в чате также поддерживают Markdown: код, таблицы, ссылки и списки.
+        `,
+    },
+    {
+        id: 'shortcuts',
+        title: '⌨️ Горячие клавиши',
+        content: `
+## Горячие клавиши
+
+### Редактирование
+| Клавиша | Функция |
+|--------|---------|
+| Ctrl+Z | Отмена |
+| Ctrl+Y | Повтор |
+| Ctrl+A | Выделить все |
+
+### Формат
+| Клавиша | Функция |
+|--------|---------|
+| Ctrl+B | Жирный |
+| Ctrl+I | Курсив |
+| Ctrl+U | Подчеркивание |
+
+### ИИ
+| Клавиша | Функция |
+|--------|---------|
+| Ctrl+J | Открыть/закрыть встроенный ИИ |
+| Enter | Начать генерацию |
+| Esc | Закрыть панель / отменить |
+
+### Slash Commands
+Введите \`/\` для меню команд: /h1, /h2, /h3, /bullet, /ordered, /todo, /quote, /code, /hr, /math.
+        `,
+    },
+    {
+        id: 'theme',
+        title: '🎭 Тема и макет',
+        content: `
+## Темы и типографика
+
+### Две темы
+- **Warm Classic**: теплый бумажный стиль, комфортный для глаз.
+- **Modern Glass**: macOS-подобная светлая стеклянная архитектура.
+
+Кнопка темы в боковой панели переключает Light, Eye Comfort и Dark.
+
+### Типографика
+**Aa▾** меняет размер 14-24px и межстрочный интервал 1.4-2.6, с быстрым сбросом.
+
+### Шрифты
+Default следует настройке body font. Панель шрифтов применяет явный шрифт к выделению или дальнейшему вводу.
+
+| Сценарий | Рекомендация |
+|---------|--------------|
+| Долгая ежедневная работа | 17px, line height 1.9 |
+| Плотная корректура | 15-16px, line height 1.6-1.8 |
+| Иммерсивное чтение | 18-20px, line height 2.0-2.2 |
+        `,
+    },
+    {
+        id: 'about',
+        title: 'ℹ️ О программе',
+        content: `
+## Об Author
+
+**Author** — инструмент для прозы с ИИ, рассчитанный на web novel и литературных авторов.
+
+### Основное
+- ИИ-письмо: inline continuation + chat.
+- Контекст: персонажи, мир, предыдущий текст.
+- Дерево лора.
+- Ghost Text с accept/reject.
+- Постраничный вид.
+- Темная тема.
+- Local-first хранение.
+- Облачная синхронизация.
+- RAG-поиск по лору.
+- Веб-поиск.
+- Автоформат.
+- Архив/загрузка.
+- Android и Windows-клиент.
+
+### Безопасность
+Контент и API Key хранятся локально. Все данные можно экспортировать.
+
+### Приватность
+ИИ-запросы проходят через сервер развертывания к провайдеру. Для серьезного использования лучше собственное развертывание.
+
+### Стек
+Next.js + Tiptap + AI API (OpenAI-compatible / Gemini)
+
+### Open Source
+Author открыт по **AGPL-3.0**.
+
+GitHub: [github.com/YuanShiJiLoong/author](${REPO.github})
+
+### Юридические документы
+| Документ | GitHub | Gitee |
+|----------|--------|-------|
+${LEGAL_LANGUAGES.map(l => [
+`| ${l.privacy} ${l.label.split(' ')[0]} | [GitHub](${legalDocUrl('github', 'PRIVACY', l.code)}) | [Gitee](${legalDocUrl('gitee', 'PRIVACY', l.code)}) |`,
+`| ${l.terms} ${l.label.split(' ')[0]} | [GitHub](${legalDocUrl('github', 'TERMS', l.code)}) | [Gitee](${legalDocUrl('gitee', 'TERMS', l.code)}) |`,
+].join('\n')).join('\n')}
+        `,
+    },
+    {
+        id: 'cloud-sync',
+        title: '☁️ Облачная синхронизация',
+        content: `
+## Синхронизация между устройствами
+
+Author поддерживает Firebase, WebDAV и временный LAN-share. Синхронизация использует privacy-first allowlist.
+
+### Быстрый старт
+1. Нажмите **Cloud Sync** в нижней левой навигации.
+2. Войдите через **Google account**.
+3. После входа данные синхронизируются автоматически.
+
+WebDAV включается в **Preferences -> Cloud Sync**. LAN подходит для временной миграции в одной Wi-Fi сети.
+
+### Что синхронизируется
+| Данные | Sync |
+|-------|:--:|
+| Главы | ✓ |
+| Лор | ✓ |
+| История AI-чата | ✗ локально |
+| Снимки | ✗ локально |
+| API keys / preferences | ✗ локально |
+
+### Desktop vs Self-hosted
+| Функция | Desktop | Self-hosted |
+|--------|:--:|:--:|
+| Firebase | встроено | нужна настройка |
+| WebDAV | опционально | опционально |
+| LAN | опционально | опционально |
+
+Конфликты решаются стратегией **last write wins**. Лучше редактировать одновременно только на одном устройстве.
+        `,
+    },
+    {
+        id: 'embedding',
+        title: '🧠 Векторный поиск',
+        content: `
+## Embedding / RAG
+
+Когда элементов лора больше 20, векторный поиск отправляет ИИ только самые релевантные записи и экономит контекст.
+
+### Как работает
+1. Каждый элемент лора превращается в вектор.
+2. Пользовательский запрос тоже превращается в вектор.
+3. По **cosine similarity** выбираются Top-K записи.
+
+### Когда включать
+| Ситуация | Совет |
+|---------|-------|
+| < 20 элементов | не нужно |
+| 20-100 | рекомендуется |
+| > 100 | настоятельно рекомендуется |
+
+### Настройка
+Откройте **Lore -> API Config**, включите **Independent Vector API**, заполните API Key, Base URL и модель.
+
+### Модели
+| Провайдер | Модель | Особенность |
+|----------|--------|-------------|
+| OpenAI | text-embedding-3-small | выгодно |
+| OpenAI | text-embedding-3-large | точнее |
+| Zhipu AI | embedding-3 | китайский язык |
+| SiliconFlow | BAAI/bge-m3 | мультиязычно |
+
+После смены embedding-модели нажмите **Rebuild Vector Index**.
+        `,
+    },
+];
+
 export default function HelpPanel({ open, onClose }) {
     const [activeSection, setActiveSection] = useState('quickstart');
-    const { t } = useI18n();
+    const { t, text, language } = useI18n();
     const [updateChecking, setUpdateChecking] = useState(false);
     const [updateResult, setUpdateResult] = useState(null); // { status: 'latest'|'available'|'error', current, latest, isSourceDeploy }
     const [updating, setUpdating] = useState(false);
@@ -774,7 +1884,7 @@ export default function HelpPanel({ open, onClose }) {
                         if (data.success) {
                             if (data.needRestart) {
                                 const ver = data.diskVersion ? ` v${data.diskVersion}` : '';
-                                setUpdateDone({ success: true, message: `代码已更新到${ver}，请重启服务生效`, needRestart: true });
+                                setUpdateDone({ success: true, message: text(`代码已更新到${ver}，请重启服务生效`, `Code updated to${ver}. Restart the service to apply it.`, `Код обновлен до${ver}. Перезапустите сервис, чтобы применить изменения.`), needRestart: true });
                             } else if (data.alreadyUpToDate) {
                                 setUpdateDone({ success: true, message: t('update.alreadyLatest') });
                             } else {
@@ -820,7 +1930,7 @@ export default function HelpPanel({ open, onClose }) {
         recordDiagnosticEvent('diagnostics.location.opened', 'User opened desktop diagnostic log location from help panel', { section: activeSection }, 'info');
         const result = await window.electronAPI.openDiagnosticLogFile();
         if (!result?.success) {
-            alert(`打开日志目录失败：${result?.error || '未知错误'}`);
+            alert(text(`打开日志目录失败：${result?.error || '未知错误'}`, `Failed to open log folder: ${result?.error || 'Unknown error'}`, `Не удалось открыть папку логов: ${result?.error || 'Неизвестная ошибка'}`));
         }
     };
 
@@ -828,7 +1938,8 @@ export default function HelpPanel({ open, onClose }) {
 
     if (!open) return null;
 
-    const currentSection = HELP_SECTIONS.find(s => s.id === activeSection);
+    const helpSections = language === 'en' ? HELP_SECTIONS_EN : language === 'ru' ? HELP_SECTIONS_RU : HELP_SECTIONS;
+    const currentSection = helpSections.find(s => s.id === activeSection) || helpSections[0];
 
     return (
         <div className="help-overlay" onMouseDown={e => { e.currentTarget._mouseDownTarget = e.target; }} onClick={e => { if (e.currentTarget._mouseDownTarget === e.currentTarget) onClose(); }}>
@@ -854,7 +1965,7 @@ export default function HelpPanel({ open, onClose }) {
                 <div className="help-body">
                     {/* 左侧导航 */}
                     <nav className="help-nav">
-                        {HELP_SECTIONS.map(section => (
+                        {helpSections.map(section => (
                             <button
                                 key={section.id}
                                 className={`help-nav-item ${activeSection === section.id ? 'active' : ''}`}

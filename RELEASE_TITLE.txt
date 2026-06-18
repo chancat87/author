@@ -1,1 +1,1 @@
-桌面章节拆分合并与移动端作品整理增强 | Desktop chapter split/merge and mobile organization improvements
+桌面/移动端国际化与云同步稳定性完善 | Desktop/mobile localization and cloud sync stability improvements

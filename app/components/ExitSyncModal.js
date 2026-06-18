@@ -66,8 +66,8 @@ export default function ExitSyncModal() {
         try {
             await useAppStore.getState().flushPendingEditorSave();
             setLocalSaveReady(true);
-            const { flushSync } = await import('../lib/firestore-sync');
-            await flushSync({ throwOnError: true });
+            const { syncToCloud } = await import('../lib/persistence');
+            await syncToCloud();
             if (window.electronAPI) {
                 setIsOpen(false);
                 window.electronAPI.allowClose();

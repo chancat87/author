@@ -70,7 +70,7 @@ function MoreMenuPortal({ anchorRef, t, setShowSettings, setShowMoreMenu, onOpen
 }
 
 /** 云同步下拉菜单（Portal 渲染到 body，根据实际高度动态调整避免被容器裁剪或超出屏幕） */
-function SyncMenuPortal({ anchorRef, t, cloudinarySyncStatus, setShowSyncMenu, setShowSyncConfirmModal }) {
+function SyncMenuPortal({ anchorRef, t, text, showToast, cloudinarySyncStatus, setShowSyncMenu, setShowSyncConfirmModal }) {
     const menuRef = useRef(null);
     const [mounted, setMounted] = useState(false);
     useEffect(() => { setMounted(true); }, []);
@@ -100,16 +100,16 @@ function SyncMenuPortal({ anchorRef, t, cloudinarySyncStatus, setShowSyncMenu, s
                 borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)', padding: 4,
             }}>
                 <div style={{ padding: '8px 12px', fontSize: 13, fontWeight: 500, color: 'var(--text-color)', borderBottom: '1px solid var(--border-light)', marginBottom: 4 }}>
-                    云同步状态
+                    {text('云同步状态', 'Cloud Sync Status', 'Статус облачной синхронизации')}
                 </div>
                 <div style={{ padding: '4px 12px', fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
-                    {cloudinarySyncStatus?.syncing ? '正在同步中...'
-                    : cloudinarySyncStatus?.pending > 0 ? `有 ${cloudinarySyncStatus.pending} 项更改等待同步`
-                    : '更改已同步至云端'}
+                    {cloudinarySyncStatus?.syncing ? text('正在同步中...', 'Syncing...', 'Синхронизация...')
+                    : cloudinarySyncStatus?.pending > 0 ? text(`有 ${cloudinarySyncStatus.pending} 项更改等待同步`, `${cloudinarySyncStatus.pending} changes waiting to sync`, `Ожидают синхронизации: ${cloudinarySyncStatus.pending}`)
+                    : text('更改已同步至云端', 'Changes are synced to the cloud', 'Изменения синхронизированы с облаком')}
                 </div>
                 {cloudinarySyncStatus?.pending > 0 && (
                     <div style={{ padding: '0 8px', marginBottom: 8 }}>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>待同步队列：</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>{text('待同步队列：', 'Pending queue:', 'Очередь ожидания:')}</div>
                         <div style={{
                             maxHeight: 120, overflowY: 'auto', 
                             background: 'var(--bg-base)', borderRadius: 4, 
@@ -119,11 +119,11 @@ function SyncMenuPortal({ anchorRef, t, cloudinarySyncStatus, setShowSyncMenu, s
                         }}>
                             {cloudinarySyncStatus.keys.map(k => {
                                 let label = k;
-                                if (k === 'author-project-settings') label = '全局设置';
-                                else if (k === 'author-works-index') label = '作品库目录';
-                                else if (k === 'author-recent-works') label = '近期使用记录';
-                                else if (k.startsWith('author-settings-nodes-')) label = '作品设定 (' + k.replace('author-settings-nodes-', '') + ')';
-                                else if (k.startsWith('author-chapters-')) label = '全书章节内容 (' + k.replace('author-chapters-', '') + ')';
+                                if (k === 'author-project-settings') label = text('全局设置', 'Global Settings', 'Глобальные настройки');
+                                else if (k === 'author-works-index') label = text('作品库目录', 'Works Index', 'Индекс произведений');
+                                else if (k === 'author-recent-works') label = text('近期使用记录', 'Recent Works', 'Недавние произведения');
+                                else if (k.startsWith('author-settings-nodes-')) label = text('作品设定', 'Work Settings', 'Настройки произведения') + ' (' + k.replace('author-settings-nodes-', '') + ')';
+                                else if (k.startsWith('author-chapters-')) label = text('全书章节内容', 'Book Chapters', 'Главы книги') + ' (' + k.replace('author-chapters-', '') + ')';
                                 return <div key={k} style={{ padding: '2px 0' }}>• {label}</div>;
                             })}
                         </div>
@@ -137,10 +137,10 @@ function SyncMenuPortal({ anchorRef, t, cloudinarySyncStatus, setShowSyncMenu, s
                             setShowSyncMenu(false);
                             try {
                                 await useAppStore.getState().flushPendingEditorSave();
-                                const { flushSync } = await import('../lib/firestore-sync');
-                                await flushSync({ throwOnError: true });
+                                const { syncToCloud } = await import('../lib/persistence');
+                                await syncToCloud();
                             } catch (err) {
-                                showToast(`同步失败: ${err.message}`, 'error');
+                                showToast(text(`同步失败: ${err.message}`, `Sync failed: ${err.message}`, `Синхронизация не удалась: ${err.message}`), 'error');
                             }
                         }}
                         disabled={cloudinarySyncStatus?.syncing}
@@ -150,7 +150,7 @@ function SyncMenuPortal({ anchorRef, t, cloudinarySyncStatus, setShowSyncMenu, s
                         ) : (
                             <CloudUpload size={14} style={{ marginRight: 6 }} />
                         )}
-                        同步到云端
+                        {text('同步到云端', 'Sync to Cloud', 'Синхронизировать в облако')}
                     </button>
 
                     <button 
@@ -163,7 +163,7 @@ function SyncMenuPortal({ anchorRef, t, cloudinarySyncStatus, setShowSyncMenu, s
                         disabled={cloudinarySyncStatus?.syncing}
                     >
                         <CloudDownload size={14} style={{ marginRight: 6 }} />
-                        从云端同步
+                        {text('从云端同步', 'Sync from Cloud', 'Синхронизировать из облака')}
                     </button>
                 </div>
                 <div style={{ padding: '8px 12px 4px', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
@@ -331,7 +331,7 @@ function formatMemoryTokens(value) {
 
 function MemoryWorkspaceHeader({
     activeMode,
-    title = '章节记忆',
+    title,
     subtitle,
     icon,
     showTabs = true,
@@ -341,7 +341,8 @@ function MemoryWorkspaceHeader({
     onSave,
     saving,
     saveDisabled,
-    saveLabel = '保存',
+    saveLabel,
+    text = (zh) => zh,
 }) {
     const headerIcon = icon || <Brain size={22} />;
     return (
@@ -349,20 +350,20 @@ function MemoryWorkspaceHeader({
             <div className="memory-workspace-title">
                 <span className="memory-workspace-icon">{headerIcon}</span>
                 <div>
-                    <h2>{title}</h2>
-                    <p>{subtitle || '用于续写承接与长期剧情压缩'}</p>
+                    <h2>{title || text('章节记忆', 'Chapter Memory', 'Память глав')}</h2>
+                    <p>{subtitle || text('用于续写承接与长期剧情压缩', 'For continuation handoff and long-range plot compression', 'Для продолжения и долгосрочного сжатия сюжета')}</p>
                 </div>
             </div>
             <div className="memory-workspace-header-actions">
                 {showTabs && (
-                    <div className="memory-workspace-tabs" aria-label="章节记忆模式">
+                    <div className="memory-workspace-tabs" aria-label={text('章节记忆模式', 'Chapter memory mode', 'Режим памяти глав')}>
                         <button
                             type="button"
                             className={`memory-workspace-tab${activeMode === 'synopsis' ? ' active' : ''}`}
                             onClick={onSwitchToSynopsis}
                             disabled={activeMode === 'synopsis' || !onSwitchToSynopsis}
                         >
-                            单章概要
+                            {text('单章概要', 'Single Synopsis', 'Синопсис главы')}
                         </button>
                         <button
                             type="button"
@@ -370,17 +371,17 @@ function MemoryWorkspaceHeader({
                             onClick={onSwitchToMemory}
                             disabled={activeMode === 'memory' || !onSwitchToMemory}
                         >
-                            多章记忆
+                            {text('多章记忆', 'Multi-Chapter Memory', 'Память нескольких глав')}
                         </button>
                     </div>
                 )}
-                <button className="memory-workspace-close" onClick={onClose} aria-label="关闭">
+                <button className="memory-workspace-close" onClick={onClose} aria-label={text('关闭', 'Close', 'Закрыть')}>
                     <X size={16} />
                 </button>
                 {onSave && (
                     <button className="btn btn-primary btn-sm memory-header-save" onClick={onSave} disabled={saving || saveDisabled}>
                         {saving ? <RefreshCw size={14} className="spin" /> : <Save size={14} />}
-                        {saving ? '保存中...' : saveLabel}
+                        {saving ? text('保存中...', 'Saving...', 'Сохранение...') : (saveLabel || text('保存', 'Save', 'Сохранить'))}
                     </button>
                 )}
             </div>
@@ -388,17 +389,17 @@ function MemoryWorkspaceHeader({
     );
 }
 
-function StructuredMemorySections({ data, mode = 'memory' }) {
+function StructuredMemorySections({ data, mode = 'memory', text = (zh) => zh }) {
     const sections = mode === 'synopsis'
         ? [
-            { title: '关键情节', items: data?.beats?.length ? data.beats : (data?.events || []) },
-            { title: '续写注意', items: data?.continuityNotes?.length ? data.continuityNotes : (data?.entityDeltas || []) },
-            { title: '待回收信息', items: data?.openThreads?.length ? data.openThreads : (data?.foreshadowing || []) },
+            { title: text('关键情节', 'Key Beats', 'Ключевые события'), items: data?.beats?.length ? data.beats : (data?.events || []) },
+            { title: text('续写注意', 'Continuation Notes', 'Заметки для продолжения'), items: data?.continuityNotes?.length ? data.continuityNotes : (data?.entityDeltas || []) },
+            { title: text('待回收信息', 'Open Threads', 'Открытые линии'), items: data?.openThreads?.length ? data.openThreads : (data?.foreshadowing || []) },
         ]
         : [
-            { title: '关键事件', items: data?.events || data?.beats || [] },
-            { title: '人物变化', items: data?.entityDeltas || data?.continuityNotes || [] },
-            { title: '伏笔与未回收问题', items: data?.foreshadowing || data?.openThreads || [] },
+            { title: text('关键事件', 'Key Events', 'Ключевые события'), items: data?.events || data?.beats || [] },
+            { title: text('人物变化', 'Character Changes', 'Изменения персонажей'), items: data?.entityDeltas || data?.continuityNotes || [] },
+            { title: text('伏笔与未回收问题', 'Foreshadowing & Open Threads', 'Намеки и открытые вопросы'), items: data?.foreshadowing || data?.openThreads || [] },
         ];
 
     return (
@@ -416,7 +417,7 @@ function StructuredMemorySections({ data, mode = 'memory' }) {
                             ))}
                         </ul>
                     ) : (
-                        <p>暂无结构化条目</p>
+                        <p>{text('暂无结构化条目', 'No structured entries yet', 'Пока нет структурированных записей')}</p>
                     )}
                 </section>
             ))}
@@ -757,11 +758,12 @@ function ChapterMemoryGroupsModal({
     );
 }
 
-function formatSynopsisTime(value) {
-    if (!value) return '未保存';
+function formatSynopsisTime(value, text = (zh) => zh, language = 'zh') {
+    if (!value) return text('未保存', 'Unsaved', 'Не сохранено');
     const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '未保存';
-    return date.toLocaleString('zh-CN', {
+    if (Number.isNaN(date.getTime())) return text('未保存', 'Unsaved', 'Не сохранено');
+    const locale = language === 'ru' ? 'ru-RU' : language === 'en' ? 'en-US' : 'zh-CN';
+    return date.toLocaleString(locale, {
         month: '2-digit',
         day: '2-digit',
         hour: '2-digit',
@@ -769,10 +771,10 @@ function formatSynopsisTime(value) {
     });
 }
 
-function getSynopsisSourceLabel(synopsis) {
-    if (synopsis?.source === 'ai') return 'AI生成';
-    if (synopsis?.source === 'manual') return '手写';
-    return '未标记';
+function getSynopsisSourceLabel(synopsis, text = (zh) => zh) {
+    if (synopsis?.source === 'ai') return text('AI生成', 'AI Generated', 'Создано ИИ');
+    if (synopsis?.source === 'manual') return text('手写', 'Manual', 'Вручную');
+    return text('未标记', 'Unlabeled', 'Без метки');
 }
 
 function ChapterSynopsisOverviewModal({
@@ -789,6 +791,8 @@ function ChapterSynopsisOverviewModal({
     onApplyContext,
     showToast,
     onClose,
+    text = (zh) => zh,
+    language = 'zh',
 }) {
     const [query, setQuery] = useState('');
     const [filter, setFilter] = useState('all');
@@ -813,10 +817,10 @@ function ChapterSynopsisOverviewModal({
     const [groupError, setGroupError] = useState('');
     const realChapters = [];
     let ordinal = 0;
-    let currentVolume = '未分卷';
+    let currentVolume = text('未分卷', 'Unassigned', 'Без тома');
     chapters.forEach((chapter) => {
         if (chapter.type === 'volume') {
-            currentVolume = chapter.title || '未命名分卷';
+            currentVolume = chapter.title || text('未命名分卷', 'Untitled Volume', 'Безымянный том');
             return;
         }
         const synopsis = getChapterSynopsis(chapter);
@@ -940,9 +944,9 @@ function ChapterSynopsisOverviewModal({
             const updated = await updateChapter(selectedEntry.chapter.id, { synopsis: payload }, activeWorkId);
             if (updated) onChapterUpdated?.(selectedEntry.chapter.id, { synopsis: payload });
             setSingleData(payload);
-            showToast?.('章节概要已保存', 'success');
+            showToast?.(text('章节概要已保存', 'Chapter synopsis saved', 'Синопсис главы сохранен'), 'success');
         } catch (err) {
-            setSingleError(err?.message || '保存失败');
+            setSingleError(err?.message || text('保存失败', 'Save failed', 'Не удалось сохранить'));
         } finally {
             setSingleBusy(false);
         }
@@ -958,13 +962,13 @@ function ChapterSynopsisOverviewModal({
         setActiveView('single');
 
         if (targetLocked) {
-            showToast?.('当前概要已锁定，取消锁定后再生成', 'info');
+            showToast?.(text('当前概要已锁定，取消锁定后再生成', 'This synopsis is locked. Unlock it before generating.', 'Этот синопсис заблокирован. Разблокируйте его перед генерацией.'), 'info');
             return;
         }
         const plainText = stripChapterHtml(entry.chapter.content || '');
         if (plainText.length < 20) {
-            setSingleError('正文太短，暂时无法生成有效概要');
-            showToast?.('正文太短，暂时无法生成有效概要', 'info');
+            setSingleError(text('正文太短，暂时无法生成有效概要', 'The chapter is too short to generate a useful synopsis yet.', 'Текст главы слишком короткий для полезного синопсиса.'));
+            showToast?.(text('正文太短，暂时无法生成有效概要', 'The chapter is too short to generate a useful synopsis yet.', 'Текст главы слишком короткий для полезного синопсиса.'), 'info');
             return;
         }
         setSingleBusy(true);
@@ -989,7 +993,7 @@ function ChapterSynopsisOverviewModal({
             });
             const aiText = await readAiTextStream(response);
             const generated = parseGeneratedSynopsis(aiText);
-            if (!hasChapterSynopsis(generated)) throw new Error('AI 没有返回可用概要');
+            if (!hasChapterSynopsis(generated)) throw new Error(text('AI 没有返回可用概要', 'AI did not return a usable synopsis', 'ИИ не вернул пригодный синопсис'));
             const now = new Date().toISOString();
             const nextSynopsis = normalizeChapterSynopsis({
                 ...generated,
@@ -1002,9 +1006,9 @@ function ChapterSynopsisOverviewModal({
             setSingleDraft(nextSynopsis.summary || aiText);
             setSingleEnding(nextSynopsis.endingState || '');
             setSingleLocked(false);
-            showToast?.('概要已生成，请确认后保存', 'success');
+            showToast?.(text('概要已生成，请确认后保存', 'Synopsis generated. Review and save it.', 'Синопсис создан. Проверьте и сохраните его.'), 'success');
         } catch (err) {
-            setSingleError(err?.message || '生成失败，请检查 API 配置');
+            setSingleError(err?.message || text('生成失败，请检查 API 配置', 'Generation failed. Check the API configuration.', 'Генерация не удалась. Проверьте настройки API.'));
         } finally {
             setSingleBusy(false);
             setSingleGeneratingId('');
@@ -1013,14 +1017,14 @@ function ChapterSynopsisOverviewModal({
 
     const handleGenerateMulti = async () => {
         if (selectedMultiEntries.length === 0) {
-            setMultiError('请先选择至少一个章节');
+            setMultiError(text('请先选择至少一个章节', 'Select at least one chapter first', 'Сначала выберите хотя бы одну главу'));
             return;
         }
         setMultiBusy(true);
         setMultiError('');
         try {
             const { apiConfig } = getProjectSettings();
-            const name = multiName.trim() || `${selectedMultiEntries[0].chapter.title} 等 ${selectedMultiEntries.length} 章`;
+            const name = multiName.trim() || text(`${selectedMultiEntries[0].chapter.title} 等 ${selectedMultiEntries.length} 章`, `${selectedMultiEntries[0].chapter.title} and ${selectedMultiEntries.length - 1} more`, `${selectedMultiEntries[0].chapter.title} и еще ${selectedMultiEntries.length - 1}`);
             const { systemPrompt, userPrompt } = buildMemoryGroupPrompts({
                 name,
                 chapters: selectedMultiEntries.map(entry => ({
@@ -1044,7 +1048,7 @@ function ChapterSynopsisOverviewModal({
             });
             const aiText = await readAiTextStream(response);
             const generated = parseGeneratedSynopsis(aiText);
-            if (!hasChapterSynopsis(generated)) throw new Error('AI 没有返回可用多章节概要');
+            if (!hasChapterSynopsis(generated)) throw new Error(text('AI 没有返回可用多章节概要', 'AI did not return a usable multi-chapter synopsis', 'ИИ не вернул пригодный многочастный синопсис'));
             const now = new Date().toISOString();
             const nextGroup = normalizeChapterMemoryGroup({
                 ...generated,
@@ -1058,9 +1062,9 @@ function ChapterSynopsisOverviewModal({
             setMultiName(name);
             setMultiData(nextGroup);
             setMultiDraft(nextGroup.summary || aiText);
-            showToast?.('多章节概要已生成，请确认后保存为分组', 'success');
+            showToast?.(text('多章节概要已生成，请确认后保存为分组', 'Multi-chapter synopsis generated. Review and save it as a group.', 'Многочастный синопсис создан. Проверьте и сохраните как группу.'), 'success');
         } catch (err) {
-            setMultiError(err?.message || '生成失败，请检查 API 配置');
+            setMultiError(err?.message || text('生成失败，请检查 API 配置', 'Generation failed. Check the API configuration.', 'Генерация не удалась. Проверьте настройки API.'));
         } finally {
             setMultiBusy(false);
         }
@@ -1068,11 +1072,11 @@ function ChapterSynopsisOverviewModal({
 
     const handleSaveMulti = async () => {
         if (selectedMultiEntries.length === 0) {
-            setMultiError('请先选择至少一个章节');
+            setMultiError(text('请先选择至少一个章节', 'Select at least one chapter first', 'Сначала выберите хотя бы одну главу'));
             return;
         }
         if (!multiDraft.trim()) {
-            setMultiError('请填写概要正文，或先用 AI 生成');
+            setMultiError(text('请填写概要正文，或先用 AI 生成', 'Fill in the synopsis text or generate it with AI first', 'Заполните текст синопсиса или сначала сгенерируйте его с ИИ'));
             return;
         }
         setMultiBusy(true);
@@ -1080,14 +1084,14 @@ function ChapterSynopsisOverviewModal({
         try {
             const payload = normalizeChapterMemoryGroup({
                 ...multiData,
-                name: multiName.trim() || `${selectedMultiEntries[0].chapter.title} 等 ${selectedMultiEntries.length} 章`,
+                name: multiName.trim() || text(`${selectedMultiEntries[0].chapter.title} 等 ${selectedMultiEntries.length} 章`, `${selectedMultiEntries[0].chapter.title} and ${selectedMultiEntries.length - 1} more`, `${selectedMultiEntries[0].chapter.title} и еще ${selectedMultiEntries.length - 1}`),
                 summary: multiDraft.trim(),
                 chapterIds: selectedMultiEntries.map(entry => entry.chapter.id),
                 source: multiData.source || 'manual',
                 updatedAt: new Date().toISOString(),
             });
             if (!hasChapterMemoryGroup(payload)) {
-                setMultiError('请填写概要正文，或先用 AI 生成');
+                setMultiError(text('请填写概要正文，或先用 AI 生成', 'Fill in the synopsis text or generate it with AI first', 'Заполните текст синопсиса или сначала сгенерируйте его с ИИ'));
                 return;
             }
             const nextGroups = memoryGroups.some(group => group.id === payload.id)
@@ -1097,9 +1101,9 @@ function ChapterSynopsisOverviewModal({
             setSelectedGroupId(payload.id);
             setGroupSelectedIds(new Set([payload.id]));
             setActiveView('groups');
-            showToast?.('多章概要组已保存', 'success');
+            showToast?.(text('多章概要组已保存', 'Multi-chapter synopsis group saved', 'Группа многочастного синопсиса сохранена'), 'success');
         } catch (err) {
-            setMultiError(err?.message || '保存失败');
+            setMultiError(err?.message || text('保存失败', 'Save failed', 'Не удалось сохранить'));
         } finally {
             setMultiBusy(false);
         }
@@ -1112,11 +1116,11 @@ function ChapterSynopsisOverviewModal({
             updatedAt: new Date().toISOString(),
         });
         if (!payload.name.trim()) {
-            setGroupError('请填写组名');
+            setGroupError(text('请填写组名', 'Enter a group name', 'Введите название группы'));
             return;
         }
         if (!hasChapterMemoryGroup(payload)) {
-            setGroupError('请填写概要正文');
+            setGroupError(text('请填写概要正文', 'Enter the synopsis text', 'Введите текст синопсиса'));
             return;
         }
         setGroupBusy(true);
@@ -1124,9 +1128,9 @@ function ChapterSynopsisOverviewModal({
         try {
             const nextGroups = memoryGroups.map(group => group.id === payload.id ? payload : group);
             await onMemoryGroupsSaved?.(nextGroups);
-            showToast?.('概要分组已保存', 'success');
+            showToast?.(text('概要分组已保存', 'Synopsis group saved', 'Группа синопсиса сохранена'), 'success');
         } catch (err) {
-            setGroupError(err?.message || '保存失败');
+            setGroupError(err?.message || text('保存失败', 'Save failed', 'Не удалось сохранить'));
         } finally {
             setGroupBusy(false);
         }
@@ -1145,9 +1149,9 @@ function ChapterSynopsisOverviewModal({
                 return next;
             });
             setSelectedGroupId(nextGroups[0]?.id || '');
-            showToast?.('概要分组已删除', 'success');
+            showToast?.(text('概要分组已删除', 'Synopsis group deleted', 'Группа синопсиса удалена'), 'success');
         } catch (err) {
-            setGroupError(err?.message || '删除失败');
+            setGroupError(err?.message || text('删除失败', 'Delete failed', 'Не удалось удалить'));
         } finally {
             setGroupBusy(false);
         }
@@ -1156,7 +1160,7 @@ function ChapterSynopsisOverviewModal({
     const handleMergeGroups = async () => {
         const selectedGroups = memoryGroups.filter(group => groupSelectedIds.has(group.id));
         if (selectedGroups.length < 2) {
-            setGroupError('请至少选择两个概要组');
+            setGroupError(text('请至少选择两个概要组', 'Select at least two synopsis groups', 'Выберите минимум две группы синопсиса'));
             return;
         }
         setGroupBusy(true);
@@ -1164,7 +1168,11 @@ function ChapterSynopsisOverviewModal({
         try {
             const { apiConfig } = getProjectSettings();
             const unionChapterIds = Array.from(new Set(selectedGroups.flatMap(group => group.chapterIds)));
-            const name = `合并概要：${selectedGroups.map(group => group.name || '未命名概要组').slice(0, 2).join(' + ')}${selectedGroups.length > 2 ? ' 等' : ''}`;
+            const name = text(
+                `合并概要：${selectedGroups.map(group => group.name || '未命名概要组').slice(0, 2).join(' + ')}${selectedGroups.length > 2 ? ' 等' : ''}`,
+                `Merged Synopsis: ${selectedGroups.map(group => group.name || 'Untitled Synopsis Group').slice(0, 2).join(' + ')}${selectedGroups.length > 2 ? ' etc.' : ''}`,
+                `Объединенный синопсис: ${selectedGroups.map(group => group.name || 'Безымянная группа синопсиса').slice(0, 2).join(' + ')}${selectedGroups.length > 2 ? ' и др.' : ''}`
+            );
             const { systemPrompt, userPrompt } = buildMemoryMergePrompts({
                 name,
                 groups: selectedGroups,
@@ -1186,7 +1194,7 @@ function ChapterSynopsisOverviewModal({
             });
             const aiText = await readAiTextStream(response);
             const generated = parseGeneratedSynopsis(aiText);
-            if (!hasChapterSynopsis(generated)) throw new Error('AI 没有返回可用合并概要');
+            if (!hasChapterSynopsis(generated)) throw new Error(text('AI 没有返回可用合并概要', 'AI did not return a usable merged synopsis', 'ИИ не вернул пригодный объединенный синопсис'));
             const now = new Date().toISOString();
             const mergedDraft = normalizeChapterMemoryGroup({
                 ...generated,
@@ -1203,20 +1211,20 @@ function ChapterSynopsisOverviewModal({
             setMultiDraft(mergedDraft.summary || aiText);
             setMultiSelectedIds(new Set(unionChapterIds));
             setActiveView('multi');
-            showToast?.('合并概要已生成，请确认后保存', 'success');
+            showToast?.(text('合并概要已生成，请确认后保存', 'Merged synopsis generated. Review and save it.', 'Объединенный синопсис создан. Проверьте и сохраните.'), 'success');
         } catch (err) {
-            setGroupError(err?.message || '合并失败，请检查 API 配置');
+            setGroupError(err?.message || text('合并失败，请检查 API 配置', 'Merge failed. Check the API configuration.', 'Объединение не удалось. Проверьте настройки API.'));
         } finally {
             setGroupBusy(false);
         }
     };
 
     const filterItems = [
-        { key: 'all', label: '全部', count: realChapters.length },
-        { key: 'missing', label: '缺概要', count: missingCount },
-        { key: 'locked', label: '已锁定', count: lockedCount },
-        { key: 'ai', label: 'AI生成', count: aiCount },
-        { key: 'manual', label: '手写', count: manualCount },
+        { key: 'all', label: text('全部', 'All', 'Все'), count: realChapters.length },
+        { key: 'missing', label: text('缺概要', 'Missing', 'Нет синопсиса'), count: missingCount },
+        { key: 'locked', label: text('已锁定', 'Locked', 'Заблокировано'), count: lockedCount },
+        { key: 'ai', label: text('AI生成', 'AI Generated', 'Создано ИИ'), count: aiCount },
+        { key: 'manual', label: text('手写', 'Manual', 'Вручную'), count: manualCount },
     ];
 
     const rows = [];
@@ -1233,31 +1241,32 @@ function ChapterSynopsisOverviewModal({
         <div className="modal-overlay" onMouseDown={e => { e.currentTarget._mouseDownTarget = e.target; }} onClick={e => { if (e.currentTarget._mouseDownTarget === e.currentTarget) onClose(); }}>
             <div className="modal chapter-memory-workspace synopsis-overview-workspace" onClick={e => e.stopPropagation()}>
                 <MemoryWorkspaceHeader
-                    title="章节概要中心"
-                    subtitle="总览已保存概要、缺失章节、锁定状态与多章分组入口"
+                    title={text('章节概要中心', 'Chapter Synopsis Center', 'Центр синопсисов глав')}
+                    subtitle={text('总览已保存概要、缺失章节、锁定状态与多章分组入口', 'Review saved synopses, missing chapters, lock status, and multi-chapter groups', 'Обзор сохраненных синопсисов, пропусков, блокировок и групп глав')}
                     icon={<BookMarked size={22} />}
                     showTabs={false}
                     onClose={onClose}
+                    text={text}
                 />
 
-                <div className="synopsis-overview-tabs" aria-label="概要中心视图">
-                    <button type="button" className={activeView === 'single' ? 'active' : ''} onClick={() => setActiveView('single')}>单章概要</button>
-                    <button type="button" className={activeView === 'multi' ? 'active' : ''} onClick={() => setActiveView('multi')}>多章概要</button>
-                    <button type="button" className={activeView === 'groups' ? 'active' : ''} onClick={() => setActiveView('groups')}>概要分组</button>
-                    <button type="button" className={activeView === 'saved' ? 'active' : ''} onClick={() => setActiveView('saved')}>已保存</button>
+                <div className="synopsis-overview-tabs" aria-label={text('概要中心视图', 'Synopsis center view', 'Вид центра синопсисов')}>
+                    <button type="button" className={activeView === 'single' ? 'active' : ''} onClick={() => setActiveView('single')}>{text('单章概要', 'Single Synopsis', 'Синопсис главы')}</button>
+                    <button type="button" className={activeView === 'multi' ? 'active' : ''} onClick={() => setActiveView('multi')}>{text('多章概要', 'Multi-Chapter Synopsis', 'Синопсис нескольких глав')}</button>
+                    <button type="button" className={activeView === 'groups' ? 'active' : ''} onClick={() => setActiveView('groups')}>{text('概要分组', 'Synopsis Groups', 'Группы синопсисов')}</button>
+                    <button type="button" className={activeView === 'saved' ? 'active' : ''} onClick={() => setActiveView('saved')}>{text('已保存', 'Saved', 'Сохранено')}</button>
                 </div>
 
                 <div className="synopsis-overview-grid">
                     <aside className="synopsis-overview-filter">
                         <div className="synopsis-coverage-card">
                             <div>
-                                <span>概要覆盖</span>
-                                <strong>{savedCount}/{realChapters.length} 章</strong>
+                                <span>{text('概要覆盖', 'Synopsis Coverage', 'Покрытие синопсисов')}</span>
+                                <strong>{text(`${savedCount}/${realChapters.length} 章`, `${savedCount}/${realChapters.length} chapters`, `${savedCount}/${realChapters.length} гл.`)}</strong>
                             </div>
                             <div className="synopsis-progress-bar">
                                 <span style={{ width: `${coverage}%` }} />
                             </div>
-                            <em>{coverage}% 已完成 · {missingCount} 章缺失</em>
+                            <em>{text(`${coverage}% 已完成 · ${missingCount} 章缺失`, `${coverage}% complete · ${missingCount} missing`, `${coverage}% готово · пропущено: ${missingCount}`)}</em>
                         </div>
 
                         <label className="memory-search-box synopsis-overview-search">
@@ -1265,7 +1274,7 @@ function ChapterSynopsisOverviewModal({
                             <input
                                 value={query}
                                 onChange={e => setQuery(e.target.value)}
-                                placeholder="搜索章节或概要"
+                                placeholder={text('搜索章节或概要', 'Search chapters or synopses', 'Искать главы или синопсисы')}
                             />
                         </label>
 
@@ -1286,13 +1295,16 @@ function ChapterSynopsisOverviewModal({
                         <div className="synopsis-group-summary">
                             <div className="memory-rail-title">
                                 <BookMarked size={15} />
-                                <span>概要分组</span>
+                                <span>{text('概要分组', 'Synopsis Groups', 'Группы синопсисов')}</span>
                                 <em>{memoryGroups.length}</em>
                             </div>
-                            <p>{memoryGroups.length ? `已有 ${memoryGroups.length} 个多章概要组，可在“概要分组”中编辑、合并或注入上下文。` : '还没有多章概要组。可先选择章节生成多章概要。'}</p>
+                            <p>{memoryGroups.length
+                                ? text(`已有 ${memoryGroups.length} 个多章概要组，可在“概要分组”中编辑、合并或注入上下文。`, `${memoryGroups.length} multi-chapter synopsis groups. Edit, merge, or inject them from Synopsis Groups.`, `${memoryGroups.length} групп многочастных синопсисов. Их можно редактировать, объединять или добавлять в контекст.`)
+                                : text('还没有多章概要组。可先选择章节生成多章概要。', 'No multi-chapter synopsis groups yet. Select chapters first to generate one.', 'Групп многочастных синопсисов пока нет. Сначала выберите главы.')}
+                            </p>
                             <button className="btn btn-secondary btn-sm" onClick={() => setActiveView('groups')}>
                                 <Layers3 size={14} />
-                                查看分组
+                                {text('查看分组', 'View Groups', 'Смотреть группы')}
                             </button>
                         </div>
                     </aside>
@@ -1300,16 +1312,16 @@ function ChapterSynopsisOverviewModal({
                     <section className="synopsis-saved-list-panel">
                         <div className="synopsis-list-head">
                             <div>
-                                <h3>{activeView === 'multi' ? '选择章节生成多章概要' : activeView === 'groups' ? '概要分组' : activeView === 'single' ? '单章概要' : '已保存概要'}</h3>
-                                <p>{activeView === 'multi' ? '可任选章节组成一组，保存为多章概要' : activeView === 'groups' ? '查看已保存的多章概要组，可在右侧编辑或合并' : '按分卷浏览章节概要，缺失章节也会显示出来'}</p>
+                                <h3>{activeView === 'multi' ? text('选择章节生成多章概要', 'Select Chapters for Multi-Chapter Synopsis', 'Выберите главы для многочастного синопсиса') : activeView === 'groups' ? text('概要分组', 'Synopsis Groups', 'Группы синопсисов') : activeView === 'single' ? text('单章概要', 'Single Synopsis', 'Синопсис главы') : text('已保存概要', 'Saved Synopses', 'Сохраненные синопсисы')}</h3>
+                                <p>{activeView === 'multi' ? text('可任选章节组成一组，保存为多章概要', 'Choose any chapters and save them as a multi-chapter synopsis', 'Выберите главы и сохраните их как многочастный синопсис') : activeView === 'groups' ? text('查看已保存的多章概要组，可在右侧编辑或合并', 'View saved multi-chapter groups; edit or merge them on the right', 'Просматривайте сохраненные группы; редактируйте или объединяйте их справа') : text('按分卷浏览章节概要，缺失章节也会显示出来', 'Browse synopses by volume, including missing chapters', 'Просматривайте синопсисы по томам, включая пропуски')}</p>
                             </div>
-                            <span>{activeView === 'groups' ? memoryGroups.length : filteredEntries.length} 项</span>
+                            <span>{text(`${activeView === 'groups' ? memoryGroups.length : filteredEntries.length} 项`, `${activeView === 'groups' ? memoryGroups.length : filteredEntries.length} items`, `${activeView === 'groups' ? memoryGroups.length : filteredEntries.length} эл.`)}</span>
                         </div>
 
                         <div className="synopsis-saved-list">
                             {activeView === 'groups' ? (
                                 memoryGroups.length === 0 ? (
-                                    <div className="memory-empty-state">还没有概要分组。切到“多章概要”选择章节后创建。</div>
+                                    <div className="memory-empty-state">{text('还没有概要分组。切到“多章概要”选择章节后创建。', 'No synopsis groups yet. Switch to Multi-Chapter Synopsis and select chapters to create one.', 'Групп синопсисов пока нет. Перейдите к многочастному синопсису и выберите главы.')}</div>
                                 ) : memoryGroups.map(group => {
                                     const selected = selectedGroup?.id === group.id;
                                     return (
@@ -1326,21 +1338,21 @@ function ChapterSynopsisOverviewModal({
                                                 />
                                             </label>
                                             <span className="synopsis-row-main">
-                                                <strong>{group.name || '未命名概要组'}</strong>
-                                                <em>{group.summary || '暂无概要正文'}</em>
+                                                <strong>{group.name || text('未命名概要组', 'Untitled Synopsis Group', 'Безымянная группа синопсиса')}</strong>
+                                                <em>{group.summary || text('暂无概要正文', 'No synopsis text yet', 'Пока нет текста синопсиса')}</em>
                                             </span>
-                                            <span className="synopsis-row-badge saved">{group.chapterIds?.length || 0} 章</span>
-                                            <span className="synopsis-row-source">{getSynopsisSourceLabel(group)}</span>
-                                            <span className="synopsis-row-time">{formatSynopsisTime(group.updatedAt || group.generatedAt)}</span>
+                                            <span className="synopsis-row-badge saved">{text(`${group.chapterIds?.length || 0} 章`, `${group.chapterIds?.length || 0} chapters`, `${group.chapterIds?.length || 0} гл.`)}</span>
+                                            <span className="synopsis-row-source">{getSynopsisSourceLabel(group, text)}</span>
+                                            <span className="synopsis-row-time">{formatSynopsisTime(group.updatedAt || group.generatedAt, text, language)}</span>
                                             <div className="synopsis-row-actions" onClick={e => e.stopPropagation()}>
-                                                <button className="btn btn-ghost btn-sm" onClick={() => setSelectedGroupId(group.id)}>编辑</button>
-                                                <button className="btn btn-ghost btn-sm" onClick={() => toggleGroupSelection(group.id)}>选择合并</button>
+                                                <button className="btn btn-ghost btn-sm" onClick={() => setSelectedGroupId(group.id)}>{text('编辑', 'Edit', 'Изменить')}</button>
+                                                <button className="btn btn-ghost btn-sm" onClick={() => toggleGroupSelection(group.id)}>{text('选择合并', 'Select to Merge', 'Выбрать для объединения')}</button>
                                             </div>
                                         </div>
                                     );
                                 })
                             ) : rows.length === 0 ? (
-                                <div className="memory-empty-state">没有匹配的概要。</div>
+                                <div className="memory-empty-state">{text('没有匹配的概要。', 'No matching synopses.', 'Нет подходящих синопсисов.')}</div>
                             ) : rows.map(row => {
                                 if (row.type === 'volume') {
                                     return <div key={row.id} className="synopsis-volume-row">{row.title}</div>;
@@ -1349,8 +1361,8 @@ function ChapterSynopsisOverviewModal({
                                 const selected = selectedEntry?.chapter.id === entry.chapter.id;
                                 const isSingleGeneratingEntry = singleGeneratingId === entry.chapter.id;
                                 const synopsisPreview = entry.hasSynopsis
-                                    ? (entry.synopsis.summary || entry.synopsisText || '已有概要')
-                                    : '尚未生成章节概要。';
+                                    ? (entry.synopsis.summary || entry.synopsisText || text('已有概要', 'Synopsis saved', 'Синопсис сохранен'))
+                                    : text('尚未生成章节概要。', 'No chapter synopsis generated yet.', 'Синопсис главы еще не создан.');
                                 return (
                                     <div
                                         key={entry.chapter.id}
@@ -1372,15 +1384,15 @@ function ChapterSynopsisOverviewModal({
                                             ) : String(entry.ordinal).padStart(2, '0')}
                                         </span>
                                         <span className="synopsis-row-main">
-                                            <strong>{entry.chapter.title || '未命名章节'}</strong>
-                                            <em>{activeView === 'multi' ? (entry.hasSynopsis ? '可使用单章概要压缩' : '缺概要，将使用正文首尾线索') : synopsisPreview}</em>
+                                            <strong>{entry.chapter.title || text('未命名章节', 'Untitled Chapter', 'Безымянная глава')}</strong>
+                                            <em>{activeView === 'multi' ? (entry.hasSynopsis ? text('可使用单章概要压缩', 'Can use single-chapter synopsis for compression', 'Можно сжать по синопсису главы') : text('缺概要，将使用正文首尾线索', 'Missing synopsis; will use opening and ending clues', 'Нет синопсиса; будут использованы начало и конец текста')) : synopsisPreview}</em>
                                         </span>
                                         <span className={`synopsis-row-badge${entry.hasSynopsis ? ' saved' : ' missing'}`}>
-                                            {entry.hasSynopsis ? '已概要' : '缺概要'}
+                                            {entry.hasSynopsis ? text('已概要', 'Saved', 'Сохранено') : text('缺概要', 'Missing', 'Нет синопсиса')}
                                         </span>
-                                        {entry.synopsis.locked && <span className="synopsis-row-badge locked">锁定</span>}
-                                        {entry.hasSynopsis && <span className="synopsis-row-source">{getSynopsisSourceLabel(entry.synopsis)}</span>}
-                                        <span className="synopsis-row-time">{formatSynopsisTime(entry.synopsis.updatedAt || entry.synopsis.generatedAt)}</span>
+                                        {entry.synopsis.locked && <span className="synopsis-row-badge locked">{text('锁定', 'Locked', 'Заблокировано')}</span>}
+                                        {entry.hasSynopsis && <span className="synopsis-row-source">{getSynopsisSourceLabel(entry.synopsis, text)}</span>}
+                                        <span className="synopsis-row-time">{formatSynopsisTime(entry.synopsis.updatedAt || entry.synopsis.generatedAt, text, language)}</span>
                                         <div className="synopsis-row-actions" onClick={e => e.stopPropagation()}>
                                             <button type="button" className="btn btn-ghost btn-sm" disabled={singleBusy} onClick={() => {
                                                 if (entry.hasSynopsis) {
@@ -1389,13 +1401,13 @@ function ChapterSynopsisOverviewModal({
                                                 }
                                                 handleGenerateSingle(entry);
                                             }}>
-                                                {isSingleGeneratingEntry ? '生成中...' : entry.hasSynopsis ? '编辑' : '生成'}
+                                                {isSingleGeneratingEntry ? text('生成中...', 'Generating...', 'Генерация...') : entry.hasSynopsis ? text('编辑', 'Edit', 'Изменить') : text('生成', 'Generate', 'Сгенерировать')}
                                             </button>
                                             <button type="button" className="btn btn-ghost btn-sm" disabled={singleBusy} onClick={() => handleGenerateSingle(entry)}>
-                                                {isSingleGeneratingEntry ? '生成中...' : '重新生成'}
+                                                {isSingleGeneratingEntry ? text('生成中...', 'Generating...', 'Генерация...') : text('重新生成', 'Regenerate', 'Сгенерировать заново')}
                                             </button>
                                             <button type="button" className="btn btn-ghost btn-sm" disabled={singleBusy} onClick={() => onToggleLock(entry.chapter.id, !entry.synopsis.locked)}>
-                                                {entry.synopsis.locked ? '解锁' : '锁定'}
+                                                {entry.synopsis.locked ? text('解锁', 'Unlock', 'Разблокировать') : text('锁定', 'Lock', 'Заблокировать')}
                                             </button>
                                         </div>
                                     </div>
@@ -1409,49 +1421,49 @@ function ChapterSynopsisOverviewModal({
                             selectedGroup ? (
                                 <>
                                     <div className="synopsis-inspector-head">
-                                        <span className="synopsis-row-badge saved">概要组</span>
-                                        {groupSelectedIds.size > 0 && <span className="synopsis-row-badge locked">已选 {groupSelectedIds.size}</span>}
-                                        <h3>{groupDraft.name || selectedGroup.name || '未命名概要组'}</h3>
-                                        <p>{groupDraft.chapterIds?.length || 0} 章 · {formatMemoryTokens(estimateTokens(buildChapterMemoryGroupText(groupDraft, chapters)))}</p>
+                                        <span className="synopsis-row-badge saved">{text('概要组', 'Synopsis Group', 'Группа синопсиса')}</span>
+                                        {groupSelectedIds.size > 0 && <span className="synopsis-row-badge locked">{text(`已选 ${groupSelectedIds.size}`, `${groupSelectedIds.size} selected`, `Выбрано: ${groupSelectedIds.size}`)}</span>}
+                                        <h3>{groupDraft.name || selectedGroup.name || text('未命名概要组', 'Untitled Synopsis Group', 'Безымянная группа синопсиса')}</h3>
+                                        <p>{text(`${groupDraft.chapterIds?.length || 0} 章`, `${groupDraft.chapterIds?.length || 0} chapters`, `${groupDraft.chapterIds?.length || 0} гл.`)} · {formatMemoryTokens(estimateTokens(buildChapterMemoryGroupText(groupDraft, chapters)))}</p>
                                     </div>
                                     <input
                                         className="memory-group-name-input"
                                         value={groupDraft.name}
                                         onChange={e => setGroupDraft(prev => normalizeChapterMemoryGroup({ ...prev, name: e.target.value }))}
-                                        placeholder="概要组名"
+                                        placeholder={text('概要组名', 'Synopsis group name', 'Название группы синопсиса')}
                                     />
                                     <textarea
                                         className="memory-main-textarea synopsis-center-textarea"
                                         value={groupDraft.summary}
                                         onChange={e => setGroupDraft(prev => normalizeChapterMemoryGroup({ ...prev, summary: e.target.value, source: prev.source === 'ai' ? 'ai' : 'manual' }))}
-                                        placeholder="概要正文"
+                                        placeholder={text('概要正文', 'Synopsis text', 'Текст синопсиса')}
                                     />
-                                    <StructuredMemorySections data={groupDraft} />
+                                    <StructuredMemorySections data={groupDraft} text={text} />
                                     {groupError && <div className="chapter-synopsis-error">{groupError}</div>}
                                     <div className="synopsis-inspector-actions">
                                         <button className="btn btn-secondary btn-sm" onClick={handleMergeGroups} disabled={groupBusy || groupSelectedIds.size < 2}>
                                             {groupBusy ? <RefreshCw size={14} className="spin" /> : <GitMerge size={14} />}
-                                            合并所选
+                                            {text('合并所选', 'Merge Selected', 'Объединить выбранное')}
                                         </button>
                                         <button className="btn btn-ghost btn-sm danger" onClick={handleDeleteGroupDraft} disabled={groupBusy}>
-                                            删除
+                                            {text('删除', 'Delete', 'Удалить')}
                                         </button>
                                         <button className="btn btn-primary btn-sm" onClick={handleSaveGroupDraft} disabled={groupBusy}>
                                             {groupBusy ? <RefreshCw size={14} className="spin" /> : <Save size={14} />}
-                                            保存
+                                            {text('保存', 'Save', 'Сохранить')}
                                         </button>
                                     </div>
                                 </>
                             ) : (
-                                <div className="memory-empty-state">还没有概要分组。切到“多章概要”选择章节后创建。</div>
+                                <div className="memory-empty-state">{text('还没有概要分组。切到“多章概要”选择章节后创建。', 'No synopsis groups yet. Switch to Multi-Chapter Synopsis and select chapters to create one.', 'Групп синопсисов пока нет. Перейдите к многочастному синопсису и выберите главы.')}</div>
                             )
                         ) : activeView === 'multi' ? (
                             <>
                                 <div className="synopsis-inspector-head">
-                                    <span className="synopsis-row-badge saved">多章概要</span>
-                                    <span className="synopsis-row-badge locked">已选 {selectedMultiEntries.length}</span>
-                                    <h3>{multiName || '新建多章概要组'}</h3>
-                                    <p>{selectedMultiEntries.length ? selectedMultiEntries.map(entry => entry.chapter.title || '未命名章节').slice(0, 3).join('、') : '从中间列表任选章节组成一组'}</p>
+                                    <span className="synopsis-row-badge saved">{text('多章概要', 'Multi-Chapter Synopsis', 'Синопсис нескольких глав')}</span>
+                                    <span className="synopsis-row-badge locked">{text(`已选 ${selectedMultiEntries.length}`, `${selectedMultiEntries.length} selected`, `Выбрано: ${selectedMultiEntries.length}`)}</span>
+                                    <h3>{multiName || text('新建多章概要组', 'New Multi-Chapter Synopsis Group', 'Новая группа многочастного синопсиса')}</h3>
+                                    <p>{selectedMultiEntries.length ? selectedMultiEntries.map(entry => entry.chapter.title || text('未命名章节', 'Untitled Chapter', 'Безымянная глава')).slice(0, 3).join(text('、', ', ', ', ')) : text('从中间列表任选章节组成一组', 'Choose chapters from the middle list to make a group', 'Выберите главы из центрального списка для группы')}</p>
                                 </div>
                                 <input
                                     className="memory-group-name-input"
@@ -1460,7 +1472,7 @@ function ChapterSynopsisOverviewModal({
                                         setMultiName(e.target.value);
                                         setMultiData(prev => normalizeChapterMemoryGroup({ ...prev, name: e.target.value }));
                                     }}
-                                    placeholder="概要组名，例如：第一卷前五章 / 学院篇开端"
+                                    placeholder={text('概要组名，例如：第一卷前五章 / 学院篇开端', 'Group name, e.g. Volume 1 first five chapters / Academy opening', 'Название группы, напр. первые пять глав тома 1 / начало академии')}
                                 />
                                 <textarea
                                     className="memory-main-textarea synopsis-center-textarea"
@@ -1469,18 +1481,18 @@ function ChapterSynopsisOverviewModal({
                                         setMultiDraft(e.target.value);
                                         setMultiData(prev => normalizeChapterMemoryGroup({ ...prev, summary: e.target.value, source: prev.source === 'ai' ? 'ai' : 'manual' }));
                                     }}
-                                    placeholder="可手写，也可选择章节后点击 AI 生成多章概要。"
+                                    placeholder={text('可手写，也可选择章节后点击 AI 生成多章概要。', 'Write manually, or select chapters and use AI to generate a multi-chapter synopsis.', 'Можно написать вручную или выбрать главы и сгенерировать многочастный синопсис с ИИ.')}
                                 />
-                                <StructuredMemorySections data={multiData} />
+                                <StructuredMemorySections data={multiData} text={text} />
                                 {multiError && <div className="chapter-synopsis-error">{multiError}</div>}
                                 <div className="synopsis-inspector-actions">
                                     <button className="btn btn-secondary btn-sm" onClick={handleGenerateMulti} disabled={multiBusy || selectedMultiEntries.length === 0}>
                                         {multiBusy ? <RefreshCw size={14} className="spin" /> : <Sparkles size={14} />}
-                                        AI 生成
+                                        {text('AI 生成', 'AI Generate', 'Сгенерировать ИИ')}
                                     </button>
                                     <button className="btn btn-primary btn-sm" onClick={handleSaveMulti} disabled={multiBusy || selectedMultiEntries.length === 0}>
                                         {multiBusy ? <RefreshCw size={14} className="spin" /> : <Save size={14} />}
-                                        保存为分组
+                                        {text('保存为分组', 'Save as Group', 'Сохранить как группу')}
                                     </button>
                                 </div>
                             </>
@@ -1489,11 +1501,11 @@ function ChapterSynopsisOverviewModal({
                                 <>
                                     <div className="synopsis-inspector-head">
                                         <span className={`synopsis-row-badge${selectedEntry.hasSynopsis ? ' saved' : ' missing'}`}>
-                                            {selectedEntry.hasSynopsis ? '已保存' : '缺概要'}
+                                            {selectedEntry.hasSynopsis ? text('已保存', 'Saved', 'Сохранено') : text('缺概要', 'Missing', 'Нет синопсиса')}
                                         </span>
-                                        {singleLocked && <span className="synopsis-row-badge locked">锁定</span>}
-                                        <h3>{selectedEntry.chapter.title || '未命名章节'}</h3>
-                                        <p>第 {selectedEntry.ordinal} 章 · {formatMemoryTokens(selectedEntry.textTokens)}</p>
+                                        {singleLocked && <span className="synopsis-row-badge locked">{text('锁定', 'Locked', 'Заблокировано')}</span>}
+                                        <h3>{selectedEntry.chapter.title || text('未命名章节', 'Untitled Chapter', 'Безымянная глава')}</h3>
+                                        <p>{text(`第 ${selectedEntry.ordinal} 章`, `Chapter ${selectedEntry.ordinal}`, `Глава ${selectedEntry.ordinal}`)} · {formatMemoryTokens(selectedEntry.textTokens)}</p>
                                     </div>
                                     <label className="synopsis-lock-row">
                                         <input
@@ -1502,8 +1514,8 @@ function ChapterSynopsisOverviewModal({
                                             onChange={e => setSingleLocked(e.target.checked)}
                                         />
                                         <span>
-                                            <strong>锁定概要</strong>
-                                            <em>避免被 AI 生成覆盖</em>
+                                            <strong>{text('锁定概要', 'Lock Synopsis', 'Заблокировать синопсис')}</strong>
+                                            <em>{text('避免被 AI 生成覆盖', 'Prevent AI generation from overwriting it', 'Не дать ИИ перезаписать его')}</em>
                                         </span>
                                     </label>
                                     <textarea
@@ -1514,10 +1526,10 @@ function ChapterSynopsisOverviewModal({
                                             setSingleDraft(value);
                                             setSingleData(prev => normalizeChapterSynopsis({ ...prev, summary: value, source: prev.source === 'ai' ? 'ai' : 'manual' }));
                                         }}
-                                        placeholder="写下这一章发生了什么、冲突如何推进、信息有什么变化，以及最后停在什么状态。"
+                                        placeholder={text('写下这一章发生了什么、冲突如何推进、信息有什么变化，以及最后停在什么状态。', 'Write what happened in this chapter, how the conflict moved, what information changed, and where it ended.', 'Опишите, что произошло в главе, как развился конфликт, какая информация изменилась и чем все закончилось.')}
                                     />
                                     <label className="synopsis-ending-field">
-                                        <span>结尾状态</span>
+                                        <span>{text('结尾状态', 'Ending State', 'Состояние в конце')}</span>
                                         <input
                                             value={singleEnding}
                                             onChange={e => {
@@ -1525,29 +1537,29 @@ function ChapterSynopsisOverviewModal({
                                                 setSingleEnding(value);
                                                 setSingleData(prev => normalizeChapterSynopsis({ ...prev, endingState: value, source: prev.source === 'ai' ? 'ai' : 'manual' }));
                                             }}
-                                            placeholder="本章最后停留的画面、决定、冲突或情绪状态"
+                                            placeholder={text('本章最后停留的画面、决定、冲突或情绪状态', 'Final image, decision, conflict, or emotional state of this chapter', 'Финальный образ, решение, конфликт или эмоция главы')}
                                         />
                                     </label>
                                     <details className="chapter-synopsis-details synopsis-advanced-details">
-                                        <summary>概要细节</summary>
-                                        <StructuredMemorySections data={singleData} mode="synopsis" />
+                                        <summary>{text('概要细节', 'Synopsis Details', 'Детали синопсиса')}</summary>
+                                        <StructuredMemorySections data={singleData} mode="synopsis" text={text} />
                                         {buildChapterSynopsisText(singleData) && (
                                             <details className="chapter-synopsis-details memory-raw-details">
-                                                <summary>查看注入文本</summary>
+                                                <summary>{text('查看注入文本', 'View Injected Text', 'Показать вставляемый текст')}</summary>
                                                 <pre>{buildChapterSynopsisText(singleData)}</pre>
                                             </details>
                                         )}
                                     </details>
                                     {singleError && <div className="chapter-synopsis-error">{singleError}</div>}
                                     <div className="synopsis-inspector-actions">
-                                        <button className="btn btn-ghost btn-sm" onClick={handleClearSingle} disabled={singleBusy}>清空</button>
+                                        <button className="btn btn-ghost btn-sm" onClick={handleClearSingle} disabled={singleBusy}>{text('清空', 'Clear', 'Очистить')}</button>
                                         <button className="btn btn-secondary btn-sm" onClick={() => handleGenerateSingle()} disabled={singleBusy || singleLocked}>
                                             {singleBusy ? <RefreshCw size={14} className="spin" /> : <Sparkles size={14} />}
-                                            AI 生成
+                                            {text('AI 生成', 'AI Generate', 'Сгенерировать ИИ')}
                                         </button>
                                         <button className="btn btn-primary btn-sm" onClick={handleSaveSingle} disabled={singleBusy}>
                                             {singleBusy ? <RefreshCw size={14} className="spin" /> : <Save size={14} />}
-                                            保存
+                                            {text('保存', 'Save', 'Сохранить')}
                                         </button>
                                     </div>
                                 </>
@@ -1555,55 +1567,55 @@ function ChapterSynopsisOverviewModal({
                                 <>
                                     <div className="synopsis-inspector-head">
                                         <span className={`synopsis-row-badge${selectedEntry.hasSynopsis ? ' saved' : ' missing'}`}>
-                                            {selectedEntry.hasSynopsis ? '已保存' : '缺概要'}
+                                            {selectedEntry.hasSynopsis ? text('已保存', 'Saved', 'Сохранено') : text('缺概要', 'Missing', 'Нет синопсиса')}
                                         </span>
-                                        {selectedEntry.synopsis.locked && <span className="synopsis-row-badge locked">锁定</span>}
-                                        <h3>{selectedEntry.chapter.title || '未命名章节'}</h3>
-                                        <p>第 {selectedEntry.ordinal} 章 · {formatMemoryTokens(selectedEntry.textTokens)}</p>
+                                        {selectedEntry.synopsis.locked && <span className="synopsis-row-badge locked">{text('锁定', 'Locked', 'Заблокировано')}</span>}
+                                        <h3>{selectedEntry.chapter.title || text('未命名章节', 'Untitled Chapter', 'Безымянная глава')}</h3>
+                                        <p>{text(`第 ${selectedEntry.ordinal} 章`, `Chapter ${selectedEntry.ordinal}`, `Глава ${selectedEntry.ordinal}`)} · {formatMemoryTokens(selectedEntry.textTokens)}</p>
                                     </div>
 
                                     <div className="synopsis-inspector-block">
-                                        <h4>概要正文</h4>
-                                        <p>{selectedEntry.synopsis.summary || '还没有保存概要。'}</p>
+                                        <h4>{text('概要正文', 'Synopsis Text', 'Текст синопсиса')}</h4>
+                                        <p>{selectedEntry.synopsis.summary || text('还没有保存概要。', 'No synopsis saved yet.', 'Синопсис еще не сохранен.')}</p>
                                     </div>
                                     <div className="synopsis-inspector-block">
-                                        <h4>结尾状态</h4>
-                                        <p>{selectedEntry.synopsis.endingState || '暂无结尾状态。'}</p>
+                                        <h4>{text('结尾状态', 'Ending State', 'Состояние в конце')}</h4>
+                                        <p>{selectedEntry.synopsis.endingState || text('暂无结尾状态。', 'No ending state yet.', 'Пока нет состояния в конце.')}</p>
                                     </div>
                                     <div className="synopsis-inspector-block">
-                                        <h4>续写注意</h4>
+                                        <h4>{text('续写注意', 'Continuation Notes', 'Заметки для продолжения')}</h4>
                                         {selectedEntry.synopsis.continuityNotes.length ? (
                                             <ul>{selectedEntry.synopsis.continuityNotes.slice(0, 5).map((item, index) => <li key={index}>{item}</li>)}</ul>
                                         ) : (
-                                            <p>暂无续写注意。</p>
+                                            <p>{text('暂无续写注意。', 'No continuation notes yet.', 'Пока нет заметок для продолжения.')}</p>
                                         )}
                                     </div>
                                     <div className="synopsis-inspector-block">
-                                        <h4>待回收信息</h4>
+                                        <h4>{text('待回收信息', 'Open Threads', 'Открытые линии')}</h4>
                                         {selectedEntry.synopsis.openThreads.length ? (
                                             <ul>{selectedEntry.synopsis.openThreads.slice(0, 5).map((item, index) => <li key={index}>{item}</li>)}</ul>
                                         ) : (
-                                            <p>暂无待回收信息。</p>
+                                            <p>{text('暂无待回收信息。', 'No open threads yet.', 'Пока нет открытых линий.')}</p>
                                         )}
                                     </div>
                                     <div className="synopsis-inspector-meta">
-                                        <span>{getSynopsisSourceLabel(selectedEntry.synopsis)}</span>
-                                        <span>{formatSynopsisTime(selectedEntry.synopsis.updatedAt || selectedEntry.synopsis.generatedAt)}</span>
+                                        <span>{getSynopsisSourceLabel(selectedEntry.synopsis, text)}</span>
+                                        <span>{formatSynopsisTime(selectedEntry.synopsis.updatedAt || selectedEntry.synopsis.generatedAt, text, language)}</span>
                                         <span>{formatMemoryTokens(estimateTokens(selectedEntry.synopsisText || selectedEntry.synopsis.summary || ''))}</span>
                                     </div>
                                     <div className="synopsis-inspector-actions">
                                         <button className="btn btn-secondary btn-sm" onClick={() => setActiveView('single')}>
                                             <FileText size={14} />
-                                            {selectedEntry.hasSynopsis ? '编辑概要' : '生成概要'}
+                                            {selectedEntry.hasSynopsis ? text('编辑概要', 'Edit Synopsis', 'Изменить синопсис') : text('生成概要', 'Generate Synopsis', 'Сгенерировать синопсис')}
                                         </button>
                                         <button className="btn btn-ghost btn-sm" onClick={() => onToggleLock(selectedEntry.chapter.id, !selectedEntry.synopsis.locked)}>
-                                            {selectedEntry.synopsis.locked ? '解锁' : '锁定'}
+                                            {selectedEntry.synopsis.locked ? text('解锁', 'Unlock', 'Разблокировать') : text('锁定', 'Lock', 'Заблокировать')}
                                         </button>
                                     </div>
                                 </>
                             )
                         ) : (
-                            <div className="memory-empty-state">请选择一个章节。</div>
+                            <div className="memory-empty-state">{text('请选择一个章节。', 'Select a chapter.', 'Выберите главу.')}</div>
                         )}
                     </aside>
                 </div>
@@ -1611,7 +1623,7 @@ function ChapterSynopsisOverviewModal({
                 <div className="memory-workspace-footer synopsis-overview-footer">
                     <div className="memory-footer-status">
                         <CheckCircle2 size={15} />
-                        <span>保存的单章概要会自动作为前文摘要参与续写上下文；多章分组可手动管理。</span>
+                        <span>{text('保存的单章概要会自动作为前文摘要参与续写上下文；多章分组可手动管理。', 'Saved single-chapter synopses are automatically used as previous-context summaries; multi-chapter groups can be managed manually.', 'Сохраненные синопсисы глав автоматически участвуют в контексте продолжения; группами можно управлять вручную.')}</span>
                     </div>
                     <div className="memory-footer-actions">
                         <button className="btn btn-ghost btn-sm" onClick={() => {
@@ -1622,7 +1634,7 @@ function ChapterSynopsisOverviewModal({
                             }
                         }} disabled={missingCount === 0 || activeView === 'groups'}>
                             <Sparkles size={14} />
-                            生成缺失概要
+                            {text('生成缺失概要', 'Generate Missing Synopses', 'Сгенерировать пропущенные синопсисы')}
                         </button>
                         <button className="btn btn-secondary btn-sm" onClick={() => {
                             if (activeView !== 'multi') {
@@ -1632,13 +1644,15 @@ function ChapterSynopsisOverviewModal({
                             handleGenerateMulti();
                         }} disabled={activeView === 'multi' && (multiBusy || multiSelectedIds.size === 0)}>
                             <Layers3 size={14} />
-                            {activeView === 'multi' ? `AI 生成多章概要${multiSelectedIds.size ? ` (${multiSelectedIds.size})` : ''}` : '选择章节生成多章概要'}
+                            {activeView === 'multi'
+                                ? text(`AI 生成多章概要${multiSelectedIds.size ? ` (${multiSelectedIds.size})` : ''}`, `AI Generate Multi-Chapter Synopsis${multiSelectedIds.size ? ` (${multiSelectedIds.size})` : ''}`, `Сгенерировать многочастный синопсис ИИ${multiSelectedIds.size ? ` (${multiSelectedIds.size})` : ''}`)
+                                : text('选择章节生成多章概要', 'Select Chapters for Multi-Chapter Synopsis', 'Выберите главы для многочастного синопсиса')}
                         </button>
                         <button className="btn btn-ghost btn-sm" onClick={onCopyAll}>
-                            导出概要
+                            {text('导出概要', 'Export Synopses', 'Экспорт синопсисов')}
                         </button>
                         <button className="btn btn-primary btn-sm" onClick={onApplyContext}>
-                            应用到上下文
+                            {text('应用到上下文', 'Apply to Context', 'Добавить в контекст')}
                         </button>
                     </div>
                 </div>
@@ -1689,7 +1703,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
     const [catCustomLabels, setCatCustomLabels] = useState({}); // category → folder name
     const [outlineCollapsed, setOutlineCollapsed] = useState(false); // 手动折叠大纲
     const [headings, setHeadings] = useState([]); // 文档大纲标题列表
-    const [headingStats, setHeadingStats] = useState([]); // 每个标题下的字数+token
+    const [headingStats, setHeadingStats] = useState([]); // 每个标题下的字数
     const [activeHeadingIndex, setActiveHeadingIndex] = useState(-1); // 当前高亮的大纲项
     const isClickScrollingRef = useRef(false); // 防 scrollspy 死循环互斥锁
     const [dragId, setDragId] = useState(null); // 拖拽中的 item id
@@ -1712,7 +1726,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
     const [memoryGenerating, setMemoryGenerating] = useState(false);
     const [memorySaving, setMemorySaving] = useState(false);
     const [memoryError, setMemoryError] = useState('');
-    const { t } = useI18n();
+    const { t, text, language } = useI18n();
 
     const synopsisChapter = synopsisModal
         ? chapters.find(ch => ch.id === synopsisModal.chapterId && (ch.type || 'chapter') !== 'volume')
@@ -1802,22 +1816,22 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
         light: {
             icon: <Sun size={18} />,
             text: t('sidebar.navThemeLight') || '亮色',
-            label: '当前：亮色模式。点击切换到护眼模式',
+            label: text('当前：亮色模式。点击切换到护眼模式', 'Current: Light mode. Click to switch to Eye Comfort mode', 'Сейчас: светлый режим. Нажмите, чтобы переключиться на режим защиты глаз'),
         },
         eye: {
             icon: <Eye size={18} />,
-            text: '护眼',
-            label: '当前：护眼模式。点击切换到暗色模式',
+            text: text('护眼', 'Eye', 'Защита'),
+            label: text('当前：护眼模式。点击切换到暗色模式', 'Current: Eye Comfort mode. Click to switch to Dark mode', 'Сейчас: режим защиты глаз. Нажмите, чтобы переключиться на тёмный режим'),
         },
         dark: {
             icon: <Moon size={18} />,
             text: t('sidebar.navThemeDark') || '暗色',
-            label: '当前：暗色模式。点击切换到亮色模式',
+            label: text('当前：暗色模式。点击切换到亮色模式', 'Current: Dark mode. Click to switch to Light mode', 'Сейчас: тёмный режим. Нажмите, чтобы переключиться на светлый режим'),
         },
     }[theme] || {
         icon: <Sun size={18} />,
         text: t('sidebar.navThemeLight') || '亮色',
-        label: '切换主题',
+        label: text('切换主题', 'Switch theme', 'Переключить тему'),
     };
 
     // 中文数字 ↔ 阿拉伯数字 互转
@@ -2007,10 +2021,10 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
         await updateChapter(id, { numberingIgnored }, activeWorkId);
         updateChapterStore(id, { numberingIgnored });
         showToast(numberingIgnored
-            ? `「${item.title}」已设为特殊章节，重排编号时会跳过`
-            : `「${item.title}」已恢复普通章节`,
+            ? text(`「${item.title}」已设为特殊章节，重排编号时会跳过`, `"${item.title}" marked as a special chapter and will be skipped when renumbering`, `"${item.title}" отмечена как специальная глава и будет пропущена при перенумерации`)
+            : text(`「${item.title}」已恢复普通章节`, `"${item.title}" restored as a normal chapter`, `"${item.title}" восстановлена как обычная глава`),
             'success');
-    }, [activeWorkId, chapters, showToast, updateChapterStore]);
+    }, [activeWorkId, chapters, showToast, text, updateChapterStore]);
 
     const handleOpenSynopsis = useCallback((id) => {
         const chapter = chapters.find(c => c.id === id && (c.type || 'chapter') !== 'volume');
@@ -2067,25 +2081,25 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
             if (updated) {
                 updateChapterStore(synopsisChapter.id, { synopsis: payload });
             }
-            showToast('章节概要已保存', 'success');
+            showToast(text('章节概要已保存', 'Chapter synopsis saved', 'Синопсис главы сохранен'), 'success');
             handleCloseSynopsis();
         } catch (err) {
-            setSynopsisError(err?.message || '保存失败');
+            setSynopsisError(err?.message || text('保存失败', 'Save failed', 'Не удалось сохранить'));
         } finally {
             setSynopsisSaving(false);
         }
-    }, [activeWorkId, handleCloseSynopsis, showToast, synopsisChapter, synopsisData, synopsisDraft, synopsisLocked, updateChapterStore]);
+    }, [activeWorkId, handleCloseSynopsis, showToast, synopsisChapter, synopsisData, synopsisDraft, synopsisLocked, text, updateChapterStore]);
 
     const handleGenerateSynopsis = useCallback(async () => {
         if (!synopsisChapter) return;
         if (synopsisLocked) {
-            showToast('当前概要已锁定，取消锁定后再生成', 'info');
+            showToast(text('当前概要已锁定，取消锁定后再生成', 'This synopsis is locked. Unlock it before generating.', 'Этот синопсис заблокирован. Разблокируйте его перед генерацией.'), 'info');
             return;
         }
 
         const plainText = stripChapterHtml(synopsisChapter.content || '');
         if (plainText.length < 20) {
-            setSynopsisError('正文太短，暂时无法生成有效概要');
+            setSynopsisError(text('正文太短，暂时无法生成有效概要', 'The chapter is too short to generate a useful synopsis yet.', 'Текст главы слишком короткий для полезного синопсиса.'));
             return;
         }
 
@@ -2111,7 +2125,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
             const aiText = await readAiTextStream(response);
             const generated = parseGeneratedSynopsis(aiText);
             if (!hasChapterSynopsis(generated)) {
-                throw new Error('AI 没有返回可用概要');
+                throw new Error(text('AI 没有返回可用概要', 'AI did not return a usable synopsis', 'ИИ не вернул пригодный синопсис'));
             }
 
             const now = new Date().toISOString();
@@ -2124,13 +2138,13 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
             });
             setSynopsisData(nextSynopsis);
             setSynopsisDraft(nextSynopsis.summary || aiText);
-            showToast('概要已生成，请确认后保存', 'success');
+            showToast(text('概要已生成，请确认后保存', 'Synopsis generated. Review and save it.', 'Синопсис создан. Проверьте и сохраните его.'), 'success');
         } catch (err) {
-            setSynopsisError(err?.message || '生成失败，请检查 API 配置');
+            setSynopsisError(err?.message || text('生成失败，请检查 API 配置', 'Generation failed. Check the API configuration.', 'Генерация не удалась. Проверьте настройки API.'));
         } finally {
             setSynopsisGenerating(false);
         }
-    }, [showToast, synopsisChapter, synopsisLocked]);
+    }, [showToast, synopsisChapter, synopsisLocked, text]);
 
     const notifyMemoryGroupsChanged = useCallback(() => {
         if (typeof window === 'undefined') return;
@@ -2161,7 +2175,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
         if (!chapter) return;
         const synopsis = getChapterSynopsis(chapter);
         if (!hasChapterSynopsis(synopsis)) {
-            showToast('这个章节还没有概要，生成或填写后再锁定', 'info');
+            showToast(text('这个章节还没有概要，生成或填写后再锁定', 'This chapter has no synopsis yet. Generate or write one before locking.', 'У этой главы еще нет синопсиса. Создайте или заполните его перед блокировкой.'), 'info');
             return;
         }
         const payload = normalizeChapterSynopsis({
@@ -2173,8 +2187,8 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
         if (updated) {
             updateChapterStore(chapter.id, { synopsis: payload });
         }
-        showToast(locked ? '概要已锁定' : '概要已解锁', 'success');
-    }, [activeWorkId, chapters, showToast, updateChapterStore]);
+        showToast(locked ? text('概要已锁定', 'Synopsis locked', 'Синопсис заблокирован') : text('概要已解锁', 'Synopsis unlocked', 'Синопсис разблокирован'), 'success');
+    }, [activeWorkId, chapters, showToast, text, updateChapterStore]);
 
     const handleCopyAllSynopsis = useCallback(async () => {
         const lines = [];
@@ -2183,24 +2197,24 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
             if ((chapter.type || 'chapter') === 'volume') return;
             ordinal += 1;
             if (!hasChapterSynopsis(chapter)) return;
-            lines.push(`第${ordinal}章「${chapter.title || '未命名章节'}」\n${buildChapterSynopsisText(chapter)}`);
+            lines.push(`${text(`第${ordinal}章`, `Chapter ${ordinal}`, `Глава ${ordinal}`)} "${chapter.title || text('未命名章节', 'Untitled Chapter', 'Безымянная глава')}"\n${buildChapterSynopsisText(chapter)}`);
         });
-        const text = lines.join('\n\n---\n\n').trim();
-        if (!text) {
-            showToast('还没有可导出的章节概要', 'info');
+        const synopsisText = lines.join('\n\n---\n\n').trim();
+        if (!synopsisText) {
+            showToast(text('还没有可导出的章节概要', 'No chapter synopses to export yet', 'Пока нет синопсисов глав для экспорта'), 'info');
             return;
         }
         try {
-            await navigator.clipboard.writeText(text);
-            showToast('所有已保存概要已复制', 'success');
+            await navigator.clipboard.writeText(synopsisText);
+            showToast(text('所有已保存概要已复制', 'All saved synopses copied', 'Все сохраненные синопсисы скопированы'), 'success');
         } catch {
-            showToast('复制失败，请检查浏览器剪贴板权限', 'error');
+            showToast(text('复制失败，请检查浏览器剪贴板权限', 'Copy failed. Check browser clipboard permission.', 'Не удалось скопировать. Проверьте разрешение буфера обмена.'), 'error');
         }
-    }, [chapters, showToast]);
+    }, [chapters, showToast, text]);
 
     const handleApplySynopsisContext = useCallback(() => {
-        showToast('已保存概要会自动参与前文上下文；多章分组可在概要分组中管理', 'success');
-    }, [showToast]);
+        showToast(text('已保存概要会自动参与前文上下文；多章分组可在概要分组中管理', 'Saved synopses automatically participate in previous-context; multi-chapter groups can be managed in Synopsis Groups.', 'Сохраненные синопсисы автоматически участвуют в предыдущем контексте; группами можно управлять в разделе групп синопсисов.'), 'success');
+    }, [showToast, text]);
 
     const getSynopsisSwitchTargetId = useCallback(() => {
         if (activeSynopsisTarget?.id) return activeSynopsisTarget.id;
@@ -2269,7 +2283,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
     const handleGenerateMemoryGroup = useCallback(async () => {
         const selectedEntries = getSelectedMemoryChapterEntries();
         if (selectedEntries.length === 0) {
-            setMemoryError('请先选择至少一个章节');
+            setMemoryError(text('请先选择至少一个章节', 'Select at least one chapter first', 'Сначала выберите хотя бы одну главу'));
             return;
         }
 
@@ -2277,7 +2291,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
         setMemoryError('');
         try {
             const { apiConfig } = getProjectSettings();
-            const name = memoryDraft.name || `${selectedEntries[0].chapter.title} 等 ${selectedEntries.length} 章`;
+            const name = memoryDraft.name || text(`${selectedEntries[0].chapter.title} 等 ${selectedEntries.length} 章`, `${selectedEntries[0].chapter.title} and ${selectedEntries.length - 1} more`, `${selectedEntries[0].chapter.title} и еще ${selectedEntries.length - 1}`);
             const { systemPrompt, userPrompt } = buildMemoryGroupPrompts({
                 name,
                 chapters: selectedEntries,
@@ -2298,7 +2312,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
             });
             const aiText = await readAiTextStream(response);
             const generated = parseGeneratedSynopsis(aiText);
-            if (!hasChapterSynopsis(generated)) throw new Error('AI 没有返回可用多章节概要');
+            if (!hasChapterSynopsis(generated)) throw new Error(text('AI 没有返回可用多章节概要', 'AI did not return a usable multi-chapter synopsis', 'ИИ не вернул пригодный синопсис нескольких глав'));
             const now = new Date().toISOString();
             setMemoryDraft(prev => normalizeChapterMemoryGroup({
                 ...prev,
@@ -2310,18 +2324,18 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                 generatedAt: now,
                 updatedAt: now,
             }));
-            showToast('多章节概要已生成，请确认后保存', 'success');
+            showToast(text('多章节概要已生成，请确认后保存', 'Multi-chapter synopsis generated. Review and save it.', 'Синопсис нескольких глав создан. Проверьте и сохраните.'), 'success');
         } catch (err) {
-            setMemoryError(err?.message || '生成失败，请检查 API 配置');
+            setMemoryError(err?.message || text('生成失败，请检查 API 配置', 'Generation failed. Check the API configuration.', 'Генерация не удалась. Проверьте настройки API.'));
         } finally {
             setMemoryGenerating(false);
         }
-    }, [getSelectedMemoryChapterEntries, memoryDraft.name, showToast]);
+    }, [getSelectedMemoryChapterEntries, memoryDraft.name, showToast, text]);
 
     const handleMergeMemoryGroups = useCallback(async () => {
         const selectedGroups = memoryGroups.filter(group => memorySelectedGroupIds.has(group.id));
         if (selectedGroups.length < 2) {
-            setMemoryError('请至少选择两个记忆组');
+            setMemoryError(text('请至少选择两个记忆组', 'Select at least two memory groups', 'Выберите минимум две группы памяти'));
             return;
         }
 
@@ -2330,7 +2344,11 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
         try {
             const { apiConfig } = getProjectSettings();
             const unionChapterIds = Array.from(new Set(selectedGroups.flatMap(group => group.chapterIds)));
-            const name = `合并概要：${selectedGroups.map(group => group.name || '未命名记忆组').slice(0, 2).join(' + ')}${selectedGroups.length > 2 ? ' 等' : ''}`;
+            const name = text(
+                `合并概要：${selectedGroups.map(group => group.name || '未命名记忆组').slice(0, 2).join(' + ')}${selectedGroups.length > 2 ? ' 等' : ''}`,
+                `Merged synopsis: ${selectedGroups.map(group => group.name || 'Untitled Memory Group').slice(0, 2).join(' + ')}${selectedGroups.length > 2 ? ' and more' : ''}`,
+                `Объединенный синопсис: ${selectedGroups.map(group => group.name || 'Безымянная группа памяти').slice(0, 2).join(' + ')}${selectedGroups.length > 2 ? ' и др.' : ''}`
+            );
             const { systemPrompt, userPrompt } = buildMemoryMergePrompts({
                 name,
                 groups: selectedGroups,
@@ -2352,7 +2370,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
             });
             const aiText = await readAiTextStream(response);
             const generated = parseGeneratedSynopsis(aiText);
-            if (!hasChapterSynopsis(generated)) throw new Error('AI 没有返回可用合并概要');
+            if (!hasChapterSynopsis(generated)) throw new Error(text('AI 没有返回可用合并概要', 'AI did not return a usable merged synopsis', 'ИИ не вернул пригодный объединенный синопсис'));
             const now = new Date().toISOString();
             setMemoryDraft(normalizeChapterMemoryGroup({
                 ...generated,
@@ -2365,13 +2383,13 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                 updatedAt: now,
             }));
             setMemorySelectedChapterIds(new Set(unionChapterIds));
-            showToast('合并概要已生成，请确认后保存', 'success');
+            showToast(text('合并概要已生成，请确认后保存', 'Merged synopsis generated. Review and save it.', 'Объединенный синопсис создан. Проверьте и сохраните.'), 'success');
         } catch (err) {
-            setMemoryError(err?.message || '合并失败，请检查 API 配置');
+            setMemoryError(err?.message || text('合并失败，请检查 API 配置', 'Merge failed. Check the API configuration.', 'Не удалось объединить. Проверьте настройки API.'));
         } finally {
             setMemoryGenerating(false);
         }
-    }, [chapters, memoryGroups, memorySelectedGroupIds, showToast]);
+    }, [chapters, memoryGroups, memorySelectedGroupIds, showToast, text]);
 
     const handleSaveMemoryGroup = useCallback(async () => {
         const payload = normalizeChapterMemoryGroup({
@@ -2381,15 +2399,15 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
             updatedAt: new Date().toISOString(),
         });
         if (!payload.name.trim()) {
-            setMemoryError('请填写组名');
+            setMemoryError(text('请填写组名', 'Enter a group name', 'Введите название группы'));
             return;
         }
         if (!hasChapterMemoryGroup(payload)) {
-            setMemoryError('请填写概要正文，或先用 AI 生成');
+            setMemoryError(text('请填写概要正文，或先用 AI 生成', 'Write synopsis text or generate it with AI first', 'Введите текст синопсиса или сначала создайте его с ИИ'));
             return;
         }
         if (payload.chapterIds.length === 0) {
-            setMemoryError('请至少选择一个章节');
+            setMemoryError(text('请至少选择一个章节', 'Select at least one chapter', 'Выберите минимум одну главу'));
             return;
         }
 
@@ -2402,13 +2420,13 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
             await saveChapterMemoryGroups(nextGroups, activeWorkId);
             setMemoryGroups(nextGroups);
             notifyMemoryGroupsChanged();
-            showToast('章节记忆组已保存', 'success');
+            showToast(text('章节记忆组已保存', 'Chapter memory group saved', 'Группа памяти глав сохранена'), 'success');
         } catch (err) {
-            setMemoryError(err?.message || '保存失败');
+            setMemoryError(err?.message || text('保存失败', 'Save failed', 'Не удалось сохранить'));
         } finally {
             setMemorySaving(false);
         }
-    }, [activeWorkId, memoryDraft, memoryGroups, memorySelectedChapterIds, notifyMemoryGroupsChanged, showToast]);
+    }, [activeWorkId, memoryDraft, memoryGroups, memorySelectedChapterIds, notifyMemoryGroupsChanged, showToast, text]);
 
     const handleEditMemoryGroup = useCallback((group) => {
         const normalized = normalizeChapterMemoryGroup(group);
@@ -2427,8 +2445,8 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
             return next;
         });
         notifyMemoryGroupsChanged();
-        showToast('章节记忆组已删除', 'success');
-    }, [activeWorkId, memoryGroups, notifyMemoryGroupsChanged, showToast]);
+        showToast(text('章节记忆组已删除', 'Chapter memory group deleted', 'Группа памяти глав удалена'), 'success');
+    }, [activeWorkId, memoryGroups, notifyMemoryGroupsChanged, showToast, text]);
 
     // ===== 分卷管理 =====
     const getNextVolumeTitle = useCallback(() => {
@@ -2592,8 +2610,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                 }
                 const plainText = text.replace(/\s+/g, '');
                 const words = plainText.length;
-                const tokens = estimateTokens(text);
-                return { words, tokens };
+                return { words };
             });
             setHeadingStats(stats);
         };
@@ -2722,10 +2739,10 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                         <IconButton icon={<BookOpen size={18} />} label={t('sidebar.chapterList') || '章节大纲'} text={sidebarOpen ? (t('sidebar.navChapter') || '章节') : undefined} tooltipSide="right" className={`nav-item ${activeNavTab === 'chapters' ? 'active' : ''}`} onClick={() => { if (activeNavTab === 'chapters' && sidebarOpen) { setSidebarOpen(false); } else { setActiveNavTab('chapters'); setSidebarOpen(true); } }} />
 
                         {/* 概要 */}
-                        <IconButton icon={<FileText size={18} />} label="章节概要总览" text={sidebarOpen ? '概要' : undefined} tooltipSide="right" className={`nav-item ${synopsisOverviewModal ? 'active' : ''}`} onClick={handleOpenSynopsisOverview} />
+                            <IconButton icon={<FileText size={18} />} label={text('章节概要总览', 'Chapter Synopsis Overview', 'Обзор конспектов глав')} text={sidebarOpen ? text('概要', 'Synopsis', 'Конспект') : undefined} tooltipSide="right" className={`nav-item ${synopsisOverviewModal ? 'active' : ''}`} onClick={handleOpenSynopsisOverview} />
 
                         {/* 作品信息 */}
-                        <IconButton icon={<Book size={18} />} label={'作品信息'} text={sidebarOpen ? '作品' : undefined} tooltipSide="right" className="nav-item" onClick={() => setShowBookInfo(true)} />
+                            <IconButton icon={<Book size={18} />} label={text('作品信息', 'Book Info', 'Информация о произведении')} text={sidebarOpen ? text('作品', 'Book', 'Книга') : undefined} tooltipSide="right" className="nav-item" onClick={() => setShowBookInfo(true)} />
 
                         <div className="nav-category-divider" />
 
@@ -2733,7 +2750,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                         <div className="nav-settings-group" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', borderWidth: 1, borderStyle: 'solid', borderColor: 'var(--border-light, #e5e7eb)', borderRadius: 12, padding: '4px 2px', margin: '0 3px', background: 'var(--bg-secondary, #f9fafb)', gap: 1 }}>
                         {/* 设定集 — 弹出缩略图菜单 */}
                         <div ref={categoryPopoverAnchorRef}>
-                            <IconButton icon={<Library size={18} />} label={showCategoryPopover ? '' : (t('sidebar.tooltipSettings') || '设定集管理')} text={sidebarOpen ? '设定' : undefined} tooltipSide="right" onClick={() => { setSidebarOpen(false); setShowCategoryPopover(!showCategoryPopover); }} className="nav-item" />
+                            <IconButton icon={<Library size={18} />} label={showCategoryPopover ? '' : (t('sidebar.tooltipSettings') || '设定集管理')} text={sidebarOpen ? text('设定', 'Settings', 'Настройки') : undefined} tooltipSide="right" onClick={() => { setSidebarOpen(false); setShowCategoryPopover(!showCategoryPopover); }} className="nav-item" />
                             {showCategoryPopover && (
                                 <SettingsCategoryPopover
                                     anchorRef={categoryPopoverAnchorRef}
@@ -2757,7 +2774,19 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                         {pinnedCategories.filter(cat => cat !== 'bookInfo').map(cat => {
                             const CatIcon = getCategoryIcon(cat, catCustomIcons[cat]);
                             const colors = getCategoryColor(cat);
-                            const catLabel = catCustomLabels[cat] || getCategoryLabel(cat, t);
+                            const builtInCategoryNamesZh = {
+                                character: '人物设定',
+                                location: '空间/地点',
+                                world: '世界观/设定',
+                                object: '物品/道具',
+                                plot: '大纲',
+                                rules: '写作规则',
+                                custom: '自定义设定',
+                            };
+                            const customLabel = catCustomLabels[cat];
+                            const catLabel = customLabel && customLabel !== builtInCategoryNamesZh[cat]
+                                ? customLabel
+                                : getCategoryLabel(cat, t, text);
                             const isDragging = navDragCat === cat;
                             const isDragOver = navDragOverCat === cat;
                             return (
@@ -2823,7 +2852,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                         <IconButton icon={<Save size={18} />} label={t('sidebar.menuSave') || '存档'} text={sidebarOpen ? (t('sidebar.menuSave') || '存档') : undefined} tooltipSide="right" onClick={() => { exportProject(); showToast(t('sidebar.exportedProject') || '已导出', 'success'); }} className="nav-item" />
                         <IconButton icon={<FileDown size={18} />} label={t('sidebar.menuImportWork') || '导入'} text={sidebarOpen ? (t('sidebar.navImport') || '导入') : undefined} tooltipSide="right" onClick={() => document.getElementById('work-import-input')?.click()} className="nav-item" />
                         <div ref={navExportRef} style={{ position: 'relative', width: '100%', display: 'flex', justifyContent: 'center' }}>
-                            <IconButton icon={<FileOutput size={18} />} label={showNavExportMenu ? '' : '导出'} text={sidebarOpen ? '导出' : undefined} tooltipSide="right" onClick={() => setShowNavExportMenu(!showNavExportMenu)} className="nav-item" />
+                            <IconButton icon={<FileOutput size={18} />} label={showNavExportMenu ? '' : text('导出', 'Export', 'Экспорт')} text={sidebarOpen ? text('导出', 'Export', 'Экспорт') : undefined} tooltipSide="right" onClick={() => setShowNavExportMenu(!showNavExportMenu)} className="nav-item" />
                             {showNavExportMenu && createPortal(
                                 <>
                                     <div style={{ position: 'fixed', inset: 0, zIndex: 9990 }} onClick={() => setShowNavExportMenu(false)} />
@@ -2835,7 +2864,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                                         background: 'var(--bg-card)', border: '1px solid var(--border-light)',
                                         borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)', padding: 4,
                                     }}>
-                                        <div style={{ padding: '4px 10px', fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>导出本章</div>
+                                        <div style={{ padding: '4px 10px', fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>{text('导出本章', 'Export Current Chapter', 'Экспорт текущей главы')}</div>
                                         {activeChapterId && chapters.find(c => c.id === activeChapterId) ? [
                                             { label: 'TXT', icon: <FileText size={14} />, fn: () => exportWorkAsTxt([chapters.find(c => c.id === activeChapterId)], chapters.find(c => c.id === activeChapterId).title) },
                                             { label: 'Markdown', icon: <FileType size={14} />, fn: () => exportWorkAsMarkdown([chapters.find(c => c.id === activeChapterId)], chapters.find(c => c.id === activeChapterId).title) },
@@ -2844,9 +2873,9 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                                             { label: 'PDF', icon: <Printer size={14} />, fn: () => exportWorkAsPdf([chapters.find(c => c.id === activeChapterId)], chapters.find(c => c.id === activeChapterId).title) },
                                         ].map(item => (
                                             <button key={item.label} className="dropdown-item" style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={async () => { await item.fn(); setShowNavExportMenu(false); showToast(t('sidebar.exportedChapter'), 'success'); }}>{item.icon} {item.label}</button>
-                                        )) : <div style={{ padding: '6px 10px', fontSize: 12, color: 'var(--text-muted)' }}>请先选择章节</div>}
+                                        )) : <div style={{ padding: '6px 10px', fontSize: 12, color: 'var(--text-muted)' }}>{text('请先选择章节', 'Select a chapter first', 'Сначала выберите главу')}</div>}
                                         <div style={{ height: 1, background: 'var(--border-light)', margin: '4px 0' }} />
-                                        <button className="dropdown-item" style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => { setShowNavExportMenu(false); setShowExportModal(true); }}><Library size={14} /> 导出更多</button>
+                                        <button className="dropdown-item" style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => { setShowNavExportMenu(false); setShowExportModal(true); }}><Library size={14} /> {text('导出更多', 'More Export Options', 'Другие варианты экспорта')}</button>
                                     </div>
                                 </>,
                                 document.body
@@ -2861,13 +2890,13 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                                     : cloudSyncStatus?.syncing ? <RefreshCw size={18} className="spin" />
                                     : <Cloud size={18} />}
                                 label={cloudAuthUser
-                                    ? (cloudSyncStatus?.syncing ? '同步中...'
-                                        : cloudSyncStatus?.pending > 0 ? `${cloudSyncStatus.pending} 项待同步`
-                                        : cloudSyncStatus?.idle ? '自动同步已暂停'
-                                        : cloudSyncStatus?.lastSync ? `已同步 · ${new Date(cloudSyncStatus.lastSync).toLocaleTimeString()}`
-                                        : '云同步')
-                                    : '同步方式与设置'}
-                                text={sidebarOpen ? '同步' : undefined}
+                                    ? (cloudSyncStatus?.syncing ? text('同步中...', 'Syncing...', 'Синхронизация...')
+                                        : cloudSyncStatus?.pending > 0 ? text(`${cloudSyncStatus.pending} 项待同步`, `${cloudSyncStatus.pending} pending`, `Ожидает: ${cloudSyncStatus.pending}`)
+                                        : cloudSyncStatus?.idle ? text('自动同步已暂停', 'Auto sync paused', 'Автосинхронизация приостановлена')
+                                        : cloudSyncStatus?.lastSync ? text(`已同步 · ${new Date(cloudSyncStatus.lastSync).toLocaleTimeString()}`, `Synced · ${new Date(cloudSyncStatus.lastSync).toLocaleTimeString()}`, `Синхронизировано · ${new Date(cloudSyncStatus.lastSync).toLocaleTimeString()}`)
+                                        : text('云同步', 'Cloud Sync', 'Облачная синхронизация'))
+                                    : text('同步方式与设置', 'Sync Method and Settings', 'Способ синхронизации и настройки')}
+                                text={sidebarOpen ? text('同步', 'Sync', 'Синхр.') : undefined}
                                 tooltipSide="right"
                                 onClick={async () => {
                                     if (!firebaseAvailable || !cloudAuthUser) {
@@ -2883,6 +2912,8 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                                 <SyncMenuPortal 
                                     anchorRef={syncMenuAnchorRef} 
                                     t={t}
+                                    text={text}
+                                    showToast={showToast}
                                     cloudinarySyncStatus={cloudSyncStatus} 
                                     setShowSyncMenu={setShowSyncMenu} 
                                     setShowSyncConfirmModal={setShowSyncConfirmModal} 
@@ -2906,16 +2937,16 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                     <>
                     {/* ===== 文档分页 ===== */}
                 <div className="gdocs-section-header">
-                    <span className="gdocs-section-title">文档分页</span>
+                    <span className="gdocs-section-title">{text('文档分页', 'Document Pages', 'Страницы документа')}</span>
                     <div style={{ display: 'flex', gap: '2px' }}>
-                        <Tooltip content="章节概要总览">
+                        <Tooltip content={text('章节概要总览', 'Chapter Synopsis Overview', 'Обзор синопсисов глав')}>
                             <button
                                 className="gdocs-section-add gdocs-section-summary-btn"
                                 onClick={handleOpenSynopsisOverview}
-                                aria-label="章节概要总览"
+                                aria-label={text('章节概要总览', 'Chapter Synopsis Overview', 'Обзор синопсисов глав')}
                             >
                                 <FileText size={13} />
-                                <span>概要</span>
+                                <span>{text('概要', 'Synopsis', 'Синопсис')}</span>
                             </button>
                         </Tooltip>
                         <Tooltip content={t('sidebar.renumber') || '重新编号'}><button className="gdocs-section-add" onClick={handleRenumber} aria-label={t('sidebar.renumber') || '重新编号'}><ListOrdered size={14} /></button></Tooltip>
@@ -3050,22 +3081,22 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                                                 <span className="gdocs-tab-title">
                                                     {ch.title}
                                                     {ch.numberingIgnored && (
-                                                        <span className="gdocs-special-badge" title="特殊章节：重排编号时忽略">特殊</span>
+                                                        <span className="gdocs-special-badge" title={text('特殊章节：重排编号时忽略', 'Special chapter: ignored when renumbering', 'Специальная глава: игнорируется при перенумерации')}>{text('特殊', 'Special', 'Особая')}</span>
                                                     )}
                                                     {hasChapterSynopsis(ch) && (
-                                                        <span className="gdocs-synopsis-badge" title="已有章节概要">概要</span>
+                                                        <span className="gdocs-synopsis-badge" title={text('已有章节概要', 'Chapter synopsis exists', 'Синопсис главы уже есть')}>{text('概要', 'Synopsis', 'Синопсис')}</span>
                                                     )}
                                                 </span>
                                                 {(ch.wordCount || 0) > 0 && (
                                                     <span style={{ display: 'block', fontSize: '10px', color: 'var(--text-muted)', marginTop: '1px' }}>
-                                                        {ch.wordCount.toLocaleString()}字 · ~{estimateTokens((ch.content || '').replace(/<[^>]*>/g, '')).toLocaleString()} tokens
+                                                        {ch.wordCount.toLocaleString()}{text('字', ' words', ' слов')}
                                                     </span>
                                                 )}
                                             </span>
                                             <div className="gdocs-tab-actions">
                                                 <button
                                                     className={`gdocs-tab-action-btn synopsis${hasChapterSynopsis(ch) ? ' active' : ''}`}
-                                                    title={hasChapterSynopsis(ch) ? '编辑章节概要' : '添加章节概要'}
+                                                    title={hasChapterSynopsis(ch) ? text('编辑章节概要', 'Edit chapter synopsis', 'Изменить синопсис главы') : text('添加章节概要', 'Add chapter synopsis', 'Добавить синопсис главы')}
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         handleOpenSynopsis(ch.id);
@@ -3073,7 +3104,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                                                 ><FileText size={14} /></button>
                                                 <button
                                                     className="gdocs-tab-action-btn"
-                                                    title="在此后插入章节"
+                                                    title={text('在此后插入章节', 'Insert chapter after this', 'Вставить главу после этой')}
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         handleCreateChapterAfter(ch.id);
@@ -3081,12 +3112,12 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                                                 ><Plus size={14} /></button>
                                                 <button
                                                     className={`gdocs-tab-action-btn special${ch.numberingIgnored ? ' active' : ''}`}
-                                                    title={ch.numberingIgnored ? '取消特殊章节标记' : '设为特殊章节，重排编号时忽略'}
+                                                    title={ch.numberingIgnored ? text('取消特殊章节标记', 'Remove special chapter marker', 'Убрать метку специальной главы') : text('设为特殊章节，重排编号时忽略', 'Mark as special chapter, ignored when renumbering', 'Отметить как специальную главу, игнорировать при перенумерации')}
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         handleToggleSpecialChapter(ch.id);
                                                     }}
-                                                >特</button>
+                                                >{text('特', 'S', 'С')}</button>
                                                 <button
                                                     className="gdocs-tab-action-btn"
                                                     title={t('sidebar.contextRename')}
@@ -3122,7 +3153,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                                                 <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.text}</span>
                                                 {headingStats[idx] && headingStats[idx].words > 0 && (
                                                     <span className="gdocs-outline-stats">
-                                                        {headingStats[idx].words.toLocaleString()}字 · ~{headingStats[idx].tokens.toLocaleString()}t
+                                                        {headingStats[idx].words.toLocaleString()}字
                                                     </span>
                                                 )}
                                             </div>
@@ -3159,7 +3190,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                         padding: '28px', maxWidth: 360, width: '90%', borderRadius: 'var(--radius-lg)',
                         display: 'flex', flexDirection: 'column', gap: 16,
                     }}>
-                        <h3 style={{ margin: 0, fontSize: 16, textAlign: 'center' }}>社区与源码</h3>
+                        <h3 style={{ margin: 0, fontSize: 16, textAlign: 'center' }}>{text('社区与源码', 'Community & Source', 'Сообщество и исходный код')}</h3>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                             <a href="https://github.com/YuanShiJiLoong/author" target="_blank" rel="noopener noreferrer" onClick={() => setShowGitPopup(false)} style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: 'var(--text-primary)', fontSize: 14, padding: '10px 14px', borderRadius: 'var(--radius-md)', background: 'var(--bg-secondary)', transition: 'background 0.15s' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-secondary)'}>
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" /></svg>
@@ -3168,19 +3199,19 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                             </a>
                             <a href="https://gitee.com/yuanshijilong/author" target="_blank" rel="noopener noreferrer" onClick={() => setShowGitPopup(false)} style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: 'var(--text-primary)', fontSize: 14, padding: '10px 14px', borderRadius: 'var(--radius-md)', background: 'var(--bg-secondary)', transition: 'background 0.15s' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-secondary)'}>
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M11.984 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.016 0zm6.09 5.333c.328 0 .593.266.592.593v1.482a.594.594 0 0 1-.593.592H9.777c-.982 0-1.778.796-1.778 1.778v5.48c0 .327.266.592.593.592h5.574c.327 0 .593-.265.593-.593v-1.482a.594.594 0 0 0-.593-.592h-3.408a.43.43 0 0 1-.43-.43v-1.455a.43.43 0 0 1 .43-.43h5.91c.329 0 .594.266.594.593v5.78a2.133 2.133 0 0 1-2.133 2.134H5.926a.593.593 0 0 1-.593-.593V9.778a4.444 4.444 0 0 1 4.444-4.444h8.297z" /></svg>
-                                <span style={{ flex: 1 }}>Gitee（国内镜像）</span>
+                                <span style={{ flex: 1 }}>{text('Gitee（国内镜像）', 'Gitee (China mirror)', 'Gitee (зеркало в Китае)')}</span>
                                 <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>→</span>
                             </a>
                             <div style={{ height: 1, background: 'var(--border-light)', margin: '4px 0' }} />
                             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 'var(--radius-md)', background: 'var(--bg-secondary)' }}>
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12.003 2C6.477 2 2 6.477 2 12.003c0 2.39.84 4.584 2.236 6.31l-.924 3.468 3.592-.96A9.95 9.95 0 0 0 12.003 22C17.52 22 22 17.523 22 12.003S17.52 2 12.003 2zm4.97 13.205c-.234.657-1.378 1.257-1.902 1.313-.525.06-1.003.234-3.38-.703-2.86-1.13-4.68-4.07-4.82-4.26-.14-.19-1.15-1.53-1.15-2.92s.728-2.072.986-2.354c.258-.282.563-.352.75-.352s.375.004.54.01c.173.006.405-.066.633.483.234.563.797 1.947.867 2.088.07.14.117.305.023.492-.094.188-.14.305-.28.468-.14.164-.296.366-.422.492-.14.14-.286.292-.123.571.164.28.727 1.2 1.562 1.944 1.073.955 1.977 1.252 2.258 1.393.28.14.445.117.608-.07.164-.188.703-.82.89-1.102.188-.28.375-.234.633-.14.258.093 1.632.77 1.912.91.28.14.468.21.538.328.07.117.07.68-.164 1.336z" /></svg>
-                                <span style={{ flex: 1, fontSize: 14 }}>QQ群：1087016949</span>
-                                <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => { navigator.clipboard?.writeText('1087016949'); showToast('群号已复制', 'success'); }}>复制群号</button>
-                                <a href="https://qm.qq.com/q/wjRDkotw0E" target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-sm" style={{ padding: '4px 8px', fontSize: 11, textDecoration: 'none' }} onClick={() => setShowGitPopup(false)}>直达</a>
+                                <span style={{ flex: 1, fontSize: 14 }}>{text('QQ群：1087016949', 'QQ Group: 1087016949', 'QQ-группа: 1087016949')}</span>
+                                <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => { navigator.clipboard?.writeText('1087016949'); showToast(text('群号已复制', 'Group ID copied', 'Номер группы скопирован'), 'success'); }}>{text('复制群号', 'Copy ID', 'Копировать ID')}</button>
+                                <a href="https://qm.qq.com/q/wjRDkotw0E" target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-sm" style={{ padding: '4px 8px', fontSize: 11, textDecoration: 'none' }} onClick={() => setShowGitPopup(false)}>{text('直达', 'Open', 'Открыть')}</a>
                             </div>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'center' }}>
-                            <button className="btn btn-ghost btn-sm" onClick={() => setShowGitPopup(false)}>关闭</button>
+                            <button className="btn btn-ghost btn-sm" onClick={() => setShowGitPopup(false)}>{text('关闭', 'Close', 'Закрыть')}</button>
                         </div>
                     </div>
                 </div>
@@ -3195,10 +3226,10 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                         {chapters.find(c => c.id === contextMenu.id)?.type !== 'volume' && (
                             <>
                                 <button className="dropdown-item" onClick={() => { handleOpenSynopsis(contextMenu.id); setContextMenu(null); }}>
-                                    章节概要
+                                    {text('章节概要', 'Chapter Synopsis', 'Синопсис главы')}
                                 </button>
                                 <button className="dropdown-item" onClick={() => { handleToggleSpecialChapter(contextMenu.id); setContextMenu(null); }}>
-                                    {chapters.find(c => c.id === contextMenu.id)?.numberingIgnored ? '取消特殊章节' : '设为特殊章节'}
+                                    {chapters.find(c => c.id === contextMenu.id)?.numberingIgnored ? text('取消特殊章节', 'Unset Special Chapter', 'Снять особую главу') : text('设为特殊章节', 'Set as Special Chapter', 'Сделать особой главой')}
                                 </button>
                             </>
                         )}
@@ -3221,6 +3252,8 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                     onApplyContext={handleApplySynopsisContext}
                     showToast={showToast}
                     onClose={() => setSynopsisOverviewModal(null)}
+                    text={text}
+                    language={language}
                 />
             )}
             {/* ===== 导入作品弹窗 ===== */}
@@ -3312,7 +3345,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                             const { persistSet } = await import('../lib/persistence');
                             const { createSnapshot } = await import('../lib/snapshots');
 
-                            await createSnapshot('从云端同步前的备份', 'manual', { syncLatestToCloud: false });
+                            await createSnapshot(text('从云端同步前的备份', 'Backup before cloud sync', 'Резервная копия перед синхронизацией из облака'), 'manual', { syncLatestToCloud: false });
                             
                             window._isAppForcePulling = true;
                             const localSet = async (key, value) => {
@@ -3326,14 +3359,14 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                             
                             const count = await forcePullFromCloud(localSet);
                             window._isAppForcePulling = false;
-                            showToast(`成功覆盖了 ${count} 项本地数据，即将刷新以应用更改...`, 'success');
+                            showToast(text(`成功覆盖了 ${count} 项本地数据，即将刷新以应用更改...`, `Overwrote ${count} local items. Refreshing to apply changes...`, `Перезаписано локальных элементов: ${count}. Обновление для применения изменений...`), 'success');
                             setTimeout(() => {
                                 window.location.reload();
                             }, 1500);
                         } catch (err) {
                             window._isAppForcePulling = false;
                             window._isForcePullingBypass = false;
-                            showToast(`拉取失败: ${err.message}`, 'error');
+                            showToast(text(`拉取失败: ${err.message}`, `Pull failed: ${err.message}`, `Загрузка не удалась: ${err.message}`), 'error');
                         }
                     }}
                 />

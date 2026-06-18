@@ -8,6 +8,20 @@ import { estimateTokenCount } from 'tokenx';
 import { buildChapterSynopsisBriefText, buildChapterSynopsisText, hasChapterSynopsis, stripChapterHtml } from './chapter-synopsis';
 import { buildChapterMemoryGroupText, getChapterMemoryGroups, hasChapterMemoryGroup } from './chapter-memory-groups';
 
+function getRuntimeLanguage(explicitLanguage) {
+    if (explicitLanguage) return explicitLanguage;
+    if (typeof localStorage !== 'undefined') {
+        return localStorage.getItem('author-lang') || 'zh';
+    }
+    return 'zh';
+}
+
+function promptText(language, zh, en, ru = en) {
+    if (language === 'en') return en;
+    if (language === 'ru') return ru || en;
+    return zh;
+}
+
 // ==================== Graph RAG 智能推荐 ====================
 
 /**
@@ -93,6 +107,8 @@ const PREVIOUS_CHAPTER_ANCHOR_ID = 'chapter-previous-anchor';
 export async function getContextItems(activeChapterId, chaptersOverride, workId = null) {
     const settings = getProjectSettings();
     const targetWorkId = workId || getActiveWorkId();
+    const language = getRuntimeLanguage();
+    const tr = (zh, en, ru = en) => promptText(language, zh, en, ru);
     const chapters = chaptersOverride || await getChapters(targetWorkId);
     const currentIndex = chapters.findIndex(ch => ch.id === activeChapterId);
 
@@ -104,13 +120,13 @@ export async function getContextItems(activeChapterId, chaptersOverride, workId 
 
     // 分类映射
     const categoryMap = {
-        rules: { group: '写作规则', builder: (ns) => buildRulesContext(ns) },
-        character: { group: '人物设定', builder: (ns) => buildCharactersContext(ns) },
-        location: { group: '空间/地点', builder: (ns) => buildLocationsContext(ns, nodes) },
-        world: { group: '世界观', builder: (ns) => buildWorldContext(ns, nodes) },
-        object: { group: '物品/道具', builder: (ns) => buildObjectsContext(ns, nodes) },
-        plot: { group: '大纲', builder: (ns) => buildPlotContext(ns, nodes) },
-        custom: { group: '自定义', builder: (ns) => buildCustomContext(ns, nodes) },
+        rules: { group: tr('写作规则', 'Writing Rules', 'Правила письма'), builder: (ns) => buildRulesContext(ns) },
+        character: { group: tr('人物设定', 'Characters', 'Персонажи'), builder: (ns) => buildCharactersContext(ns) },
+        location: { group: tr('空间/地点', 'Places', 'Места'), builder: (ns) => buildLocationsContext(ns, nodes) },
+        world: { group: tr('世界观', 'Worldbuilding', 'Мир'), builder: (ns) => buildWorldContext(ns, nodes) },
+        object: { group: tr('物品/道具', 'Items / Props', 'Предметы / реквизит'), builder: (ns) => buildObjectsContext(ns, nodes) },
+        plot: { group: tr('大纲', 'Outline', 'План'), builder: (ns) => buildPlotContext(ns, nodes) },
+        custom: { group: tr('自定义', 'Custom', 'Пользовательское'), builder: (ns) => buildCustomContext(ns, nodes) },
     };
 
     // 设定条目
@@ -123,7 +139,7 @@ export async function getContextItems(activeChapterId, chaptersOverride, workId 
                 items.push({
                     id: `empty-${cat}`,
                     group: config.group,
-                    name: '（暂无条目）',
+                    name: tr('（暂无条目）', '(No entries yet)', '(Пока нет записей)'),
                     tokens: 0,
                     category: cat,
                     enabled: false,
@@ -152,8 +168,8 @@ export async function getContextItems(activeChapterId, chaptersOverride, workId 
     if (bookInfo && (bookInfo.title || bookInfo.author || bookInfo.genre || bookInfo.synopsis)) {
         items.push({
             id: 'bookinfo',
-            group: '作品信息',
-            name: bookInfo.title || '作品信息',
+            group: tr('作品信息', 'Book Info', 'Информация о произведении'),
+            name: bookInfo.title || tr('作品信息', 'Book Info', 'Информация о произведении'),
             tokens: estimateTokens(buildBookInfoContext(bookInfo)),
             category: 'bookInfo',
             enabled: true,
@@ -171,8 +187,8 @@ export async function getContextItems(activeChapterId, chaptersOverride, workId 
     for (const group of relevantMemoryGroups) {
         items.push({
             id: `memory-group-${group.id}`,
-            group: '章节',
-            name: `${group.name || '未命名记忆组'}（自定义多章节概要）`,
+            group: tr('章节', 'Chapters', 'Главы'),
+            name: `${group.name || tr('未命名记忆组', 'Untitled Memory Group', 'Безымянная группа памяти')}${tr('（自定义多章节概要）', ' (custom multi-chapter synopsis)', ' (пользовательский многочастный синопсис)')}`,
             tokens: estimateTokens(buildMemoryGroupContext(group, chapters)),
             category: 'chapterMemoryGroup',
             enabled: group.enabledByDefault,
@@ -183,7 +199,7 @@ export async function getContextItems(activeChapterId, chaptersOverride, workId 
     for (const group of olderGroups) {
         items.push({
             id: group.id,
-            group: '章节',
+            group: tr('章节', 'Chapters', 'Главы'),
             name: group.label,
             tokens: estimateTokens(buildChapterGroupContext(group)),
             category: 'chapterGroup',
@@ -194,8 +210,12 @@ export async function getContextItems(activeChapterId, chaptersOverride, workId 
     if (previousEntry) {
         items.push({
             id: PREVIOUS_CHAPTER_ANCHOR_ID,
-            group: '章节',
-            name: `第${previousEntry.ordinal}章「${previousEntry.chapter.title}」（上一章原文·文风锚点）`,
+            group: tr('章节', 'Chapters', 'Главы'),
+            name: tr(
+                `第${previousEntry.ordinal}章「${previousEntry.chapter.title}」（上一章原文·文风锚点）`,
+                `Chapter ${previousEntry.ordinal} "${previousEntry.chapter.title}" (previous chapter text / style anchor)`,
+                `Глава ${previousEntry.ordinal} "${previousEntry.chapter.title}" (текст предыдущей главы / стилевой ориентир)`
+            ),
             tokens: estimateTokens(buildPreviousChapterAnchorContext(chapters, currentIndex)),
             category: 'previousChapterAnchor',
             enabled: true,
@@ -211,8 +231,8 @@ export async function getContextItems(activeChapterId, chaptersOverride, workId 
             // 当前章节
             items.push({
                 id: `chapter-current`,
-                group: '章节',
-                name: `${ch.title}（当前）`,
+                group: tr('章节', 'Chapters', 'Главы'),
+                name: `${ch.title}${tr('（当前）', ' (current)', ' (текущая)')}`,
                 tokens: estimateTokens(buildCurrentContext(ch, getChapterOrdinal(chapters, i), getRealChapterCount(chapters))),
                 category: 'currentChapter',
                 enabled: true,
@@ -221,8 +241,8 @@ export async function getContextItems(activeChapterId, chaptersOverride, workId 
             if (ch.id === previousAnchorChapterId) return;
             items.push({
                 id: `chapter-${ch.id}`,
-                group: '章节',
-                name: `${ch.title}${hasChapterSynopsis(ch) ? '（概要）' : ''}${i > currentIndex ? '（后续）' : ''}`,
+                group: tr('章节', 'Chapters', 'Главы'),
+                name: `${ch.title}${hasChapterSynopsis(ch) ? tr('（概要）', ' (synopsis)', ' (синопсис)') : ''}${i > currentIndex ? tr('（后续）', ' (later)', ' (следующая)') : ''}`,
                 tokens: estimateTokens(buildChapterReferenceContext(ch, getChapterOrdinal(chapters, i))),
                 category: 'chapter',
                 enabled: false, // 默认由多章节概要 + 上一章原文锚点接管，需要精查时再手动勾选
@@ -516,7 +536,9 @@ export async function getContextPreview(activeChapterId, selectedText) {
 /**
  * 将上下文编译成系统提示词
  */
-export function compileSystemPrompt(context, mode) {
+export function compileSystemPrompt(context, mode, options = {}) {
+    const language = getRuntimeLanguage(options.language);
+    const tr = (zh, en, ru) => promptText(language, zh, en, ru);
     const stablePrefixSections = [];
     const dynamicSections = [];
 
@@ -524,51 +546,63 @@ export function compileSystemPrompt(context, mode) {
     const settings = getProjectSettings();
     const rolePrompt = settings.customPrompt?.trim()
         ? settings.customPrompt.trim()
-        : getModeRolePrompt(context.writingMode);
+        : getModeRolePrompt(context.writingMode, language);
     stablePrefixSections.push(rolePrompt);
 
     if (context.bookInfo) {
-        stablePrefixSections.push(`【作品信息】\n${context.bookInfo}`);
+        stablePrefixSections.push(`${tr('【作品信息】', '[Book Info]', '[Информация о произведении]')}\n${context.bookInfo}`);
     }
     if (context.previousChapters) {
-        stablePrefixSections.push(`【前文概要】\n以下是较早章节的多章节概要，续写时必须保持情节、人物与设定连续：\n${context.previousChapters}`);
+        stablePrefixSections.push(`${tr(
+            '【前文概要】\n以下是较早章节的多章节概要，续写时必须保持情节、人物与设定连续：',
+            '[Previous Context]\nThese are multi-chapter summaries from earlier chapters. Maintain continuity of plot, characters, and settings when continuing:',
+            '[Предыдущий контекст]\nЭто многочастные краткие изложения предыдущих глав. При продолжении сохраняй непрерывность сюжета, персонажей и сеттинга:'
+        )}\n${context.previousChapters}`);
     }
 
     // 在 chat 模式下注入设定索引，让 AI 知道所有条目。索引通常比勾选详情更稳定，前置有利于 DeepSeek 前缀缓存。
     if (mode === 'chat' && context.settingsIndex) {
-        stablePrefixSections.push(`【设定集条目索引】\n以下是当前作品的全部设定条目列表（包括已禁用的），当用户询问"有哪些角色/设定"或要求查找、删除条目时，请参考此列表：\n${context.settingsIndex}`);
+        stablePrefixSections.push(`${tr(
+            '【设定集条目索引】\n以下是当前作品的全部设定条目列表（包括已禁用的），当用户询问"有哪些角色/设定"或要求查找、删除条目时，请参考此列表：',
+            '[Lore Entry Index]\nThis is the complete list of lore entries for the current work, including disabled entries. Refer to it when the user asks what characters/settings exist or asks to find/delete entries:',
+            '[Индекс лора]\nЭто полный список записей лора текущего произведения, включая отключённые записи. Используй его, когда пользователь спрашивает о персонажах/настройках или просит найти/удалить записи:'
+        )}\n${context.settingsIndex}`);
     }
     if (context.previousChapterAnchor) {
-        stablePrefixSections.push(`【上一章原文——文风与承接锚点】\n以下内容位于稳定前文块的末尾，用于继承最近章节的语言节奏、叙事密度和情绪余韵。不要重复上一章剧情，只延续其风格与承接关系：\n${context.previousChapterAnchor}`);
+        stablePrefixSections.push(`${tr(
+            '【上一章原文——文风与承接锚点】\n以下内容位于稳定前文块的末尾，用于继承最近章节的语言节奏、叙事密度和情绪余韵。不要重复上一章剧情，只延续其风格与承接关系：',
+            '[Previous Chapter Anchor: Style and Continuity]\nThis sits at the end of the stable context block so you can inherit the recent chapter\'s rhythm, narrative density, and emotional aftertaste. Do not repeat the previous chapter; only continue its style and continuity:',
+            '[Якорь предыдущей главы: стиль и преемственность]\nЭтот блок стоит в конце стабильного контекста, чтобы сохранить ритм, плотность повествования и эмоциональный след последней главы. Не повторяй сюжет предыдущей главы, продолжай только стиль и связь:'
+        )}\n${context.previousChapterAnchor}`);
     }
 
     if (context.characters) {
-        dynamicSections.push(`【人物档案】\n以下是本作品中的重要角色，写作时必须严格遵循他们的设定：\n${context.characters}`);
+        dynamicSections.push(`${tr('【人物档案】\n以下是本作品中的重要角色，写作时必须严格遵循他们的设定：', '[Characters]\nImportant characters in this work. Follow their settings strictly while writing:', '[Персонажи]\nВажные персонажи произведения. Строго соблюдай их настройки при письме:')}\n${context.characters}`);
     }
     if (context.locations) {
-        dynamicSections.push(`【空间/地点】\n以下是本作品中的重要场所：\n${context.locations}`);
+        dynamicSections.push(`${tr('【空间/地点】\n以下是本作品中的重要场所：', '[Places]\nImportant places in this work:', '[Места]\nВажные места произведения:')}\n${context.locations}`);
     }
     if (context.worldbuilding) {
-        dynamicSections.push(`【世界观设定】\n以下是本作品的世界观，所有内容必须在这个框架内：\n${context.worldbuilding}`);
+        dynamicSections.push(`${tr('【世界观设定】\n以下是本作品的世界观，所有内容必须在这个框架内：', '[Worldbuilding]\nWorldbuilding for this work. Keep all content within this framework:', '[Мир]\nМир произведения. Всё содержание должно оставаться в этой рамке:')}\n${context.worldbuilding}`);
     }
     if (context.objects) {
-        dynamicSections.push(`【物品/道具】\n以下是本作品中的重要物品：\n${context.objects}`);
+        dynamicSections.push(`${tr('【物品/道具】\n以下是本作品中的重要物品：', '[Items / Props]\nImportant items in this work:', '[Предметы / реквизит]\nВажные предметы произведения:')}\n${context.objects}`);
     }
     if (context.plotOutline) {
-        dynamicSections.push(`【剧情大纲】\n${context.plotOutline}`);
+        dynamicSections.push(`${tr('【剧情大纲】', '[Plot Outline]', '[План сюжета]')}\n${context.plotOutline}`);
     }
     if (context.writingRules) {
-        dynamicSections.push(`【写作规则——必须严格遵守】\n${context.writingRules}`);
+        dynamicSections.push(`${tr('【写作规则——必须严格遵守】', '[Writing Rules: Must Follow]', '[Правила письма: строго соблюдать]')}\n${context.writingRules}`);
     }
     if (context.customSettings) {
-        dynamicSections.push(`【补充设定】\n${context.customSettings}`);
+        dynamicSections.push(`${tr('【补充设定】', '[Additional Settings]', '[Дополнительные настройки]')}\n${context.customSettings}`);
     }
     if (context.currentChapter) {
-        dynamicSections.push(`【当前写作位置】\n${context.currentChapter}`);
+        dynamicSections.push(`${tr('【当前写作位置】', '[Current Writing Position]', '[Текущая позиция письма]')}\n${context.currentChapter}`);
     }
 
-    const modeInstruction = getModeInstruction(mode);
-    dynamicSections.push(`【你的任务】\n${modeInstruction}`);
+    const modeInstruction = getModeInstruction(mode, language);
+    dynamicSections.push(`${tr('【你的任务】', '[Your Task]', '[Твоя задача]')}\n${modeInstruction}`);
 
     return [...stablePrefixSections, ...dynamicSections].join('\n\n---\n\n');
 }
@@ -576,35 +610,37 @@ export function compileSystemPrompt(context, mode) {
 /**
  * 构建用户提示词
  */
-export function compileUserPrompt(mode, text, instruction) {
+export function compileUserPrompt(mode, text, instruction, options = {}) {
+    const language = getRuntimeLanguage(options.language);
+    const tr = (zh, en, ru) => promptText(language, zh, en, ru);
     switch (mode) {
         case 'continue':
             if (!text || !text.trim()) {
                 return instruction
-                    ? `请根据以下要求开始创作新内容：\n要求：${instruction}`
-                    : '请根据设定集信息，开始撰写新的章节内容。';
+                    ? `${tr('请根据以下要求开始创作新内容：\n要求：', 'Start writing new content according to the following requirement:\nRequirement: ', 'Начни писать новый текст по следующему требованию:\nТребование: ')}${instruction}`
+                    : tr('请根据设定集信息，开始撰写新的章节内容。', 'Start drafting new chapter content based on the lore and context.', 'Начни писать новую главу на основе лора и контекста.');
             }
             return instruction
-                ? `请续写以下内容，保持风格和情节的连贯性：\n要求：${instruction}\n\n「${text}」`
-                : `请续写以下内容，保持风格和情节的连贯性：\n\n「${text}」`;
+                ? `${tr('请续写以下内容，保持风格和情节的连贯性：\n要求：', 'Continue the following text while preserving style and plot continuity:\nRequirement: ', 'Продолжи следующий текст, сохраняя стиль и сюжетную непрерывность:\nТребование: ')}${instruction}\n\n"${text}"`
+                : `${tr('请续写以下内容，保持风格和情节的连贯性：', 'Continue the following text while preserving style and plot continuity:', 'Продолжи следующий текст, сохраняя стиль и сюжетную непрерывность:')}\n\n"${text}"`;
         case 'rewrite':
             return instruction
-                ? `按照以下要求改写文本：\n要求：${instruction}\n\n原文：\n「${text}」`
-                : `请润色改写以下文本，提升文学质量：\n\n「${text}」`;
+                ? `${tr('按照以下要求改写文本：\n要求：', 'Rewrite the text according to the following requirement:\nRequirement: ', 'Перепиши текст по следующему требованию:\nТребование: ')}${instruction}\n\n${tr('原文：', 'Original:', 'Исходный текст:')}\n"${text}"`
+                : `${tr('请润色改写以下文本，提升文学质量：', 'Polish and rewrite the following text to improve its literary quality:', 'Отредактируй и перепиши следующий текст, повысив его литературное качество:')}\n\n"${text}"`;
         case 'expand':
-            return `请扩写以下文本，加入更丰富的细节和描写（约为原文1.5-2倍）：\n\n「${text}」`;
+            return `${tr('请扩写以下文本，加入更丰富的细节和描写（约为原文1.5-2倍）：', 'Expand the following text with richer detail and description, about 1.5-2x the original length:', 'Расширь следующий текст, добавив больше деталей и описаний, примерно в 1,5-2 раза длиннее оригинала:')}\n\n"${text}"`;
         case 'condense':
-            return `请精简以下文本，保留核心信息，删除冗余：\n\n「${text}」`;
+            return `${tr('请精简以下文本，保留核心信息，删除冗余：', 'Condense the following text, preserving the core information and removing redundancy:', 'Сократи следующий текст, сохранив главное и убрав лишнее:')}\n\n"${text}"`;
         case 'dialogue':
-            return `请为以下场景优化或续写人物对话，对话须符合各角色的说话风格：\n\n「${text}」`;
+            return `${tr('请为以下场景优化或续写人物对话，对话须符合各角色的说话风格：', "Optimize or continue the character dialogue for the following scene. Dialogue must match each character's voice:", 'Оптимизируй или продолжи диалог персонажей для следующей сцены. Реплики должны соответствовать голосу каждого персонажа:')}\n\n"${text}"`;
         case 'chat':
             // 自由对话模式：instruction 是用户的问题，text 可能是选中文本
             if (text && instruction) {
-                return `${instruction}\n\n参考文本：\n「${text}」`;
+                return `${instruction}\n\n${tr('参考文本：', 'Reference text:', 'Справочный текст:')}\n"${text}"`;
             }
-            return instruction || text || '请根据设定集信息回答我的问题。';
+            return instruction || text || tr('请根据设定集信息回答我的问题。', 'Answer my question based on the lore and context.', 'Ответь на мой вопрос на основе лора и контекста.');
         default:
-            return instruction ? `${instruction}\n\n「${text}」` : text;
+            return instruction ? `${instruction}\n\n"${text}"` : text;
     }
 }
 
@@ -904,7 +940,147 @@ function buildCurrentContext(chapter, chapterNumber, totalChapters) {
     return parts.join('\n');
 }
 
-function getModeInstruction(mode) {
+function getModeInstruction(mode, language = 'zh') {
+    if (language === 'en') {
+        switch (mode) {
+            case 'continue':
+                return `Naturally continue the story based on the previous plot direction and current chapter.
+Requirements:
+- The continuation must be logically consistent with the previous plot and introduce no contradictions
+- Existing characters must match their established personality and voice
+- Scene descriptions must fit the worldbuilding
+- Plot progression must follow the outline direction`;
+            case 'rewrite':
+                return `Polish and rewrite the selected text to improve literary quality.
+Requirements:
+- Preserve the core meaning and events of the original
+- Improve sensory detail and literary expression
+- Keep the rewritten text consistent with character settings and worldbuilding
+- Preserve the narrative point of view`;
+            case 'expand':
+                return `Expand the selected text with richer detail.
+Requirements:
+- Add environment description, sensory detail, and inner activity
+- Deepen emotional expression
+- Keep the expanded text naturally connected to surrounding context
+- Do not change the original plot direction`;
+            case 'condense':
+                return `Condense the selected text and improve pacing.
+Requirements:
+- Remove redundant modifiers and repeated expression
+- Preserve core information and key descriptions
+- Keep the event flow intact`;
+            case 'dialogue':
+                return `Optimize or continue character dialogue.
+Requirements:
+- Each character's dialogue must match their personality and voice
+- Use dialogue to move the plot or reveal relationships
+- Add appropriate action beats and expression details
+- Keep dialogue rhythm natural, alternating short and long lines`;
+            case 'chat':
+                return `Act as a creative writing consultant and answer the author's questions based on the full lore above.
+Requirements:
+- Base answers on existing lore; do not invent unsupported facts
+- If the question touches material not covered by lore, give reasonable suggestions based on existing settings
+- Keep answers clear, concise, and specific
+- Use the user's language unless they ask otherwise
+- When the user asks you to generate, rewrite, continue, or polish prose that can be inserted directly into the editor, put the final prose in its own Markdown code block. Put explanation, critique, and alternatives outside the code block. Do not put settings action blocks inside code fences.
+
+[Lore Management Capability]
+When the user asks you to create, update, or delete lore entries, embed action blocks in your reply:
+
+[SETTINGS_ACTION]
+{"action":"add","category":"character","name":"Character Name","content":{"role":"protagonist","personality":"...","background":"..."}}
+[/SETTINGS_ACTION]
+
+Available actions: "add", "update", "delete". Use name+category or nodeId for update/delete. Prefer name+category because users usually refer to entries by name.
+
+Available categories: "character", "world", "location", "object", "plot", "rules", "custom", "bookInfo".
+If the user wants a subcategory, include "parentName", "parentId", or "path".
+
+Rules:
+- Each action block contains exactly one JSON object
+- Use multiple [SETTINGS_ACTION] blocks for multiple operations
+- content must be a JSON object, not a string or array
+- Equipment, weapons, props, artifacts, and tools should use category "object"
+- Put normal explanatory text before and after action blocks
+- Do not wrap action blocks in code fences
+- If the user says "delete X", output a delete action even if you think deletion may be unwise
+- When characters/settings appear in prose and the user asks, infer and create lore entries from the prose`;
+            default:
+                return 'Follow the author\'s instructions and keep the content consistent with existing lore.';
+        }
+    }
+    if (language === 'ru') {
+        switch (mode) {
+            case 'continue':
+                return `Естественно продолжи историю на основе предыдущего сюжета и текущей главы.
+Требования:
+- Продолжение должно быть логически связано с предыдущим сюжетом и не создавать противоречий
+- Существующие персонажи должны соответствовать своим характерам и голосам
+- Описания сцен должны соответствовать миру
+- Развитие сюжета должно следовать плану`;
+            case 'rewrite':
+                return `Отредактируй и перепиши выбранный текст, повысив литературное качество.
+Требования:
+- Сохрани основной смысл и события оригинала
+- Усиль чувственные детали и литературную выразительность
+- Сохрани соответствие персонажам и миру
+- Сохрани точку зрения повествования`;
+            case 'expand':
+                return `Расширь выбранный текст, добавив больше деталей.
+Требования:
+- Добавь описание окружения, чувственные детали и внутренние переживания
+- Углуби эмоциональное выражение
+- Сохрани естественную связь с соседним контекстом
+- Не меняй исходное направление сюжета`;
+            case 'condense':
+                return `Сократи выбранный текст и улучши темп.
+Требования:
+- Удали избыточные украшения и повторы
+- Сохрани основную информацию и ключевые описания
+- Сохрани целостность событий`;
+            case 'dialogue':
+                return `Оптимизируй или продолжи диалог персонажей.
+Требования:
+- Реплики каждого персонажа должны соответствовать его характеру и голосу
+- Диалог должен двигать сюжет или раскрывать отношения
+- Добавляй уместные действия и детали выражения
+- Поддерживай естественный ритм диалога`;
+            case 'chat':
+                return `Действуй как творческий консультант и отвечай на вопросы автора на основе всего лора выше.
+Требования:
+- Основывай ответы на существующем лоре; не выдумывай неподтверждённые факты
+- Если вопрос касается неописанной области, давай разумные предложения на основе существующих настроек
+- Отвечай ясно, кратко и конкретно
+- Используй язык пользователя, если он не просит иначе
+- Когда пользователь просит создать, переписать, продолжить или отредактировать прозу для вставки в редактор, помести финальный текст в отдельный Markdown-блок кода. Объяснения и варианты оставляй вне блока. Не помещай блоки операций с лором в кодовые блоки.
+
+[Возможности управления лором]
+Когда пользователь просит создать, изменить или удалить записи лора, вставляй блоки действий:
+
+[SETTINGS_ACTION]
+{"action":"add","category":"character","name":"Имя персонажа","content":{"role":"главный герой","personality":"...","background":"..."}}
+[/SETTINGS_ACTION]
+
+Доступные действия: "add", "update", "delete". Для обновления/удаления используй name+category или nodeId. Предпочитай name+category.
+
+Доступные категории: "character", "world", "location", "object", "plot", "rules", "custom", "bookInfo".
+Если нужна подкатегория, добавь "parentName", "parentId" или "path".
+
+Правила:
+- В каждом блоке действий ровно один JSON-объект
+- Для нескольких операций используй несколько [SETTINGS_ACTION] блоков
+- content должен быть JSON-объектом
+- Снаряжение, оружие, реквизит, артефакты и инструменты относятся к category "object"
+- До и после блоков действий должен быть обычный текст
+- Не оборачивай блоки действий в кодовые ограждения
+- Если пользователь говорит "удали X", выведи delete-действие, даже если удаление кажется нежелательным
+- Если персонажи/настройки встречаются в прозе и пользователь просит, извлекай их и создавай записи лора`;
+            default:
+                return 'Выполни инструкции автора и сохрани согласованность с существующим лором.';
+        }
+    }
     switch (mode) {
         case 'continue':
             return `根据前文的情节走向和当前章节的内容，自然地续写故事。
@@ -995,7 +1171,80 @@ function getModeInstruction(mode) {
 
 // ==================== 写作模式角色提示词 ====================
 
-export function getModeRolePrompt(writingMode) {
+export function getModeRolePrompt(writingMode, explicitLanguage) {
+    const language = getRuntimeLanguage(explicitLanguage);
+    if (language === 'en') {
+        const base = `Your core principles:
+- Understand the work's worldbuilding and characters deeply; never write content that contradicts established lore
+- Preserve the author's established style and tone; you are a collaborator, not a replacement
+- Dialogue must reflect each character's distinct voice and personality
+- Prose intended for direct insertion into the editor should follow the user's language and punctuation conventions; JSON, code, and lore action blocks are exceptions
+- Avoid bland AI-sounding words and filler transitions
+- Plot progression should feel natural and align with the outline and character motivations`;
+
+        switch (writingMode) {
+            case 'webnovel':
+                return `You are a seasoned webnovel writer and editor, skilled at serialization pacing and designing satisfying hooks. You are helping the author create a webnovel.
+${base}
+- Prioritize pacing and hook density; each chapter should give readers a reason to keep reading
+- Maintain strict consistency in numeric systems such as levels, attributes, and cooldowns
+- Keep dialogue concise and forceful, moving plot and relationships forward`;
+            case 'traditional':
+                return `You are an experienced literary editor and novelist, deeply familiar with prose aesthetics and thematic construction. You are helping the author create a literary work.
+${base}
+- Use rich sensory description: sight, sound, touch, smell, and taste
+- Weave themes and recurring imagery with layered symbolism
+- Explore character psychology deeply; inner monologue should match the character's unique mind
+- Prioritize prose quality, precision, and beauty`;
+            case 'screenplay':
+                return `You are a professional screenwriter and script consultant, skilled in visual storytelling and dialogue. You are helping the author create a screenplay or script.
+${base}
+- Write visually: describe what the camera can see rather than abstract concepts
+- Dialogue must be colloquial and character-specific; each character needs a distinct voice
+- Maintain scene logic: who is present, where they are, and when it happens
+- Preserve continuity of light, time, and space`;
+            default:
+                return `You are an experienced writer and editor. You are helping the author create a work.
+${base}
+- Use rich sensory description and keep the writing precise and expressive`;
+        }
+    }
+    if (language === 'ru') {
+        const base = `Твои основные принципы:
+- Глубоко понимать мир и персонажей произведения; никогда не писать то, что противоречит установленному лору
+- Сохранять уже сложившийся стиль и тон автора; ты соавтор, а не замена автору
+- Диалоги должны отражать уникальную манеру речи и характер каждого персонажа
+- Проза для прямой вставки в редактор должна следовать языку и пунктуационным привычкам пользователя; JSON, код и блоки действий с лором являются исключениями
+- Избегать пустых и шаблонных AI-переходов
+- Развитие сюжета должно быть естественным и соответствовать плану и мотивациям персонажей`;
+
+        switch (writingMode) {
+            case 'webnovel':
+                return `Ты опытный автор и редактор веб-романов, умеющий держать темп сериализации и создавать сильные крючки. Ты помогаешь автору писать веб-роман.
+${base}
+- Уделяй внимание темпу и плотности крючков; каждая глава должна удерживать читателя
+- Строго поддерживай согласованность числовых систем: уровни, атрибуты, перезарядки и т.п.
+- Делай диалоги краткими и сильными, чтобы они двигали сюжет и отношения`;
+            case 'traditional':
+                return `Ты опытный литературный редактор и романист, хорошо понимающий эстетику прозы и построение тем. Ты помогаешь автору создать литературное произведение.
+${base}
+- Используй богатые чувственные описания: зрение, слух, осязание, запах и вкус
+- Вплетай темы и повторяющиеся образы с многослойной символикой
+- Глубоко раскрывай психологию персонажей; внутренний монолог должен соответствовать их мышлению
+- Ставь на первое место качество, точность и красоту прозы`;
+            case 'screenplay':
+                return `Ты профессиональный сценарист и консультант по сценариям, владеющий визуальным повествованием и диалогом. Ты помогаешь автору писать сценарий.
+${base}
+- Пиши визуально: описывай то, что может увидеть камера, а не абстрактные идеи
+- Диалоги должны быть разговорными и персонажными; у каждого персонажа свой голос
+- Соблюдай логику сцены: кто присутствует, где они находятся и когда это происходит
+- Сохраняй непрерывность света, времени и пространства`;
+            default:
+                return `Ты опытный писатель и редактор. Ты помогаешь автору создать произведение.
+${base}
+- Используй богатые чувственные описания и сохраняй точность и выразительность письма`;
+        }
+    }
     const base = `你的核心原则：
 - 深度理解作品的世界观和人物，绝不写出与设定矛盾的内容
 - 保持作者已建立的写作风格和语气，你是协作者，不是替代者

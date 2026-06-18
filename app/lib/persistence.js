@@ -175,6 +175,7 @@ export async function persistSet(key, value) {
         return;
     }
     if (typeof window === 'undefined') return;
+    const awaitServerWrite = !!window._isForcePullingBypass || !!window._forcePersistAwaitServerWrite;
     ensureUserId();
 
     // 1. 先写浏览器（立即可用）
@@ -182,9 +183,11 @@ export async function persistSet(key, value) {
 
     // 2. 异步写服务端（不阻塞 UI）
     if (isSyncableKey(key) && await checkServerAvailable()) {
-        serverSet(key, value).catch(err => {
+        const serverWrite = serverSet(key, value).catch(err => {
             console.warn('[persist] Server write failed, data saved in browser only:', err.message);
+            if (awaitServerWrite) throw err;
         });
+        if (awaitServerWrite) await serverWrite;
     }
 
     // 3. Firebase 云同步（去抖队列，5分钟批量写入）
@@ -305,12 +308,53 @@ export async function syncFromCloud() {
     return await sync.pullAllFromCloud(persistGet, persistSet);
 }
 
+async function collectSyncableKeysForCloudPush() {
+    const keys = new Set(['author-works-index']);
+    const works = await persistGet('author-works-index');
+    const workIds = new Set(['work-default']);
+
+    if (Array.isArray(works)) {
+        for (const work of works) {
+            if (work?.id) workIds.add(work.id);
+        }
+    }
+
+    if (typeof window !== 'undefined') {
+        const activeWorkId = localStorage.getItem('author-active-work');
+        if (activeWorkId) workIds.add(activeWorkId);
+    }
+
+    for (const workId of workIds) {
+        keys.add(`author-chapters-${workId}`);
+        keys.add(`author-chapter-memory-groups-${workId}`);
+        keys.add(`author-settings-nodes-${workId}`);
+    }
+
+    return Array.from(keys).filter(isSyncableKey);
+}
+
+/**
+ * Firebase 手动“同步到云端”：将本机当前作品图谱全量写入云端。
+ * 这比 flush pending 更适合登录后补传已有本地稿件。
+ */
+export async function syncToCloud() {
+    const sync = await ensureFirebase();
+    if (!sync || !isFirebaseSignedIn()) return 0;
+    const keys = await collectSyncableKeysForCloudPush();
+    return await sync.pushAllToCloud(persistGet, keys);
+}
+
 /**
  * Firebase 退出登录前调用：同步剩余数据 + 停止同步
  */
 export async function stopCloudSync() {
     const sync = await ensureFirebase();
     if (!sync) return;
-    await sync.flushSync(); // 先同步剩余
+    if (isFirebaseSignedIn()) {
+        const keys = await collectSyncableKeysForCloudPush();
+        await sync.pushAllToCloud(persistGet, keys);
+    } else {
+        await sync.flushSync(); // 先同步剩余
+    }
     sync.stopSync();        // 再停止
 }

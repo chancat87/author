@@ -4,6 +4,13 @@ import { Node, mergeAttributes } from '@tiptap/core';
 import { InputRule } from '@tiptap/core';
 import katex from 'katex';
 
+function mathText(zh, en, ru = en) {
+    const lang = typeof window !== 'undefined' ? localStorage.getItem('author-lang') : 'zh';
+    if (lang === 'en') return en;
+    if (lang === 'ru') return ru;
+    return zh;
+}
+
 // ==================== 公式编辑弹窗（居中大框） ====================
 export function openMathEditor(currentLatex, onSave) {
     // 创建遮罩
@@ -15,16 +22,16 @@ export function openMathEditor(currentLatex, onSave) {
     dialog.className = 'math-editor-dialog';
     dialog.innerHTML = `
         <div class="math-editor-header">
-            <span class="math-editor-title">∑ 编辑公式</span>
+            <span class="math-editor-title">∑ ${mathText('编辑公式', 'Edit Formula', 'Редактировать формулу')}</span>
             <button class="math-editor-close">×</button>
         </div>
         <div class="math-editor-preview"></div>
-        <textarea class="math-editor-input" placeholder="输入 LaTeX 公式，如 E = mc^2" spellcheck="false"></textarea>
+        <textarea class="math-editor-input" placeholder="${mathText('输入 LaTeX 公式，如 E = mc^2', 'Enter a LaTeX formula, e.g. E = mc^2', 'Введите формулу LaTeX, напр. E = mc^2')}" spellcheck="false"></textarea>
         <div class="math-editor-footer">
-            <span class="math-editor-hint">实时预览 · Enter 换行 · Ctrl+Enter 确认</span>
+            <span class="math-editor-hint">${mathText('实时预览 · Enter 换行 · Ctrl+Enter 确认', 'Live preview · Enter for newline · Ctrl+Enter to confirm', 'Предпросмотр · Enter перенос · Ctrl+Enter подтвердить')}</span>
             <div class="math-editor-actions">
-                <button class="math-editor-cancel">取消</button>
-                <button class="math-editor-save">确认</button>
+                <button class="math-editor-cancel">${mathText('取消', 'Cancel', 'Отмена')}</button>
+                <button class="math-editor-save">${mathText('确认', 'Confirm', 'Подтвердить')}</button>
             </div>
         </div>
     `;
@@ -44,7 +51,7 @@ export function openMathEditor(currentLatex, onSave) {
     const updatePreview = () => {
         const val = textarea.value.trim();
         if (!val) {
-            preview.innerHTML = '<span class="math-editor-placeholder">此处显示公式预览…</span>';
+            preview.innerHTML = `<span class="math-editor-placeholder">${mathText('此处显示公式预览…', 'Formula preview appears here...', 'Здесь появится предпросмотр формулы...')}</span>`;
             return;
         }
         try {

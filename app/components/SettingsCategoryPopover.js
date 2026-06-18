@@ -163,7 +163,7 @@ export function savePinnedCategories(list) {
  * 设定分类缩略图弹出面板（3×3 宫格，高级卡片风格）
  */
 export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCategory, onAddCategory, onPinnedChange }) {
-    const { t } = useI18n();
+    const { text } = useI18n();
     const { setOpenCategoryModal, incrementSettingsVersion } = useAppStore();
     const popoverRef = useRef(null);
     const [mounted, setMounted] = useState(false);
@@ -179,6 +179,22 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
     const [allNodes, setAllNodes] = useState([]);
     const [renamingCategoryId, setRenamingCategoryId] = useState(null);
     const [renamingCategoryName, setRenamingCategoryName] = useState('');
+    const getCatLabel = (category, fallback = category) => ({
+        bookInfo: text('作品信息', 'Book Info', 'Информация о произведении'),
+        character: text('人物设定', 'Characters', 'Персонажи'),
+        location: text('空间/地点', 'Places', 'Места'),
+        world: text('世界观', 'Worldbuilding', 'Мир'),
+        object: text('物品/道具', 'Items', 'Предметы'),
+        plot: text('大纲', 'Outline', 'План'),
+        rules: text('写作规则', 'Writing Rules', 'Правила письма'),
+        custom: text('自定义设定', 'Custom Settings', 'Пользовательские настройки'),
+    }[category] || fallback);
+    const getDisplayName = (cat) => {
+        const builtInName = CAT_LABELS[cat.category];
+        return builtInName && (!cat.name || cat.name === builtInName)
+            ? getCatLabel(cat.category, cat.name)
+            : (cat.name || getCatLabel(cat.category, cat.category));
+    };
 
     const persistPinnedList = useCallback((next) => {
         savePinnedCategories(next);
@@ -205,7 +221,7 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
         const existingCats = new Set(catFolders.map(f => f.category));
         const virtualEntries = builtInCats
             .filter(cat => !existingCats.has(cat))
-            .map(cat => ({ id: `__virtual__${cat}`, name: CAT_LABELS[cat] || cat, type: 'folder', category: cat, parentId: workId }));
+            .map(cat => ({ id: `__virtual__${cat}`, name: getCatLabel(cat, CAT_LABELS[cat] || cat), type: 'folder', category: cat, parentId: workId }));
         virtualEntries.forEach(v => { counts[v.category] = 0; });
         const allEntries = [];
         builtInCats.forEach(cat => {
@@ -246,7 +262,7 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
                 .filter(cat => !existingCats.has(cat))
                 .map(cat => ({
                     id: `__virtual__${cat}`,
-                    name: CAT_LABELS[cat] || cat,
+                    name: getCatLabel(cat, CAT_LABELS[cat] || cat),
                     type: 'folder',
                     category: cat,
                     parentId: workId,
@@ -383,12 +399,12 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
                 {/* 标题栏 */}
                 <div style={styles.header}>
                     <span style={styles.title}>
-                        {editMode ? '编辑导航栏' : '设定集'}
+                        {editMode ? text('编辑导航栏', 'Edit Navigation', 'Редактировать навигацию') : text('设定集', 'Settings', 'Настройки')}
                     </span>
                     <button
                         style={{ ...styles.editBtn, ...(editMode ? styles.editBtnActive : {}) }}
                         onClick={() => setEditMode(!editMode)}
-                        title={editMode ? '完成' : '编辑导航栏显示'}
+                        title={editMode ? text('完成', 'Done', 'Готово') : text('编辑导航栏显示', 'Edit navigation display', 'Настроить отображение навигации')}
                         onMouseEnter={e => { if (!editMode) e.currentTarget.style.background = 'var(--bg-hover, #f3f4f6)'; }}
                         onMouseLeave={e => { if (!editMode) e.currentTarget.style.background = 'transparent'; }}
                     >
@@ -397,7 +413,7 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
                 </div>
 
                 {editMode && (
-                    <div style={styles.hint}>勾选显示在导航栏，点铅笔重命名，点 × 删除分类</div>
+                    <div style={styles.hint}>{text('勾选显示在导航栏，点铅笔重命名，点 × 删除分类', 'Check items to show in the nav, use the pencil to rename, and × to delete categories', 'Отметьте категории для навигации, карандашом переименуйте, × удалите')}</div>
                 )}
 
                 {/* 搜索框 */}
@@ -419,7 +435,7 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
                                 type="text"
                                 value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
-                                placeholder="搜索设定..."
+                                placeholder={text('搜索设定...', 'Search settings...', 'Поиск настроек...')}
                                 style={{
                                     flex: 1, border: 'none', outline: 'none',
                                     background: 'transparent', color: 'var(--text-primary, #1f2937)',
@@ -455,7 +471,7 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
                     return (
                         <div style={{ padding: '0 12px 8px', maxHeight: 150, overflowY: 'auto' }}>
                             <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600 }}>
-                                匹配条目 ({matchedItems.length})
+                                {text('匹配条目', 'Matches', 'Совпадения')} ({matchedItems.length})
                             </div>
                             {matchedItems.slice(0, 20).map(node => {
                                 const colors = CAT_COLORS[node.category] || CAT_COLORS.custom;
@@ -494,7 +510,7 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
                             if (!searchQuery.trim()) return true;
                             const q = searchQuery.trim().toLowerCase();
                             if (cat.name?.toLowerCase().includes(q)) return true;
-                            if ((CAT_LABELS[cat.category] || '').toLowerCase().includes(q)) return true;
+                            if ((getCatLabel(cat.category, CAT_LABELS[cat.category] || '') || '').toLowerCase().includes(q)) return true;
                             return false;
                         }).map(cat => {
                             const Icon = (cat.icon && getIconByName(cat.icon)) || CAT_ICONS[cat.category] || FileText;
@@ -512,7 +528,7 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
                                     onClick={() => handleCategoryClick(cat.category)}
                                     onMouseEnter={() => setHoveredId(cat.id)}
                                     onMouseLeave={() => setHoveredId(null)}
-                                    title={cat.name}
+                                    title={getDisplayName(cat)}
                                 >
                                     <span style={{ ...styles.iconWrap, color: colors.color, background: colors.bg }}>
                                         <Icon size={20} />
@@ -544,7 +560,7 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
                                             }}
                                         />
                                     ) : (
-                                        <span style={styles.label}>{cat.name}</span>
+                                        <span style={styles.label}>{getDisplayName(cat)}</span>
                                     )}
                                     {editMode ? (
                                         <>
@@ -557,7 +573,7 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
                                             </span>
                                             <span
                                                 onClick={e => startRenameCategory(e, cat)}
-                                                title="重命名分类"
+                                                title={text('重命名分类', 'Rename Category', 'Переименовать категорию')}
                                                 style={{
                                                     position: 'absolute', top: 3, right: 25,
                                                     width: 20, height: 20, borderRadius: 6,
@@ -573,7 +589,7 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
                                             </span>
                                             <span
                                                 onClick={e => handleDeleteCategory(e, cat)}
-                                                title="删除分类"
+                                                title={text('删除分类', 'Delete Category', 'Удалить категорию')}
                                                 style={{
                                                     position: 'absolute', top: 3, right: 3,
                                                     width: 20, height: 20, borderRadius: 6,
@@ -632,7 +648,7 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
                                             }
                                             if (e.key === 'Escape') { setShowNewInput(false); setNewCatName(''); }
                                         }}
-                                        placeholder="分类名称"
+                                        placeholder={text('分类名称', 'Category Name', 'Название категории')}
                                         autoFocus
                                         style={{
                                             width: '100%', padding: '4px 8px',
@@ -664,11 +680,11 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
                                                 refreshCategoriesFromNodes(refreshed, workId);
                                                 incrementSettingsVersion();
                                             }}
-                                        >确定</button>
+                                        >{text('确定', 'OK', 'ОК')}</button>
                                         <button
                                             style={{ border: 'none', borderRadius: 6, background: 'var(--bg-hover, #f3f4f6)', color: 'var(--text-muted)', fontSize: 10, padding: '3px 8px', cursor: 'pointer' }}
                                             onClick={() => { setShowNewInput(false); setNewCatName(''); }}
-                                        >取消</button>
+                                        >{text('取消', 'Cancel', 'Отмена')}</button>
                                     </div>
                                 </div>
                             ) : (
@@ -681,12 +697,12 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
                                     onClick={() => { setShowNewInput(true); setNewCatName(''); }}
                                     onMouseEnter={() => setHoveredId('_add')}
                                     onMouseLeave={() => setHoveredId(null)}
-                                    title="新建分类"
+                                    title={text('新建分类', 'New Category', 'Новая категория')}
                                 >
                                     <span style={{ ...styles.iconWrap, color: 'var(--text-muted, #9ca3af)', background: 'var(--bg-hover, #f3f4f6)' }}>
                                         <Plus size={20} />
                                     </span>
-                                    <span style={styles.label}>新建分类</span>
+                                    <span style={styles.label}>{text('新建分类', 'New Category', 'Новая категория')}</span>
                                 </div>
                             )
                         )}
@@ -706,7 +722,7 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
                         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted, #9ca3af)'; }}
                     >
                         <SettingsIcon size={13} />
-                        <span>打开完整设定面板</span>
+                        <span>{text('打开完整设定面板', 'Open Full Settings Panel', 'Открыть полную панель настроек')}</span>
                     </button>
                 )}
             </div>

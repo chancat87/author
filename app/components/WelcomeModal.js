@@ -6,7 +6,7 @@ import { useI18n } from '../lib/useI18n';
 
 export default function WelcomeModal() {
     const { language, setLanguage, visualTheme, setVisualTheme, setShowLoginModal } = useAppStore();
-    const { t } = useI18n();
+    const { t, text } = useI18n();
     const [step, setStep] = useState(1);
     const [isVisible, setIsVisible] = useState(false);
     const [mounted, setMounted] = useState(false);
@@ -128,38 +128,38 @@ export default function WelcomeModal() {
                 {step === 3 && (
                     <div className="welcome-step fadeIn">
                         <h1 className="welcome-title" style={{ marginBottom: 8 }}>
-                            {language === 'en' ? '☁️ Cloud Sync' : language === 'ru' ? '☁️ Облачная синхронизация' : '☁️ 开启云同步'}
+                            {text('☁️ 开启云同步', '☁️ Cloud Sync', '☁️ Облачная синхронизация')}
                         </h1>
                         <p className="welcome-subtitle" style={{ marginBottom: 28 }}>
-                            {language === 'en'
-                                ? 'Sync your work across devices, never lose your creations.'
-                                : language === 'ru'
-                                    ? 'Синхронизируйте работу на разных устройствах.'
-                                    : '多设备无缝同步，创作永不丢失。'}
+                            {text(
+                                '多设备无缝同步，创作永不丢失。',
+                                'Sync your work across devices, never lose your creations.',
+                                'Синхронизируйте работу на разных устройствах, чтобы не потерять рукописи.'
+                            )}
                         </p>
 
                         <div className="welcome-cloud-features">
                             <div className="welcome-cloud-feature">
                                 <div className="welcome-cloud-feature-icon">☁️</div>
                                 <div>
-                                    <h4>{language === 'en' ? 'Auto Backup' : language === 'ru' ? 'Авто-резервирование' : '自动备份'}</h4>
-                                    <p>{language === 'en' ? 'Your manuscripts are safely stored in the cloud' : language === 'ru' ? 'Рукописи надёжно хранятся в облаке' : '作品安全存储在云端'}</p>
+                                    <h4>{text('自动备份', 'Auto Backup', 'Авто-резервирование')}</h4>
+                                    <p>{text('作品安全存储在云端', 'Your manuscripts are safely stored in the cloud', 'Рукописи надёжно хранятся в облаке')}</p>
                                 </div>
                             </div>
 
                             <div className="welcome-cloud-feature">
                                 <div className="welcome-cloud-feature-icon">🔄</div>
                                 <div>
-                                    <h4>{language === 'en' ? 'Multi-device Sync' : language === 'ru' ? 'Мультиустройства' : '多端同步'}</h4>
-                                    <p>{language === 'en' ? 'Seamlessly continue on any device' : language === 'ru' ? 'Продолжайте на любом устройстве' : '在任何设备上无缝接续创作'}</p>
+                                    <h4>{text('多端同步', 'Multi-device Sync', 'Синхронизация устройств')}</h4>
+                                    <p>{text('在任何设备上无缝接续创作', 'Seamlessly continue on any device', 'Продолжайте писать на любом устройстве')}</p>
                                 </div>
                             </div>
 
                             <div className="welcome-cloud-feature">
                                 <div className="welcome-cloud-feature-icon" style={{ background: 'rgba(34, 197, 94, 0.1)' }}>✅</div>
                                 <div>
-                                    <h4>{language === 'en' ? 'Works Offline' : language === 'ru' ? 'Работает оффлайн' : '离线可用'}</h4>
-                                    <p>{language === 'en' ? 'Local-first, sync when online' : language === 'ru' ? 'Локально-первый подход' : '本地优先，联网时自动同步'}</p>
+                                    <h4>{text('离线可用', 'Works Offline', 'Работает офлайн')}</h4>
+                                    <p>{text('本地优先，联网时自动同步', 'Local-first, sync when online', 'Сначала локально, синхронизация при подключении')}</p>
                                 </div>
                             </div>
                         </div>
@@ -169,14 +169,14 @@ export default function WelcomeModal() {
                                 className="btn btn-primary btn-large welcome-start-btn"
                                 onClick={handleLoginNow}
                             >
-                                {language === 'en' ? 'Login / Register' : language === 'ru' ? 'Войти' : '立即登录'}
+                                {text('立即登录', 'Login / Register', 'Войти / зарегистрироваться')}
                             </button>
                             <button
                                 className="btn btn-ghost welcome-skip-btn"
                                 onClick={handleStart}
                                 style={{ fontSize: 14, padding: '8px 24px' }}
                             >
-                                {language === 'en' ? 'Skip for now' : language === 'ru' ? 'Пропустить' : '稍后再说'}
+                                {text('稍后再说', 'Skip for now', 'Пропустить')}
                             </button>
                         </div>
                     </div>

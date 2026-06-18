@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Plus, X } from 'lucide-react';
+import { useI18n } from '../lib/useI18n';
 
 /**
  * RadarStatsChart — 交互式雷达图（纯SVG）
@@ -23,6 +24,15 @@ const DEFAULT_STATS = [
 ];
 
 export default function RadarStatsChart({ stats, onChange, color, size = 220 }) {
+    const { text } = useI18n();
+    const defaultStats = [
+        { name: text('智力', 'Intelligence', 'Интеллект'), value: 50 },
+        { name: text('武力', 'Strength', 'Сила'), value: 50 },
+        { name: text('魅力', 'Charisma', 'Харизма'), value: 50 },
+        { name: text('防御', 'Defense', 'Защита'), value: 50 },
+        { name: text('速度', 'Speed', 'Скорость'), value: 50 },
+        { name: text('运气', 'Luck', 'Удача'), value: 50 },
+    ];
     const catColor = color || '#5b7bde';
     const rgb = `${parseInt(catColor.slice(1,3),16)},${parseInt(catColor.slice(3,5),16)},${parseInt(catColor.slice(5,7),16)}`;
     const svgRef = useRef(null);
@@ -34,7 +44,7 @@ export default function RadarStatsChart({ stats, onChange, color, size = 220 }) 
     const currentStats = (stats && stats.length >= 3) ? stats.map(s => ({
         name: s.name || '???',
         value: Math.max(0, Math.min(100, s.value || 0)),
-    })) : DEFAULT_STATS;
+    })) : defaultStats;
 
     const cx = size / 2;
     const cy = size / 2;
@@ -119,7 +129,7 @@ export default function RadarStatsChart({ stats, onChange, color, size = 220 }) 
 
     // ===== Add dimension =====
     const handleAdd = () => {
-        const newStats = [...currentStats, { name: `维度${currentStats.length + 1}`, value: 50 }];
+        const newStats = [...currentStats, { name: text(`维度${currentStats.length + 1}`, `Dimension ${currentStats.length + 1}`, `Параметр ${currentStats.length + 1}`), value: 50 }];
         onChange(newStats);
     };
 
@@ -286,7 +296,7 @@ export default function RadarStatsChart({ stats, onChange, color, size = 220 }) 
                             }}
                             onMouseEnter={(e) => { if (currentStats.length > 3) e.target.style.color = '#e55'; }}
                             onMouseLeave={(e) => { e.target.style.color = currentStats.length <= 3 ? 'var(--border-light)' : 'var(--text-muted)'; }}
-                            title={currentStats.length <= 3 ? '至少保留3个维度' : '删除维度'}
+                            title={currentStats.length <= 3 ? text('至少保留3个维度', 'Keep at least 3 dimensions', 'Оставьте минимум 3 параметра') : text('删除维度', 'Delete dimension', 'Удалить параметр')}
                         >
                             <X size={12} />
                         </button>
@@ -307,7 +317,7 @@ export default function RadarStatsChart({ stats, onChange, color, size = 220 }) 
                     onMouseEnter={(e) => { e.currentTarget.style.borderColor = catColor; e.currentTarget.style.color = catColor; }}
                     onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-light)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
                 >
-                    <Plus size={12} /> 添加维度
+                    <Plus size={12} /> {text('添加维度', 'Add Dimension', 'Добавить параметр')}
                 </button>
             </div>
         </div>

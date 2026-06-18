@@ -6,7 +6,7 @@ import { Download, ExternalLink, Settings, Monitor, X, Cloud } from 'lucide-reac
 
 export default function SyncGuideModal() {
     const { showSyncGuideModal, setShowSyncGuideModal } = useAppStore();
-    const { t } = useI18n();
+    const { t, text } = useI18n();
 
     if (!showSyncGuideModal) return null;
 
@@ -45,7 +45,7 @@ export default function SyncGuideModal() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <Monitor size={18} style={{ color: '#3b82f6' }}/>
                             <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: 'var(--text-main)' }}>
-                                方式一：{t('cloudSync.downloadClient') || '下载桌面客户端（推荐）'}
+                                {text('方式一：', 'Option 1: ', 'Вариант 1: ')}{t('cloudSync.downloadClient')}
                             </h3>
                         </div>
                         <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
@@ -85,7 +85,7 @@ export default function SyncGuideModal() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <Settings size={18} style={{ color: 'var(--text-secondary)' }}/>
                             <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: 'var(--text-main)' }}>
-                                方式二：{t('cloudSync.configFirebase') || '自行配置 Firebase'}
+                                {text('方式二：', 'Option 2: ', 'Вариант 2: ')}{t('cloudSync.configFirebase')}
                             </h3>
                         </div>
                         <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.5 }}>

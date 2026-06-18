@@ -9,6 +9,13 @@ function createRemarkId() {
     return `remark-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function remarkText(zh, en, ru = en) {
+    const lang = typeof window !== 'undefined' ? localStorage.getItem('author-lang') : 'zh';
+    if (lang === 'en') return en;
+    if (lang === 'ru') return ru;
+    return zh;
+}
+
 /**
  * RemarkMark — persistent inline remarks.
  * The body text stays untouched; remark content is stored in data attributes
@@ -55,7 +62,7 @@ const RemarkMark = Mark.create({
                     class: [this.options.HTMLAttributes.class, className].filter(Boolean).join(' '),
                     'data-remark-id': id || createRemarkId(),
                     'data-remark-text': text || '',
-                    title: text ? `备注：${text}` : '备注',
+                    title: text ? `${remarkText('备注', 'Note', 'Заметка')}：${text}` : remarkText('备注', 'Note', 'Заметка'),
                 },
             ),
             0,
@@ -84,13 +91,15 @@ export function promptForRemark(editor) {
     const isActive = editor.isActive('remark');
 
     if (empty && !isActive) {
-        window.alert('请先选中要添加备注的文字。');
+        window.alert(remarkText('请先选中要添加备注的文字。', 'Select the text you want to annotate first.', 'Сначала выделите текст для заметки.'));
         return false;
     }
 
     const attrs = editor.getAttributes('remark') || {};
     const selectedText = empty ? '' : editor.state.doc.textBetween(from, to, ' ').trim();
-    const label = isActive ? '编辑备注（留空可删除备注）' : `给选中文字添加备注${selectedText ? `：${selectedText.slice(0, 20)}` : ''}`;
+    const label = isActive
+        ? remarkText('编辑备注（留空可删除备注）', 'Edit note (leave blank to delete)', 'Редактировать заметку (оставьте пустой для удаления)')
+        : `${remarkText('给选中文字添加备注', 'Add a note to selected text', 'Добавить заметку к выделенному тексту')}${selectedText ? `：${selectedText.slice(0, 20)}` : ''}`;
     const nextText = window.prompt(label, attrs.text || '');
 
     if (nextText === null) return false;

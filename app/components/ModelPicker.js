@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } fr
 import { createPortal } from 'react-dom';
 import { Link, Settings, KeyRound, Check, CircleDot } from 'lucide-react';
 import { getProjectSettings, saveProjectSettings, getChatApiConfig } from '../lib/settings';
-import { PROVIDERS } from './SettingsPanel';
+import { PROVIDERS, getProviderLabel } from './SettingsPanel';
 import { useAppStore } from '../store/useAppStore';
 import { useI18n } from '../lib/useI18n';
 
@@ -68,7 +68,7 @@ export default function ModelPicker({ target = 'editor', onOpenSettings, classNa
     const triggerRef = useRef(null);
     const panelRef = useRef(null);
     const { showToast, setShowSettings } = useAppStore();
-    const { t } = useI18n();
+    const { t, text } = useI18n();
     const [mounted, setMounted] = useState(false);
     useEffect(() => { setMounted(true); }, []);
 
@@ -179,9 +179,10 @@ export default function ModelPicker({ target = 'editor', onOpenSettings, classNa
 
                 // 实例显示名：如果有多个实例，使用实例自定义名称
                 const instanceName = cfg?.instanceName || '';
+                const providerLabel = getProviderLabel(p, text);
                 const displayLabel = instanceKeys.length > 1 && instanceName
-                    ? `${p.label} — ${instanceName}`
-                    : p.label;
+                    ? `${providerLabel} — ${instanceName}`
+                    : providerLabel;
 
                 const q = search.toLowerCase();
                 const providerMatch = !q || displayLabel.toLowerCase().includes(q) || instanceKey.includes(q) || p.key.includes(q);
@@ -211,7 +212,7 @@ export default function ModelPicker({ target = 'editor', onOpenSettings, classNa
             const baseProv = PROVIDERS.find(pp => pp.key === provType);
             const hasKey = !!(cfg.apiKey);
             const userModels = cfg.models || [];
-            const displayLabel = cfg.instanceName || baseProv?.label || provType;
+            const displayLabel = cfg.instanceName || getProviderLabel(baseProv || provType, text);
             const q = search.toLowerCase();
             const providerMatch = !q || displayLabel.toLowerCase().includes(q) || key.includes(q);
             const filteredModels = q
@@ -236,7 +237,7 @@ export default function ModelPicker({ target = 'editor', onOpenSettings, classNa
             { label: t('modelPicker.configured') || '已配置', items: configured },
             { label: t('modelPicker.unconfigured') || '未配置', items: unconfigured },
         ];
-    }, [config, search, t]);
+    }, [config, search, t, text]);
 
     // 切换模型
     const selectModel = useCallback((providerKey, modelId) => {
@@ -346,10 +347,10 @@ export default function ModelPicker({ target = 'editor', onOpenSettings, classNa
     const providerDef = PROVIDERS.find(p => p.key === activeProvider) || PROVIDERS.find(p => p.key === activeProviderType);
     const displayModel = activeModel.length > 28 ? activeModel.slice(0, 26) + '…' : activeModel;
     const targetLabel = target === 'chat'
-        ? (t('modelPicker.chatModel') || '对话')
+        ? t('modelPicker.chatModel')
         : target === 'embed'
-        ? '嵌入'
-        : (t('modelPicker.editorModel') || '编辑');
+            ? t('modelPicker.embedModel')
+            : t('modelPicker.editorModel');
 
     return (
         <div className={`model-picker ${className}`} ref={dropdownRef} style={{ position: 'relative' }}>
@@ -362,7 +363,7 @@ export default function ModelPicker({ target = 'editor', onOpenSettings, classNa
             >
                 {target === 'embed' ? <span style={{ fontSize: 12 }}>📐</span> : <MiniProviderIcon provider={activeProvider} model={activeModel} />}
                 <span className="model-picker-label">
-                    {displayModel || (target === 'embed' ? '嵌入未配置' : (t('modelPicker.notConfigured') || '未配置'))}
+                    {displayModel || (target === 'embed' ? t('modelPicker.embedNotConfigured') : t('modelPicker.notConfigured'))}
                 </span>
                 {target === 'chat' && config.isFallback && (
                     <span className="model-picker-badge">{t('modelPicker.follow') || '跟随'}</span>

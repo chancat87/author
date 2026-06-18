@@ -58,7 +58,21 @@ export function getCategoryColor(category) {
 }
 
 /** 导出：获取分类标签名 */
-export function getCategoryLabel(category, t) {
+export function getCategoryLabel(category, t, text) {
+    if (text) {
+        const labels = {
+            bookInfo: text('作品信息', 'Book Info', 'Информация о произведении'),
+            character: text('人物设定', 'Characters', 'Персонажи'),
+            location: text('空间/地点', 'Places', 'Места'),
+            world: text('世界观/设定', 'Worldbuilding', 'Мир'),
+            object: text('物品/道具', 'Items / Props', 'Предметы / реквизит'),
+            plot: text('大纲', 'Outline', 'План'),
+            rules: text('写作规则', 'Writing Rules', 'Правила письма'),
+            custom: text('自定义设定', 'Custom Settings', 'Пользовательские настройки'),
+        };
+        if (labels[category]) return labels[category];
+        if (category?.startsWith('custom-')) return text('自定义分类', 'Custom Category', 'Пользовательская категория');
+    }
     const i18nKey = `settings.categories.${category}`;
     const translated = t?.(i18nKey);
     if (translated && translated !== i18nKey) return translated;
@@ -77,7 +91,7 @@ export function getCategoryLabel(category, t) {
  * 显示指定分类下的子文件夹和条目
  */
 export default function SettingsCategoryPanel({ category }) {
-    const { t } = useI18n();
+    const { t, text } = useI18n();
     const { setOpenCategoryModal, setJumpToNodeId, settingsVersion } = useAppStore();
     const [nodes, setNodes] = useState([]);
     const [rootFolder, setRootFolder] = useState(null);
@@ -86,7 +100,18 @@ export default function SettingsCategoryPanel({ category }) {
     const [searchQuery, setSearchQuery] = useState('');
     const colors = getCategoryColor(category);
     const CatIcon = getCategoryIcon(category, rootFolder?.icon);
-    const label = rootFolder?.name || getCategoryLabel(category, t);
+    const builtInNameZh = {
+        bookInfo: '作品信息',
+        character: '人物设定',
+        location: '空间/地点',
+        world: '世界观/设定',
+        object: '物品/道具',
+        plot: '大纲',
+        rules: '写作规则',
+    }[category];
+    const label = rootFolder?.name && rootFolder.name !== builtInNameZh
+        ? rootFolder.name
+        : getCategoryLabel(category, t, text);
 
     // 加载分类节点
     const loadNodes = useCallback(async () => {
@@ -115,7 +140,7 @@ export default function SettingsCategoryPanel({ category }) {
     const handleAddSubFolder = async () => {
         if (!rootFolder) return;
         await addSettingsNode({
-            name: '新分类',
+            name: text('新分类', 'New Category', 'Новая категория'),
             type: 'folder',
             category,
             parentId: rootFolder.id,
@@ -126,7 +151,7 @@ export default function SettingsCategoryPanel({ category }) {
     // 新建条目
     const handleAddItem = async (parentId) => {
         await addSettingsNode({
-            name: '新条目',
+            name: text('新条目', 'New Entry', 'Новая запись'),
             type: 'item',
             category,
             parentId: parentId || rootFolder?.id,
@@ -194,7 +219,7 @@ export default function SettingsCategoryPanel({ category }) {
                         <FolderOpen size={14} style={{ color: colors.color, flexShrink: 0 }} />
                         <span className="scp-folder-name">{node.name}</span>
                         <span className="scp-folder-count">{children.filter(c => c.type === 'item').length}</span>
-                        <Tooltip content="新建条目">
+                        <Tooltip content={text('新建条目', 'New Entry', 'Новая запись')}>
                             <button
                                 className="scp-add-btn"
                                 onClick={(e) => { e.stopPropagation(); handleAddItem(node.id); }}
@@ -236,7 +261,7 @@ export default function SettingsCategoryPanel({ category }) {
     if (loading) {
         return (
             <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
-                加载中...
+                {text('加载中...', 'Loading...', 'Загрузка...')}
             </div>
         );
     }
@@ -252,12 +277,12 @@ export default function SettingsCategoryPanel({ category }) {
                     {label}
                 </span>
                 <div style={{ display: 'flex', gap: 2 }}>
-                    <Tooltip content="新建子分类">
+                    <Tooltip content={text('新建子分类', 'New Subcategory', 'Новая подкатегория')}>
                         <button className="gdocs-section-add" onClick={handleAddSubFolder}>
                             <FolderOpen size={14} />
                         </button>
                     </Tooltip>
-                    <Tooltip content="新建条目">
+                    <Tooltip content={text('新建条目', 'New Entry', 'Новая запись')}>
                         <button className="gdocs-section-add" onClick={() => handleAddItem()}>+</button>
                     </Tooltip>
                 </div>
@@ -282,7 +307,7 @@ export default function SettingsCategoryPanel({ category }) {
                             type="text"
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
-                            placeholder={`搜索${label}...`}
+                            placeholder={text(`搜索${label}...`, `Search ${label}...`, `Искать: ${label}...`)}
                             style={{
                                 flex: 1, border: 'none', outline: 'none',
                                 background: 'transparent', color: 'var(--text-primary)',
@@ -304,9 +329,9 @@ export default function SettingsCategoryPanel({ category }) {
                 {rootChildren.length === 0 ? (
                     <div className="scp-empty">
                         <CatIcon size={24} style={{ color: colors.color, opacity: 0.3 }} />
-                        <span>暂无内容</span>
+                        <span>{text('暂无内容', 'No content yet', 'Пока нет содержимого')}</span>
                         <button className="scp-empty-add" onClick={() => handleAddItem()}>
-                            <Plus size={12} /> 添加{label}
+                            <Plus size={12} /> {text(`添加${label}`, `Add ${label}`, `Добавить: ${label}`)}
                         </button>
                     </div>
                 ) : (

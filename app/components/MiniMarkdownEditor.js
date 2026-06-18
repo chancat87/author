@@ -5,6 +5,7 @@ import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import { Markdown } from 'tiptap-markdown';
 import { useEffect, useRef, useCallback, memo } from 'react';
+import { useI18n } from '../lib/useI18n';
 
 /**
  * MiniMarkdownEditor — 轻量 Tiptap Markdown 编辑器
@@ -90,6 +91,7 @@ function MiniMarkdownEditor({ value, onChange, placeholder, rows = 3, autoFocus 
  * 工具栏 — 紧凑图标按钮
  */
 const MiniToolbar = memo(function MiniToolbar({ editor }) {
+    const { text } = useI18n();
     const btn = (label, title, action, isActiveCheck) => (
         <button
             key={title}
@@ -107,18 +109,18 @@ const MiniToolbar = memo(function MiniToolbar({ editor }) {
 
     return (
         <div className="mini-md-toolbar">
-            {btn('B', '加粗', () => editor.chain().focus().toggleBold().run(), () => editor.isActive('bold'))}
-            {btn('I', '斜体', () => editor.chain().focus().toggleItalic().run(), () => editor.isActive('italic'))}
-            {btn('S', '删除线', () => editor.chain().focus().toggleStrike().run(), () => editor.isActive('strike'))}
+            {btn('B', text('加粗', 'Bold', 'Жирный'), () => editor.chain().focus().toggleBold().run(), () => editor.isActive('bold'))}
+            {btn('I', text('斜体', 'Italic', 'Курсив'), () => editor.chain().focus().toggleItalic().run(), () => editor.isActive('italic'))}
+            {btn('S', text('删除线', 'Strikethrough', 'Зачёркивание'), () => editor.chain().focus().toggleStrike().run(), () => editor.isActive('strike'))}
             <span className="mini-md-tb-sep" />
-            {btn('H1', '标题1', () => editor.chain().focus().toggleHeading({ level: 1 }).run(), () => editor.isActive('heading', { level: 1 }))}
-            {btn('H2', '标题2', () => editor.chain().focus().toggleHeading({ level: 2 }).run(), () => editor.isActive('heading', { level: 2 }))}
-            {btn('H3', '标题3', () => editor.chain().focus().toggleHeading({ level: 3 }).run(), () => editor.isActive('heading', { level: 3 }))}
+            {btn('H1', text('标题1', 'Heading 1', 'Заголовок 1'), () => editor.chain().focus().toggleHeading({ level: 1 }).run(), () => editor.isActive('heading', { level: 1 }))}
+            {btn('H2', text('标题2', 'Heading 2', 'Заголовок 2'), () => editor.chain().focus().toggleHeading({ level: 2 }).run(), () => editor.isActive('heading', { level: 2 }))}
+            {btn('H3', text('标题3', 'Heading 3', 'Заголовок 3'), () => editor.chain().focus().toggleHeading({ level: 3 }).run(), () => editor.isActive('heading', { level: 3 }))}
             <span className="mini-md-tb-sep" />
-            {btn('•', '无序列表', () => editor.chain().focus().toggleBulletList().run(), () => editor.isActive('bulletList'))}
-            {btn('1.', '有序列表', () => editor.chain().focus().toggleOrderedList().run(), () => editor.isActive('orderedList'))}
-            {btn('❝', '引用', () => editor.chain().focus().toggleBlockquote().run(), () => editor.isActive('blockquote'))}
-            {btn('⟨⟩', '代码', () => editor.chain().focus().toggleCode().run(), () => editor.isActive('code'))}
+            {btn('•', text('无序列表', 'Bulleted list', 'Маркированный список'), () => editor.chain().focus().toggleBulletList().run(), () => editor.isActive('bulletList'))}
+            {btn('1.', text('有序列表', 'Numbered list', 'Нумерованный список'), () => editor.chain().focus().toggleOrderedList().run(), () => editor.isActive('orderedList'))}
+            {btn('❝', text('引用', 'Quote', 'Цитата'), () => editor.chain().focus().toggleBlockquote().run(), () => editor.isActive('blockquote'))}
+            {btn('⟨⟩', text('代码', 'Code', 'Код'), () => editor.chain().focus().toggleCode().run(), () => editor.isActive('code'))}
         </div>
     );
 });

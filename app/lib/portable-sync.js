@@ -432,6 +432,7 @@ async function collectSyncableKeys() {
 
     for (const workId of workIds) {
         keys.add(`author-chapters-${workId}`);
+        keys.add(`author-chapter-memory-groups-${workId}`);
         keys.add(`author-settings-nodes-${workId}`);
     }
     for (const key of _pendingWrites.keys()) keys.add(key);

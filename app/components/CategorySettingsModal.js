@@ -65,6 +65,19 @@ function getCatMeta(category) {
     return CAT_META[category] || CAT_META.custom;
 }
 
+function getLocalizedCatLabel(category, text) {
+    return {
+        bookInfo: text('作品信息', 'Book Info', 'Информация о произведении'),
+        character: text('人物设定', 'Characters', 'Персонажи'),
+        location: text('空间/地点', 'Places', 'Места'),
+        world: text('世界观/设定', 'Worldbuilding', 'Мир'),
+        object: text('物品/道具', 'Items / Props', 'Предметы / реквизит'),
+        plot: text('大纲', 'Outline', 'План'),
+        rules: text('写作规则', 'Writing Rules', 'Правила письма'),
+        custom: text('自定义设定', 'Custom Settings', 'Пользовательские настройки'),
+    }[category] || category;
+}
+
 function wouldCreateParentCycle(nodes, nodeId, newParentId) {
     if (!nodeId || !newParentId) return false;
     let currentId = newParentId;
@@ -88,8 +101,8 @@ const DEFAULT_PLOT_POINTS = [
     { label: '结局', tension: 0.4, note: '' },
 ];
 
-function normalizePlotCurvePoint(point, index) {
-    const fallback = DEFAULT_PLOT_POINTS[index] || { label: `节点${index + 1}`, tension: 0.5, note: '' };
+function normalizePlotCurvePoint(point, index, defaults = DEFAULT_PLOT_POINTS) {
+    const fallback = defaults[index] || { label: `节点${index + 1}`, tension: 0.5, note: '' };
     if (typeof point === 'string') {
         const label = point.trim();
         return { ...fallback, label: label || fallback.label };
@@ -106,14 +119,22 @@ function normalizePlotCurvePoint(point, index) {
     };
 }
 
-function normalizePlotCurvePoints(value) {
-    const source = Array.isArray(value) && value.length > 0 ? value : DEFAULT_PLOT_POINTS;
-    const points = source.map(normalizePlotCurvePoint);
-    return points.length >= 2 ? points : DEFAULT_PLOT_POINTS.map(normalizePlotCurvePoint);
+function normalizePlotCurvePoints(value, defaults = DEFAULT_PLOT_POINTS) {
+    const source = Array.isArray(value) && value.length > 0 ? value : defaults;
+    const points = source.map((point, index) => normalizePlotCurvePoint(point, index, defaults));
+    return points.length >= 2 ? points : defaults.map((point, index) => normalizePlotCurvePoint(point, index, defaults));
 }
 
 function PlotCurveChart({ nodes, rootFolder, onSave }) {
-    const [points, setPoints] = useState(() => normalizePlotCurvePoints(rootFolder?.content?.plotCurve));
+    const { text } = useI18n();
+    const defaultPlotPoints = useMemo(() => ([
+        { label: text('序幕', 'Opening', 'Завязка'), tension: 0.2, note: '' },
+        { label: text('铺垫', 'Setup', 'Подготовка'), tension: 0.35, note: '' },
+        { label: text('冲突', 'Conflict', 'Конфликт'), tension: 0.6, note: '' },
+        { label: text('高潮', 'Climax', 'Кульминация'), tension: 0.95, note: '' },
+        { label: text('结局', 'Ending', 'Финал'), tension: 0.4, note: '' },
+    ]), [text]);
+    const [points, setPoints] = useState(() => normalizePlotCurvePoints(rootFolder?.content?.plotCurve, defaultPlotPoints));
     const [dragging, setDragging] = useState(null); // index for tension drag
     const [editIdx, setEditIdx] = useState(null); // label rename
     const [editLabel, setEditLabel] = useState('');
@@ -128,8 +149,8 @@ function PlotCurveChart({ nodes, rootFolder, onSave }) {
     const chartW = W - PX * 2;
 
     useEffect(() => {
-        setPoints(normalizePlotCurvePoints(rootFolder?.content?.plotCurve));
-    }, [rootFolder?.content?.plotCurve]);
+        setPoints(normalizePlotCurvePoints(rootFolder?.content?.plotCurve, defaultPlotPoints));
+    }, [rootFolder?.content?.plotCurve, defaultPlotPoints]);
 
     const coords = useMemo(() => points.map((p, i) => ({
         x: PX + (i / Math.max(points.length - 1, 1)) * chartW,
@@ -173,7 +194,7 @@ function PlotCurveChart({ nodes, rootFolder, onSave }) {
     };
 
     const addPoint = () => {
-        const next = [...points, { label: `节点${points.length + 1}`, tension: 0.5, note: '' }];
+        const next = [...points, { label: text(`节点${points.length + 1}`, `Point ${points.length + 1}`, `Точка ${points.length + 1}`), tension: 0.5, note: '' }];
         setPoints(next);
         onSave?.(next);
         setSelectedIdx(next.length - 1);
@@ -215,7 +236,13 @@ function PlotCurveChart({ nodes, rootFolder, onSave }) {
 
     const [reorderDragIdx, setReorderDragIdx] = useState(null); // label drag reorder
 
-    const tensionLabels = ['平缓', '低', '中', '高', '极高'];
+    const tensionLabels = [
+        text('平缓', 'Calm', 'Спокойно'),
+        text('低', 'Low', 'Низко'),
+        text('中', 'Medium', 'Средне'),
+        text('高', 'High', 'Высоко'),
+        text('极高', 'Peak', 'Пик'),
+    ];
 
     // 左右拖拽名称排序
     const handleLabelDragStart = (idx, e) => {
@@ -296,8 +323,10 @@ function PlotCurveChart({ nodes, rootFolder, onSave }) {
             }} onClick={() => setCollapsed(!collapsed)}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
                     <ClipboardList size={14} style={{ color: '#ef4444' }} />
-                    剧情节奏曲线
-                    <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-muted)' }}>— 上下拖拽节点调整张力 · 左右拖拽名称排序 · 双击横轴名称改名 · 双击节点添加/修改注释</span>
+                    {text('剧情节奏曲线', 'Plot Rhythm Curve', 'Кривая ритма сюжета')}
+                    <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-muted)' }}>
+                        {text('— 上下拖拽节点调整张力 · 左右拖拽名称排序 · 双击横轴名称改名 · 双击节点添加/修改注释', '- Drag points vertically to tune tension · drag labels sideways to reorder · double-click labels or points to edit', '- Перетаскивайте точки по вертикали для напряжения · метки по горизонтали для порядка · двойной клик для редактирования')}
+                    </span>
                 </span>
                 <span style={{ fontSize: 10, color: 'var(--text-muted)', transform: collapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
             </div>
@@ -394,7 +423,7 @@ function PlotCurveChart({ nodes, rootFolder, onSave }) {
                             style={{ padding: '5px 14px', border: '1px dashed var(--border-light)', borderRadius: 8, background: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--text-muted)', transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: 4 }}
                             onMouseEnter={e => { e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.color = '#ef4444'; }}
                             onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-light)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
-                        ><Plus size={12} /> 添加节点</button>
+                        ><Plus size={12} /> {text('添加节点', 'Add Point', 'Добавить точку')}</button>
                         <button
                             onClick={removeSelected}
                             disabled={selectedIdx === null || points.length <= 2}
@@ -405,7 +434,7 @@ function PlotCurveChart({ nodes, rootFolder, onSave }) {
                             }}
                             onMouseEnter={e => { if (selectedIdx !== null && points.length > 2) { e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.color = '#ef4444'; } }}
                             onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-light)'; e.currentTarget.style.color = selectedIdx !== null && points.length > 2 ? 'var(--text-muted)' : 'var(--border-light)'; }}
-                        ><Trash2 size={11} /> 删除选中{selectedIdx !== null ? ` (${points[selectedIdx]?.label})` : ''}</button>
+                        ><Trash2 size={11} /> {text('删除选中', 'Delete Selected', 'Удалить выбранное')}{selectedIdx !== null ? ` (${points[selectedIdx]?.label})` : ''}</button>
                     </div>
 
                     {/* 名称编辑 */}
@@ -416,24 +445,24 @@ function PlotCurveChart({ nodes, rootFolder, onSave }) {
                                 onKeyDown={e => { if (e.key === 'Enter') finishLabelEdit(); if (e.key === 'Escape') setEditIdx(null); }}
                                 autoFocus
                                 style={{ flex: 1, padding: '4px 8px', border: '1.5px solid #ef4444', borderRadius: 6, fontSize: 12, outline: 'none', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
-                                placeholder="节点名称"
+                                placeholder={text('节点名称', 'Point name', 'Название точки')}
                             />
-                            <button onClick={finishLabelEdit} style={{ padding: '4px 10px', border: 'none', borderRadius: 6, background: '#ef4444', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>确定</button>
+                            <button onClick={finishLabelEdit} style={{ padding: '4px 10px', border: 'none', borderRadius: 6, background: '#ef4444', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>{text('确定', 'Confirm', 'Подтвердить')}</button>
                         </div>
                     )}
 
                     {/* 注释编辑 */}
                     {noteIdx !== null && (
                         <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center' }}>
-                            <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>「{points[noteIdx]?.label}」注释:</span>
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{text('注释', 'Note', 'Заметка')}: {points[noteIdx]?.label}</span>
                             <input
                                 value={editNote} onChange={e => setEditNote(e.target.value)}
                                 onKeyDown={e => { if (e.key === 'Enter') finishNoteEdit(); if (e.key === 'Escape') setNoteIdx(null); }}
                                 autoFocus
                                 style={{ flex: 1, padding: '4px 8px', border: '1.5px solid #f59e0b', borderRadius: 6, fontSize: 12, outline: 'none', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
-                                placeholder="主角出场、反转事件等"
+                                placeholder={text('主角出场、反转事件等', 'Protagonist entrance, reversal event, etc.', 'Появление героя, поворот и т. п.')}
                             />
-                            <button onClick={finishNoteEdit} style={{ padding: '4px 10px', border: 'none', borderRadius: 6, background: '#f59e0b', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>确定</button>
+                            <button onClick={finishNoteEdit} style={{ padding: '4px 10px', border: 'none', borderRadius: 6, background: '#f59e0b', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>{text('确定', 'Confirm', 'Подтвердить')}</button>
                         </div>
                     )}
                 </div>
@@ -639,6 +668,7 @@ const S = {
 
 // ==================== 图标选择器 ====================
 function IconPicker({ currentIcon, color, bg, onSelect, onClose, anchorRect }) {
+    const { text } = useI18n();
     const ref = useRef(null);
     useEffect(() => {
         const handleClick = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
@@ -657,7 +687,7 @@ function IconPicker({ currentIcon, color, bg, onSelect, onClose, anchorRect }) {
 
     return (
         <div ref={ref} style={style} onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 10, padding: '0 2px' }}>选择图标</div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 10, padding: '0 2px' }}>{text('选择图标', 'Choose Icon', 'Выберите значок')}</div>
             <div style={S.iconGrid}>
                 {ICON_GRID.map(name => {
                     const Icon = ICON_MAP[name];
@@ -689,7 +719,7 @@ function IconPicker({ currentIcon, color, bg, onSelect, onClose, anchorRect }) {
 }
 
 // ==================== 新建菜单 ====================
-function AddMenu({ onAddFolder, onAddItem, onClose, catColor, catBg }) {
+function AddMenu({ onAddFolder, onAddItem, onClose, catColor, catBg, text }) {
     const ref = useRef(null);
     const [hovered, setHovered] = useState(null);
     useEffect(() => {
@@ -712,8 +742,8 @@ function AddMenu({ onAddFolder, onAddItem, onClose, catColor, catBg }) {
                 <span style={{ ...S.addMenuIcon, color: catColor, background: catBg }}>
                     <FolderPlus size={16} />
                 </span>
-                <span>新建分类</span>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>子分组</span>
+                <span>{text('新建分类', 'New Category', 'Новая категория')}</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>{text('子分组', 'Subgroup', 'Подгруппа')}</span>
             </button>
             <div style={{ height: 1, background: 'var(--border-light, #e5e7eb)', margin: '0 12px' }} />
             <button
@@ -728,15 +758,15 @@ function AddMenu({ onAddFolder, onAddItem, onClose, catColor, catBg }) {
                 <span style={{ ...S.addMenuIcon, color: '#6b7280', background: 'var(--bg-hover, #f3f4f6)' }}>
                     <FileText size={16} />
                 </span>
-                <span>新建条目</span>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>设定项</span>
+                <span>{text('新建条目', 'New Entry', 'Новая запись')}</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>{text('设定项', 'Entry', 'Запись')}</span>
             </button>
         </div>
     );
 }
 
 // ==================== 左侧条目列表 ====================
-function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFolder, onAddItem, onRename, onChangeIcon, onDelete, onToggleEnabled, onReorder, searchQuery }) {
+function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFolder, onAddItem, onRename, onChangeIcon, onDelete, onToggleEnabled, onReorder, searchQuery, text, getDisplayName }) {
     const meta = getCatMeta(category);
     const [collapsed, setCollapsed] = useState({});
     const [renamingId, setRenamingId] = useState(null);
@@ -946,27 +976,27 @@ function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFold
         return (
             <div className="cstree-actions" style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0, marginLeft: 'auto', ...(isHovered ? { opacity: 1, pointerEvents: 'auto' } : {}) }} onClick={e => e.stopPropagation()}>
                 <button style={{ ...actionBtnStyle, color: 'var(--text-muted)' }}
-                    onClick={e => startRename(e, node)} title="重命名"
+                    onClick={e => startRename(e, node)} title={text('重命名', 'Rename', 'Переименовать')}
                     onMouseEnter={e => { e.currentTarget.style.color = meta.color; e.currentTarget.style.background = `${meta.color}12`; }}
                     onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'none'; }}
                 ><Pencil size={12} /></button>
                 {node.type === 'item' && onToggleEnabled && (
                     <button style={{ ...actionBtnStyle, color: isHidden ? '#f59e0b' : 'var(--text-muted)' }}
-                        onClick={e => { e.stopPropagation(); onToggleEnabled(node.id); }} title={isHidden ? '显示' : '隐藏'}
+                        onClick={e => { e.stopPropagation(); onToggleEnabled(node.id); }} title={isHidden ? text('显示', 'Show', 'Показать') : text('隐藏', 'Hide', 'Скрыть')}
                         onMouseEnter={e => { e.currentTarget.style.color = isHidden ? '#22c55e' : '#f59e0b'; e.currentTarget.style.background = isHidden ? 'rgba(34,197,94,0.1)' : 'rgba(245,158,11,0.1)'; }}
                         onMouseLeave={e => { e.currentTarget.style.color = isHidden ? '#f59e0b' : 'var(--text-muted)'; e.currentTarget.style.background = 'none'; }}
                     >{isHidden ? <Eye size={12} /> : <EyeOff size={12} />}</button>
                 )}
                 {onDelete && (
                     <button style={{ ...actionBtnStyle, color: 'var(--text-muted)' }}
-                        onClick={e => { e.stopPropagation(); onDelete(node.id); }} title="删除"
+                        onClick={e => { e.stopPropagation(); onDelete(node.id); }} title={text('删除', 'Delete', 'Удалить')}
                         onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = 'rgba(239,68,68,0.08)'; }}
                         onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'none'; }}
                     ><Trash2 size={12} /></button>
                 )}
                 {addItemFn && (
                     <button style={{ ...actionBtnStyle, color: 'var(--text-muted)' }}
-                        onClick={e => { e.stopPropagation(); addItemFn(); }} title="新建条目"
+                        onClick={e => { e.stopPropagation(); addItemFn(); }} title={text('新建条目', 'New Entry', 'Новая запись')}
                         onMouseEnter={e => { e.currentTarget.style.color = meta.color; e.currentTarget.style.background = `${meta.color}12`; }}
                         onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'none'; }}
                     ><Plus size={12} /></button>
@@ -1038,7 +1068,7 @@ function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFold
                         <span
                             style={{ display: 'flex', cursor: 'pointer', flexShrink: 0, color: meta.color, borderRadius: 4, padding: 1 }}
                             onClick={(e) => handleIconClick(e, node.id)}
-                            title="点击更换图标"
+                            title={text('点击更换图标', 'Change icon', 'Сменить значок')}
                         >
                             <FolderIcon size={14} />
                         </span>
@@ -1048,7 +1078,7 @@ function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFold
                                 onBlur={finishRename}
                                 onKeyDown={e => { if (e.key === 'Enter') finishRename(); if (e.key === 'Escape') setRenamingId(null); }}
                                 onClick={e => e.stopPropagation()} />
-                        ) : <span style={{ ...S.treeName, opacity: node.enabled === false ? 0.45 : 1 }}>{node.name}</span>}
+                        ) : <span style={{ ...S.treeName, opacity: node.enabled === false ? 0.45 : 1 }}>{getDisplayName ? getDisplayName(node) : node.name}</span>}
                         <span className="cstree-count" style={{ ...S.treeCount, ...(isHovered ? { display: 'none' } : {}) }}>{totalItems}</span>
                         {renderActions(node, isHovered, () => onAddItem(node.id))}
                     </div>
@@ -1114,7 +1144,7 @@ function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFold
                     <div style={{ ...S.emptyIcon, color: meta.color, background: meta.bg }}>
                         {(() => { const Icon = meta.icon; return <Icon size={22} />; })()}
                     </div>
-                    <span style={{ fontSize: 13, color: 'var(--text-muted, #9ca3af)', fontWeight: 500 }}>暂无内容</span>
+                    <span style={{ fontSize: 13, color: 'var(--text-muted, #9ca3af)', fontWeight: 500 }}>{text('暂无内容', 'No content yet', 'Пока нет содержимого')}</span>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
                         <button
                             style={{ ...S.addBtn, borderColor: `${meta.color}50`, color: meta.color, fontSize: 12, padding: '6px 14px' }}
@@ -1122,7 +1152,7 @@ function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFold
                             onMouseEnter={e => { e.currentTarget.style.background = meta.bg; e.currentTarget.style.borderColor = meta.color; }}
                             onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.borderColor = `${meta.color}50`; }}
                         >
-                            <FolderPlus size={13} /> 新建分类
+                            <FolderPlus size={13} /> {text('新建分类', 'New Category', 'Новая категория')}
                         </button>
                         <button
                             style={{ ...S.addBtn, borderColor: 'var(--border-medium, #d1d5db)', color: 'var(--text-secondary, #6b7280)', fontSize: 12, padding: '6px 14px' }}
@@ -1130,7 +1160,7 @@ function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFold
                             onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.borderColor = 'var(--text-muted)'; }}
                             onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.borderColor = 'var(--border-medium, #d1d5db)'; }}
                         >
-                            <FileText size={13} /> 新建条目
+                            <FileText size={13} /> {text('新建条目', 'New Entry', 'Новая запись')}
                         </button>
                     </div>
                 </div>
@@ -1168,13 +1198,14 @@ function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFold
 
 // ==================== 删除确认 ====================
 function DeleteConfirmDialog({ message, onConfirm, onCancel }) {
+    const { text } = useI18n();
     return createPortal(
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 20001, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onCancel}>
             <div style={{ background: 'var(--bg-card, #fff)', borderRadius: 16, padding: '26px 30px', maxWidth: 420, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', minWidth: 300 }} onClick={e => e.stopPropagation()}>
                 <p style={{ fontSize: 14, color: 'var(--text-primary)', margin: '0 0 22px', lineHeight: 1.6, fontWeight: 500 }}>{message}</p>
                 <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-                    <button style={{ padding: '7px 18px', borderRadius: 9, border: '1px solid var(--border-light, #e5e7eb)', background: 'var(--bg-card, #fff)', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 13, fontWeight: 500 }} onClick={onCancel}>取消</button>
-                    <button style={{ padding: '7px 18px', borderRadius: 9, border: 'none', background: '#ef4444', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600, boxShadow: '0 2px 8px rgba(239,68,68,0.3)' }} onClick={onConfirm}>删除</button>
+                    <button style={{ padding: '7px 18px', borderRadius: 9, border: '1px solid var(--border-light, #e5e7eb)', background: 'var(--bg-card, #fff)', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 13, fontWeight: 500 }} onClick={onCancel}>{text('取消', 'Cancel', 'Отмена')}</button>
+                    <button style={{ padding: '7px 18px', borderRadius: 9, border: 'none', background: '#ef4444', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600, boxShadow: '0 2px 8px rgba(239,68,68,0.3)' }} onClick={onConfirm}>{text('删除', 'Delete', 'Удалить')}</button>
                 </div>
             </div>
         </div>,
@@ -1192,7 +1223,7 @@ export default function CategorySettingsModal() {
         incrementSettingsVersion,
     } = useAppStore();
 
-    const { t } = useI18n();
+    const { t, text } = useI18n();
     const [nodes, setNodes] = useState([]);
     const [selectedNodeId, setSelectedNodeId] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
@@ -1252,9 +1283,9 @@ export default function CategorySettingsModal() {
     // 导出当前分类的设定（多格式）
     const handleExportCategory = async (format = 'json') => {
         const catItems = nodes.filter(n => n.category === category && n.type === 'item');
-        if (catItems.length === 0) { alert('当前分类没有可导出的条目'); return; }
+        if (catItems.length === 0) { alert(text('当前分类没有可导出的条目', 'There are no entries to export in this category.', 'В этой категории нет записей для экспорта.')); return; }
         setShowExportMenu(false);
-        const baseName = categoryLabel + '-设定';
+        const baseName = `${categoryLabel}${text('-设定', '-settings', '-settings')}`;
 
         if (format === 'txt') {
             const txt = exportNodesToTxt(catItems);
@@ -1306,15 +1337,15 @@ export default function CategorySettingsModal() {
                 } else if (data.type === 'author-settings-export' && Array.isArray(data.nodes)) {
                     importItems = data.nodes.filter(n => n.type === 'item' && n.category === category);
                 } else {
-                    alert('无法识别的JSON格式'); return;
+                    alert(text('无法识别的 JSON 格式', 'Unrecognized JSON format', 'Нераспознанный формат JSON')); return;
                 }
-                if (importItems.length === 0) { alert('未找到可导入的条目'); return; }
+                if (importItems.length === 0) { alert(text('未找到可导入的条目', 'No importable entries found', 'Не найдены записи для импорта')); return; }
                 let updatedNodes = [...nodes];
                 let count = 0;
                 for (const item of importItems) {
                     const nodeId = Date.now().toString(36) + Math.random().toString(36).substr(2, 6) + count;
                     updatedNodes.push({
-                        id: nodeId, name: item.name || '导入条目', type: 'item',
+                        id: nodeId, name: item.name || text('导入条目', 'Imported Entry', 'Импортированная запись'), type: 'item',
                         category, parentId, order: count,
                         content: item.content || {},
                         collapsed: false, enabled: true,
@@ -1324,7 +1355,7 @@ export default function CategorySettingsModal() {
                 }
                 await saveSettingsNodes(updatedNodes, workId);
                 setNodes(updatedNodes);
-                alert(`成功导入 ${count} 个${categoryLabel}条目`);
+                alert(text(`成功导入 ${count} 个${categoryLabel}条目`, `Imported ${count} ${categoryLabel} entries`, `Импортировано записей (${categoryLabel}): ${count}`));
                 return;
             }
 
@@ -1346,7 +1377,7 @@ export default function CategorySettingsModal() {
                     // 只导入匹配当前分类的条目
                     if (entry.category && entry.category !== category) continue;
                     const mapped = mapFieldsToContent(entry.fields, category);
-                    const nodeName = mapped.name || entry.name || '导入条目';
+                    const nodeName = mapped.name || entry.name || text('导入条目', 'Imported Entry', 'Импортированная запись');
                     if (Object.keys(mapped.content).length === 0) continue;
                     importedItems.push({ name: nodeName, category, content: mapped.content });
                 }
@@ -1356,12 +1387,12 @@ export default function CategorySettingsModal() {
                     const parsed = parseTextToFields(block);
                     if (Object.keys(parsed).length === 0) continue;
                     const mapped = mapFieldsToContent(parsed, category);
-                    const nodeName = mapped.name || Object.values(parsed)[0]?.substring(0, 20) || '导入条目';
+                    const nodeName = mapped.name || Object.values(parsed)[0]?.substring(0, 20) || text('导入条目', 'Imported Entry', 'Импортированная запись');
                     importedItems.push({ name: nodeName, category, content: mapped.content });
                 }
             }
 
-            if (importedItems.length === 0) { alert('未能从文件中解析出任何条目'); return; }
+            if (importedItems.length === 0) { alert(text('未能从文件中解析出任何条目', 'No entries could be parsed from the file.', 'Не удалось извлечь записи из файла.')); return; }
 
             let updatedNodes = [...nodes];
             let count = 0;
@@ -1378,9 +1409,9 @@ export default function CategorySettingsModal() {
             }
             await saveSettingsNodes(updatedNodes, workId);
             setNodes(updatedNodes);
-            alert(`成功导入 ${count} 个${categoryLabel}条目`);
+            alert(text(`成功导入 ${count} 个${categoryLabel}条目`, `Imported ${count} ${categoryLabel} entries`, `Импортировано записей (${categoryLabel}): ${count}`));
         } catch (err) {
-            alert('导入失败: ' + err.message);
+            alert(text('导入失败: ', 'Import failed: ', 'Ошибка импорта: ') + err.message);
         }
     };
 
@@ -1431,7 +1462,19 @@ export default function CategorySettingsModal() {
 
     // 使用 rootFolder 的图标，与缩略图弹窗和完整面板保持一致
     const CatIcon = (rootFolder?.icon && getIconComponent(rootFolder.icon)) || meta.icon;
-    const categoryLabel = rootFolder?.name || meta.label;
+    const categoryDefaultLabel = meta.label;
+    const localizedCategoryLabel = getLocalizedCatLabel(category, text);
+    const categoryLabel = rootFolder?.name && rootFolder.name !== categoryDefaultLabel
+        ? rootFolder.name
+        : localizedCategoryLabel;
+    const getDisplayName = useCallback((node) => {
+        if (!node) return '';
+        const builtInLabel = CAT_META[node.category]?.label;
+        if ((node.type === 'folder' || node.type === 'special') && builtInLabel && (!node.name || node.name === builtInLabel)) {
+            return getLocalizedCatLabel(node.category, text);
+        }
+        return node.name || getLocalizedCatLabel(node.category, text);
+    }, [text]);
 
     const categoryNodes = useMemo(() => {
         if (!rootFolder) return [];
@@ -1468,7 +1511,7 @@ export default function CategorySettingsModal() {
         const targetParent = resolveParentFolder(parentId);
         if (!targetParent) return;
         const newNode = await addSettingsNode({
-            name: '新分类', type: 'folder', category, parentId: targetParent, icon: 'FolderOpen',
+            name: text('新分类', 'New Category', 'Новая категория'), type: 'folder', category, parentId: targetParent, icon: 'FolderOpen',
         });
         // 直接追加到现有状态，不重新加载
         setNodes(prev => [...prev, newNode]);
@@ -1480,7 +1523,7 @@ export default function CategorySettingsModal() {
         const targetParent = resolveParentFolder(parentId);
         if (!targetParent) return;
         const newNode = await addSettingsNode({
-            name: '新条目', type: 'item', category, parentId: targetParent, enabled: true,
+            name: text('新条目', 'New Entry', 'Новая запись'), type: 'item', category, parentId: targetParent, enabled: true,
         });
         // 直接追加到现有状态，不重新加载
         setNodes(prev => [...prev, newNode]);
@@ -1491,7 +1534,11 @@ export default function CategorySettingsModal() {
         const node = nodes.find(n => n.id === id);
         if (!node) return;
         setDeleteConfirm({
-            message: `确定要删除「${node.name}」吗？${node.type === 'folder' ? '分类内的所有条目也会被删除。' : ''}`,
+            message: text(
+                `确定要删除「${node.name}」吗？${node.type === 'folder' ? '分类内的所有条目也会被删除。' : ''}`,
+                `Delete "${node.name}"?${node.type === 'folder' ? ' All entries in this category will also be deleted.' : ''}`,
+                `Удалить «${node.name}»?${node.type === 'folder' ? ' Все записи в этой категории также будут удалены.' : ''}`
+            ),
             onConfirm: async () => {
                 setDeleteConfirm(null);
                 // 收集要删除的节点 ID（包括所有子节点）
@@ -1563,20 +1610,20 @@ export default function CategorySettingsModal() {
                                 onClick={() => { onClose(); setTimeout(() => useAppStore.getState().setShowSettings('settings'), 80); }}
                                 onMouseEnter={e => { e.currentTarget.style.color = meta.color; e.currentTarget.style.background = `${meta.color}15`; }}
                                 onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'rgba(255,255,255,0.65)'; }}
-                                title="返回完整设定集面板"
-                            ><Layers size={14} />设定集面板</button>
+                                title={text('返回完整设定集面板', 'Back to full settings panel', 'Вернуться к полной панели настроек')}
+                            ><Layers size={14} />{text('设定集面板', 'Settings Panel', 'Панель настроек')}</button>
                             <button
                                 style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: 'none', background: 'rgba(255,255,255,0.65)', backdropFilter: 'blur(6px)', padding: '6px 14px', borderRadius: 9, fontSize: 12.5, color: 'var(--text-muted)', cursor: 'pointer', transition: 'all 0.15s', fontWeight: 500, whiteSpace: 'nowrap' }}
                                 onClick={() => { onClose(); setTimeout(() => useAppStore.getState().setShowBookInfo(true), 80); }}
                                 onMouseEnter={e => { e.currentTarget.style.color = meta.color; e.currentTarget.style.background = `${meta.color}15`; }}
                                 onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'rgba(255,255,255,0.65)'; }}
-                                title="返回作品信息管理"
-                            ><BookOpen size={14} />作品信息</button>
+                                title={text('返回作品信息管理', 'Back to book info', 'Вернуться к информации о произведении')}
+                            ><BookOpen size={14} />{text('作品信息', 'Book Info', 'Информация')}</button>
                         </div>
                     </div>
                     <div style={{ display: 'flex', gap: 4, alignItems: 'center', zIndex: 1 }}>
                         <button style={S.headerBtn} onClick={() => setIsFullscreen(!isFullscreen)}
-                            title={isFullscreen ? '缩小' : '最大化'}
+                            title={isFullscreen ? text('缩小', 'Exit fullscreen', 'Выйти из полноэкранного режима') : text('最大化', 'Fullscreen', 'Во весь экран')}
                             onMouseEnter={e => { e.currentTarget.style.background = `${meta.color}12`; e.currentTarget.style.color = meta.color; }}
                             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)'; }}
                         >
@@ -1600,7 +1647,7 @@ export default function CategorySettingsModal() {
                     flexShrink: 0,
                 }}>
                     <BookOpen size={14} style={{ color: meta.color, flexShrink: 0 }} />
-                    <span style={{ fontSize: 12, color: 'var(--text-muted, #9ca3af)', whiteSpace: 'nowrap', flexShrink: 0 }}>作品</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-muted, #9ca3af)', whiteSpace: 'nowrap', flexShrink: 0 }}>{text('作品', 'Work', 'Произведение')}</span>
                     <select
                         value={activeWorkId || ''}
                         onChange={e => handleSwitchWork(e.target.value)}
@@ -1631,30 +1678,36 @@ export default function CategorySettingsModal() {
                             <input style={{ padding: '5px 10px', border: `1.5px solid ${meta.color}`, borderRadius: 10, fontSize: 12, background: 'var(--bg-card, #fff)', color: 'var(--text-primary)', outline: 'none', width: 110 }}
                                 value={newWorkName} onChange={e => setNewWorkName(e.target.value)}
                                 onKeyDown={e => { if (e.key === 'Enter') handleCreateWork(); if (e.key === 'Escape') setShowNewWorkInput(false); }}
-                                placeholder="作品名称" autoFocus />
+                                placeholder={text('作品名称', 'Work name', 'Название произведения')} autoFocus />
                             <button style={{ padding: '4px 10px', border: 'none', borderRadius: 8, background: meta.color, color: '#fff', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}
-                                onClick={handleCreateWork}>确定</button>
+                                onClick={handleCreateWork}>{text('确定', 'Confirm', 'Подтвердить')}</button>
                             <button style={{ padding: '4px 8px', border: 'none', borderRadius: 8, background: 'var(--bg-hover, #f3f4f6)', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 11 }}
-                                onClick={() => setShowNewWorkInput(false)}>取消</button>
+                                onClick={() => setShowNewWorkInput(false)}>{text('取消', 'Cancel', 'Отмена')}</button>
                         </div>
                     ) : (
                         <button style={{ padding: '4px 10px', border: '1px dashed var(--border-light, #d1d5db)', borderRadius: 8, background: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--text-muted, #9ca3af)', transition: 'all 0.15s', whiteSpace: 'nowrap' }}
                             onClick={() => { setNewWorkName(''); setShowNewWorkInput(true); }}
                             onMouseEnter={e => { e.currentTarget.style.borderColor = meta.color; e.currentTarget.style.color = meta.color; }}
                             onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-light, #d1d5db)'; e.currentTarget.style.color = 'var(--text-muted, #9ca3af)'; }}
-                        >+ 新作品</button>
+                        >+ {text('新作品', 'New Work', 'Новое произведение')}</button>
                     )}
                     {/* 右侧操作按钮 */}
                     <div style={{ marginLeft: 'auto', display: 'flex', gap: 2, alignItems: 'center', position: 'relative' }}>
                         <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                             <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted, #9ca3af)', padding: '4px 6px', borderRadius: 6, transition: 'all 0.15s', display: 'flex', alignItems: 'center' }}
-                                onClick={() => setShowExportMenu(!showExportMenu)} title={'导出' + categoryLabel}
+                                onClick={() => setShowExportMenu(!showExportMenu)} title={text(`导出${categoryLabel}`, `Export ${categoryLabel}`, `Экспорт: ${categoryLabel}`)}
                                 onMouseEnter={e => { e.currentTarget.style.color = meta.color; e.currentTarget.style.background = `${meta.color}10`; }}
                                 onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted, #9ca3af)'; e.currentTarget.style.background = 'none'; }}
                             ><Upload size={13} /></button>
                             {showExportMenu && (
                                 <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--bg-primary, #fff)', border: '1px solid var(--border-light)', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 20, overflow: 'hidden', minWidth: 120 }}>
-                                    {[{ key: 'json', label: 'JSON (完整)' }, { key: 'txt', label: 'TXT (纯文本)' }, { key: 'md', label: 'Markdown' }, { key: 'docx', label: 'Word (.docx)' }, { key: 'pdf', label: 'PDF (打印)' }].map(f => (
+                                    {[
+                                        { key: 'json', label: text('JSON (完整)', 'JSON (Complete)', 'JSON (полный)') },
+                                        { key: 'txt', label: text('TXT (纯文本)', 'TXT (Plain Text)', 'TXT (простой текст)') },
+                                        { key: 'md', label: 'Markdown' },
+                                        { key: 'docx', label: 'Word (.docx)' },
+                                        { key: 'pdf', label: text('PDF (打印)', 'PDF (Print)', 'PDF (печать)') },
+                                    ].map(f => (
                                         <button key={f.key} style={{ display: 'block', width: '100%', padding: '8px 14px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--text-primary)', textAlign: 'left', transition: 'background 0.1s' }}
                                             onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary, #f9fafb)'}
                                             onMouseLeave={e => e.currentTarget.style.background = 'none'}
@@ -1665,7 +1718,7 @@ export default function CategorySettingsModal() {
                             )}
                         </div>
                         <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted, #9ca3af)', padding: '4px 6px', borderRadius: 6, transition: 'all 0.15s', display: 'flex', alignItems: 'center' }}
-                            onClick={() => importInputRef.current?.click()} title={'导入' + categoryLabel}
+                            onClick={() => importInputRef.current?.click()} title={text(`导入${categoryLabel}`, `Import ${categoryLabel}`, `Импорт: ${categoryLabel}`)}
                             onMouseEnter={e => { e.currentTarget.style.color = meta.color; e.currentTarget.style.background = `${meta.color}10`; }}
                             onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted, #9ca3af)'; e.currentTarget.style.background = 'none'; }}
                         ><Download size={13} /></button>
@@ -1673,15 +1726,15 @@ export default function CategorySettingsModal() {
                         <div style={{ width: 1, height: 14, background: 'var(--border-light, #e5e7eb)', margin: '0 2px' }} />
                         {showClearConfirm ? (
                             <div style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 11 }}>
-                                <span style={{ color: '#ef4444', whiteSpace: 'nowrap' }}>确认清空?</span>
+                                <span style={{ color: '#ef4444', whiteSpace: 'nowrap' }}>{text('确认清空?', 'Clear all?', 'Очистить все?')}</span>
                                 <button style={{ padding: '2px 8px', border: 'none', borderRadius: 6, background: '#ef4444', color: '#fff', cursor: 'pointer', fontSize: 10, fontWeight: 600 }}
-                                    onClick={handleClearCategory}>确定</button>
+                                    onClick={handleClearCategory}>{text('确定', 'Confirm', 'Подтвердить')}</button>
                                 <button style={{ padding: '2px 8px', border: 'none', borderRadius: 6, background: 'var(--bg-hover, #f3f4f6)', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 10 }}
-                                    onClick={() => setShowClearConfirm(false)}>取消</button>
+                                    onClick={() => setShowClearConfirm(false)}>{text('取消', 'Cancel', 'Отмена')}</button>
                             </div>
                         ) : (
                             <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted, #9ca3af)', padding: '4px 6px', borderRadius: 6, transition: 'all 0.15s' }}
-                                onClick={() => setShowClearConfirm(true)} title={'清空' + categoryLabel}
+                                onClick={() => setShowClearConfirm(true)} title={text(`清空${categoryLabel}`, `Clear ${categoryLabel}`, `Очистить: ${categoryLabel}`)}
                                 onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = 'rgba(239,68,68,0.08)'; }}
                                 onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted, #9ca3af)'; e.currentTarget.style.background = 'none'; }}
                             ><Trash2 size={13} /></button>
@@ -1721,7 +1774,7 @@ export default function CategorySettingsModal() {
                                 onClick={() => setSelectedNodeId(null)}
                                 onMouseEnter={e => { if (selectedNodeId) { e.currentTarget.style.background = 'var(--bg-hover, #f3f4f6)'; } }}
                                 onMouseLeave={e => { if (selectedNodeId) { e.currentTarget.style.background = 'transparent'; } }}
-                            >全部</button>
+                            >{text('全部', 'All', 'Все')}</button>
                             {subFolders.map(folder => {
                                 const isActive = selectedNodeId === folder.id;
                                 const FolderIcon = getIconComponent(folder.icon);
@@ -1753,7 +1806,7 @@ export default function CategorySettingsModal() {
                                         onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
                                     >
                                         {FolderIcon && <FolderIcon size={12} />}
-                                        {folder.name}
+                                        {getDisplayName(folder)}
                                     </button>
                                 );
                             })}
@@ -1773,7 +1826,7 @@ export default function CategorySettingsModal() {
                             }}>
                                 <Search size={14} style={{ color: searchFocused ? meta.color : 'var(--text-muted)', flexShrink: 0, transition: 'color 0.2s' }} />
                                 <input ref={searchInputRef} style={S.searchInput}
-                                    placeholder="搜索条目…" value={searchQuery}
+                                    placeholder={text('搜索条目…', 'Search items...', 'Искать записи...')} value={searchQuery}
                                     onChange={e => setSearchQuery(e.target.value)}
                                     onFocus={() => setSearchFocused(true)}
                                     onBlur={() => setSearchFocused(false)}
@@ -1794,6 +1847,8 @@ export default function CategorySettingsModal() {
                                 await updateSettingsNode(id, { enabled: newEnabled });
                                 setNodes(prev => prev.map(n => n.id === id ? { ...n, enabled: newEnabled } : n));
                             }}
+                            text={text}
+                            getDisplayName={getDisplayName}
                             onReorder={async (draggedId, targetId, position) => {
                                 const dragged = nodes.find(n => n.id === draggedId);
                                 const target = nodes.find(n => n.id === targetId);
@@ -1810,7 +1865,7 @@ export default function CategorySettingsModal() {
                                     const siblings = nodes.filter(n => n.parentId === target.parentId && n.id !== draggedId)
                                         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
                                     if (wouldCreateParentCycle(nodes, draggedId, newParentId)) {
-                                        alert('不能把分类移动到自身或它的子分类下。');
+                                        alert(text('不能把分类移动到自身或它的子分类下。', 'A category cannot be moved into itself or one of its subcategories.', 'Категорию нельзя переместить в саму себя или в ее подкатегорию.'));
                                         return;
                                     }
                                     const targetIdx = siblings.findIndex(n => n.id === targetId);
@@ -1829,7 +1884,7 @@ export default function CategorySettingsModal() {
                                     return;
                                 }
                                 if (wouldCreateParentCycle(nodes, draggedId, newParentId)) {
-                                    alert('不能把分类移动到自身或它的子分类下。');
+                                    alert(text('不能把分类移动到自身或它的子分类下。', 'A category cannot be moved into itself or one of its subcategories.', 'Категорию нельзя переместить в саму себя или в ее подкатегорию.'));
                                     return;
                                 }
                                 const updatedNodes = nodes.map(n => {
@@ -1849,17 +1904,17 @@ export default function CategorySettingsModal() {
                                 onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(1.1)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
                                 onMouseLeave={e => { e.currentTarget.style.filter = 'none'; e.currentTarget.style.transform = 'none'; }}
                             >
-                                <Plus size={14} /> 新建
+                                <Plus size={14} /> {text('新建', 'New', 'Создать')}
                                 <ChevronDown size={11} style={{ marginLeft: 2 }} />
                             </button>
-                            <span style={{ fontSize: 11.5, color: 'var(--text-muted, #9ca3af)', fontWeight: 500, letterSpacing: '0.03em', marginLeft: 4 }}>{itemCount} 个条目</span>
+                            <span style={{ fontSize: 11.5, color: 'var(--text-muted, #9ca3af)', fontWeight: 500, letterSpacing: '0.03em', marginLeft: 4 }}>{text(`${itemCount} 个条目`, `${itemCount} entries`, `Записей: ${itemCount}`)}</span>
                             {selectedNodeId && (
                                 <button style={{ ...S.footerBtn, marginLeft: 'auto' }}
-                                    onClick={() => handleDeleteNode(selectedNodeId)} title="删除选中"
+                                    onClick={() => handleDeleteNode(selectedNodeId)} title={text('删除选中', 'Delete Selected', 'Удалить выбранное')}
                                     onMouseEnter={e => { e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = 'rgba(239,68,68,0.06)'; }}
                                     onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-light)'; e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.background = 'var(--bg-card, #fff)'; }}
                                 >
-                                    <Trash2 size={13} /> 删除
+                                    <Trash2 size={13} /> {text('删除', 'Delete', 'Удалить')}
                                 </button>
                             )}
                             {showAddMenu && (
@@ -1869,6 +1924,7 @@ export default function CategorySettingsModal() {
                                     onClose={() => setShowAddMenu(false)}
                                     catColor={meta.color}
                                     catBg={meta.bg}
+                                    text={text}
                                 />
                             )}
                         </div>

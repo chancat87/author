@@ -27,7 +27,23 @@ const CAT_LABELS = {
  * @param {Function} onClose
  */
 export default function SettingsConflictModal({ conflicts, noConflicts, onConfirm, onClose }) {
-    const { t } = useI18n();
+    const { text } = useI18n();
+    const fieldLabels = {
+        character: { role: text('角色', 'Role', 'Роль'), gender: text('性别', 'Gender', 'Пол'), age: text('年龄', 'Age', 'Возраст'), appearance: text('外貌', 'Appearance', 'Внешность'), personality: text('性格', 'Personality', 'Характер'), background: text('背景故事', 'Backstory', 'Предыстория'), motivation: text('动机', 'Motivation', 'Мотивация'), skills: text('能力', 'Abilities', 'Способности'), speechStyle: text('说话风格', 'Speech Style', 'Стиль речи'), relationships: text('人物关系', 'Relationships', 'Отношения'), arc: text('成长弧线', 'Arc', 'Арка'), notes: text('备注', 'Notes', 'Заметки') },
+        location: { description: text('描述', 'Description', 'Описание'), slugline: text('场景标题', 'Slugline', 'Сцена'), sensoryVisual: text('视觉', 'Visuals', 'Визуально'), sensoryAudio: text('听觉', 'Audio', 'Звук'), sensorySmell: text('嗅觉', 'Smell', 'Запах'), mood: text('氛围', 'Mood', 'Атмосфера'), dangerLevel: text('危险等级', 'Danger Level', 'Уровень опасности'), notes: text('备注', 'Notes', 'Заметки') },
+        object: { description: text('描述', 'Description', 'Описание'), objectType: text('类型', 'Type', 'Тип'), rank: text('品阶', 'Rank', 'Ранг'), currentHolder: text('持有者', 'Current Holder', 'Владелец'), numericStats: text('数值', 'Stats', 'Характеристики'), symbolism: text('象征', 'Symbolism', 'Символика'), notes: text('备注', 'Notes', 'Заметки') },
+        world: { description: text('描述', 'Description', 'Описание'), notes: text('备注', 'Notes', 'Заметки') },
+        plot: { status: text('状态', 'Status', 'Статус'), description: text('描述', 'Description', 'Описание'), notes: text('备注', 'Notes', 'Заметки') },
+        rules: { description: text('描述', 'Description', 'Описание'), notes: text('备注', 'Notes', 'Заметки') },
+    };
+    const getCatLabel = (category) => ({
+        character: text('人物', 'Characters', 'Персонажи'),
+        location: text('地点', 'Places', 'Места'),
+        object: text('物品', 'Items', 'Предметы'),
+        world: text('世界观', 'Worldbuilding', 'Мир'),
+        plot: text('大纲', 'Outline', 'План'),
+        rules: text('规则', 'Rules', 'Правила'),
+    }[category] || category);
     // 每个冲突的解决方式: 'existing' | 'imported' | 'merged'
     const [resolutions, setResolutions] = useState(() => {
         const init = {};
@@ -56,18 +72,18 @@ export default function SettingsConflictModal({ conflicts, noConflicts, onConfir
 
     // === 字段摘要 ===
     const renderFieldSummary = (content, category) => {
-        if (!content || Object.keys(content).length === 0) return <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>（空）</span>;
-        const labels = FIELD_LABELS[category] || {};
+        if (!content || Object.keys(content).length === 0) return <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{text('（空）', '(Empty)', '(Пусто)')}</span>;
+        const labels = fieldLabels[category] || FIELD_LABELS[category] || {};
         const entries = Object.entries(content).filter(([_, v]) => v);
-        if (entries.length === 0) return <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>（空）</span>;
+        if (entries.length === 0) return <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{text('（空）', '(Empty)', '(Пусто)')}</span>;
         return (
             <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
                 {entries.slice(0, 4).map(([key, val]) => (
                     <div key={key} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        <b>{labels[key] || key}</b>：{String(val).substring(0, 40)}{String(val).length > 40 ? '…' : ''}
+                        <b>{labels[key] || key}</b>: {String(val).substring(0, 40)}{String(val).length > 40 ? '...' : ''}
                     </div>
                 ))}
-                {entries.length > 4 && <div style={{ color: 'var(--text-muted)' }}>+{entries.length - 4} 个字段</div>}
+                {entries.length > 4 && <div style={{ color: 'var(--text-muted)' }}>+{entries.length - 4} {text('个字段', 'fields', 'полей')}</div>}
             </div>
         );
     };
@@ -148,7 +164,7 @@ ${importedFields}
 
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}));
-                throw new Error(err.error || '请求失败');
+                throw new Error(err.error || text('请求失败', 'Request failed', 'Запрос не выполнен'));
             }
 
             // 读取 SSE 流
@@ -181,7 +197,7 @@ ${importedFields}
                 const jsonMatch = fullText.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, fullText];
                 mergedContent = JSON.parse(jsonMatch[1].trim());
             } catch {
-                throw new Error('AI 返回的内容无法解析为 JSON，请重试');
+                throw new Error(text('AI 返回的内容无法解析为 JSON，请重试', 'The AI response could not be parsed as JSON. Please try again', 'Ответ ИИ не удалось разобрать как JSON. Попробуйте ещё раз'));
             }
 
             // 将新结果追加到 results 数组，切换到最新
@@ -258,9 +274,11 @@ ${importedFields}
                 display: 'flex', flexDirection: 'column', gap: 16,
                 maxHeight: '80vh', overflow: 'hidden',
             }}>
-                <h3 style={{ margin: 0, fontSize: 16 }}><ClipboardList size={16} style={{ marginRight: 6, verticalAlign: 'text-bottom' }} />设定集导入 — 冲突解决</h3>
+                <h3 style={{ margin: 0, fontSize: 16 }}><ClipboardList size={16} style={{ marginRight: 6, verticalAlign: 'text-bottom' }} />{text('设定集导入 — 冲突解决', 'Settings Import - Conflict Resolution', 'Импорт настроек - разрешение конфликтов')}</h3>
                 <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>
-                    发现 {conflicts.length} 个同名条目冲突，{noConflicts.length > 0 ? `另有 ${noConflicts.length} 个新条目将直接导入。` : ''}请选择处理方式：
+                    {text(`发现 ${conflicts.length} 个同名条目冲突，`, `Found ${conflicts.length} same-name conflicts. `, `Найдено конфликтов с одинаковыми именами: ${conflicts.length}. `)}
+                    {noConflicts.length > 0 ? text(`另有 ${noConflicts.length} 个新条目将直接导入。`, `${noConflicts.length} new items will be imported directly. `, `Новых элементов для прямого импорта: ${noConflicts.length}. `) : ''}
+                    {text('请选择处理方式：', 'Choose how to resolve them:', 'Выберите способ разрешения:')}
                 </p>
 
                 {/* 冲突列表 */}
@@ -284,20 +302,20 @@ ${importedFields}
                                     <span style={{
                                         fontSize: 10, padding: '1px 6px', borderRadius: 8,
                                         background: 'var(--bg-primary)', color: 'var(--text-muted)',
-                                    }}>{CAT_LABELS[conflict.category] || conflict.category}</span>
+                                    }}>{getCatLabel(conflict.category)}</span>
                                     <button
                                         style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)' }}
                                         onClick={() => toggleExpanded(i)}
-                                    >{expanded ? '收起 ▲' : '展开详情 ▼'}</button>
+                                    >{expanded ? text('收起 ▲', 'Collapse ▲', 'Свернуть ▲') : text('展开详情 ▼', 'Details ▼', 'Подробнее ▼')}</button>
                                 </div>
 
                                 {/* 选择按钮 */}
                                 <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: expanded ? 10 : 0 }}>
                                     <button style={btnStyle(res === 'existing')} onClick={() => setResolution(i, 'existing')}>
-                                        保留已有
+                                        {text('保留已有', 'Keep Existing', 'Оставить текущее')}
                                     </button>
                                     <button style={btnStyle(res === 'imported')} onClick={() => setResolution(i, 'imported')}>
-                                        使用导入
+                                        {text('使用导入', 'Use Imported', 'Использовать импорт')}
                                     </button>
                                     <button
                                         style={{
@@ -312,7 +330,7 @@ ${importedFields}
                                         }}
                                         disabled={ms.loading}
                                     >
-                                        {ms.loading ? '合并中...' : hasResults ? <><CheckCircle2 size={11} style={{ marginRight: 2 }} />已合并 ({totalResults})</> : <><Bot size={11} style={{ marginRight: 2 }} />AI 智能合并</>}
+                                        {ms.loading ? text('合并中...', 'Merging...', 'Слияние...') : hasResults ? <><CheckCircle2 size={11} style={{ marginRight: 2 }} />{text('已合并', 'Merged', 'Объединено')} ({totalResults})</> : <><Bot size={11} style={{ marginRight: 2 }} />{text('AI 智能合并', 'AI Smart Merge', 'Умное слияние ИИ')}</>}
                                     </button>
                                 </div>
 
@@ -325,7 +343,7 @@ ${importedFields}
                                             background: res === 'existing' ? 'rgba(var(--accent-rgb, 180, 120, 60), 0.08)' : 'var(--bg-primary)',
                                             border: res === 'existing' ? '2px solid var(--accent)' : '1px solid var(--border-light)',
                                         }}>
-                                            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}><FolderOpen size={11} style={{ marginRight: 4 }} />已有</div>
+                                            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}><FolderOpen size={11} style={{ marginRight: 4 }} />{text('已有', 'Existing', 'Текущее')}</div>
                                             {renderFieldSummary(conflict.existing.content, conflict.category)}
                                         </div>
                                         {/* 导入版本 */}
@@ -334,7 +352,7 @@ ${importedFields}
                                             background: res === 'imported' ? 'rgba(var(--accent-rgb, 180, 120, 60), 0.08)' : 'var(--bg-primary)',
                                             border: res === 'imported' ? '2px solid var(--accent)' : '1px solid var(--border-light)',
                                         }}>
-                                            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)', marginBottom: 4 }}><Download size={11} style={{ marginRight: 4 }} />导入</div>
+                                            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)', marginBottom: 4 }}><Download size={11} style={{ marginRight: 4 }} />{text('导入', 'Imported', 'Импорт')}</div>
                                             {renderFieldSummary(conflict.imported.content, conflict.category)}
                                         </div>
                                     </div>
@@ -351,7 +369,7 @@ ${importedFields}
                                                     background: 'var(--bg-primary)', color: 'var(--text-primary)',
                                                     outline: 'none',
                                                 }}
-                                                placeholder="AI 合并提示词（可选，如：以导入版本为主…）"
+                                                placeholder={text('AI 合并提示词（可选，如：以导入版本为主…）', 'AI merge instruction (optional, e.g. prioritize imported version...)', 'Инструкция для слияния ИИ (необязательно, например: взять импорт как основу...)')}
                                                 value={ms.prompt || ''}
                                                 onChange={e => setMergeStates(prev => ({
                                                     ...prev,
@@ -362,7 +380,7 @@ ${importedFields}
                                                 style={btnStyle(false)}
                                                 onClick={() => handleAiMerge(i)}
                                                 disabled={ms.loading}
-                                            >{ms.loading ? '合并中...' : <><Bot size={11} style={{ marginRight: 2 }} />合并</>}</button>
+                                            >{ms.loading ? text('合并中...', 'Merging...', 'Слияние...') : <><Bot size={11} style={{ marginRight: 2 }} />{text('合并', 'Merge', 'Объединить')}</>}</button>
                                         </div>
                                         {ms.error && (
                                             <div style={{ fontSize: 11, color: '#e44', marginTop: 4 }}><XCircle size={11} style={{ marginRight: 4 }} />{ms.error}</div>
@@ -375,7 +393,7 @@ ${importedFields}
                                                 cursor: 'pointer',
                                             }} onClick={() => setResolutions(prev => ({ ...prev, [i]: 'merged' }))}>
                                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                                                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)' }}><Sparkles size={11} style={{ marginRight: 4 }} />合并结果</span>
+                                                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)' }}><Sparkles size={11} style={{ marginRight: 4 }} />{text('合并结果', 'Merged Result', 'Результат слияния')}</span>
                                                     {totalResults > 1 && (
                                                         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                                                             <button
@@ -405,12 +423,12 @@ ${importedFields}
                 {/* 底部 */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                     <div style={{ display: 'flex', gap: 6 }}>
-                        <button style={btnStyle(false)} onClick={selectAllExisting}>全选已有</button>
-                        <button style={btnStyle(false)} onClick={selectAllImported}>全选导入</button>
+                        <button style={btnStyle(false)} onClick={selectAllExisting}>{text('全选已有', 'Select Existing', 'Выбрать текущее')}</button>
+                        <button style={btnStyle(false)} onClick={selectAllImported}>{text('全选导入', 'Select Imported', 'Выбрать импорт')}</button>
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
-                        <button className="btn btn-ghost btn-sm" onClick={onClose}>取消</button>
-                        <button className="btn btn-primary btn-sm" onClick={handleConfirm}>确认导入</button>
+                        <button className="btn btn-ghost btn-sm" onClick={onClose}>{text('取消', 'Cancel', 'Отмена')}</button>
+                        <button className="btn btn-primary btn-sm" onClick={handleConfirm}>{text('确认导入', 'Confirm Import', 'Подтвердить импорт')}</button>
                     </div>
                 </div>
             </div>

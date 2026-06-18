@@ -150,6 +150,41 @@ function notifySyncStatus(status) {
     }
 }
 
+function isCloudCanonicalArrayKey(key) {
+    return key === 'author-works-index'
+        || key.startsWith('author-chapters-')
+        || key.startsWith('author-chapter-memory-groups-')
+        || key.startsWith('author-settings-nodes-');
+}
+
+function getCloudUpdatedAtMs(cloudData) {
+    const value = cloudData?.updatedAt;
+    if (!value) return 0;
+    if (typeof value.toMillis === 'function') return value.toMillis();
+    if (typeof value.seconds === 'number') {
+        return value.seconds * 1000 + Math.floor((value.nanoseconds || 0) / 1e6);
+    }
+    const time = new Date(value).getTime();
+    return Number.isFinite(time) ? time : 0;
+}
+
+function getLatestArrayItemUpdatedAtMs(value) {
+    if (!Array.isArray(value)) return 0;
+    return value.reduce((latest, item) => {
+        if (!item || typeof item !== 'object') return latest;
+        const time = new Date(item.updatedAt || item.generatedAt || item.createdAt || 0).getTime();
+        return Number.isFinite(time) && time > latest ? time : latest;
+    }, 0);
+}
+
+function areJsonEqual(a, b) {
+    try {
+        return JSON.stringify(a) === JSON.stringify(b);
+    } catch {
+        return false;
+    }
+}
+
 // ==================== 读写接口 ====================
 
 /**
@@ -359,6 +394,65 @@ export async function flushSync(options = {}) {
 }
 
 /**
+ * 将本机当前同步白名单内的数据全量写入 Firestore。
+ * 用于“同步到云端”：即使数据是在登录前写好的、当前没有 pending 队列，也要把完整作品图谱推上云端。
+ * @param {Function} localGet - 本地读取函数 (key) => value
+ * @param {string[]} keys - 要推送的候选 key
+ * @returns {Promise<number>} 写入/删除的 key 数量
+ */
+export async function pushAllToCloud(localGet, keys = []) {
+    const user = getCurrentUser();
+    if (!isFirebaseConfigured || !db || !user) return 0;
+
+    if (_isSyncing) {
+        if (_activeFlushPromise) {
+            await _activeFlushPromise;
+        } else {
+            return 0;
+        }
+    }
+
+    const allKeys = new Set([
+        ...(Array.isArray(keys) ? keys : []),
+        ..._pendingWrites.keys(),
+    ]);
+
+    _isSyncing = true;
+    notifySyncStatus({ syncing: true, pending: _pendingWrites.size });
+
+    let pushedCount = 0;
+    try {
+        for (const key of allKeys) {
+            if (!isSyncableKey(key)) continue;
+            const pending = _pendingWrites.get(key);
+            const value = pending ? pending.value : await localGet(key);
+            const ref = doc(db, 'users', user.uid, COLLECTION_NAME, key);
+
+            if (value === '_AUTHOR_DELETE_') {
+                await deleteCloudValue(ref);
+                _pendingWrites.delete(key);
+                pushedCount++;
+                continue;
+            }
+
+            if (value === undefined || value === null) continue;
+
+            await writeCloudValue(ref, deepClean(value));
+            _pendingWrites.delete(key);
+            pushedCount++;
+        }
+
+        notifySyncStatus({ syncing: false, pending: _pendingWrites.size, lastSync: Date.now() });
+        return pushedCount;
+    } catch (err) {
+        notifySyncStatus({ syncing: false, pending: _pendingWrites.size, error: err.message });
+        throw err;
+    } finally {
+        _isSyncing = false;
+    }
+}
+
+/**
  * 首次登录时，从 Firestore 拉取全部数据并合并到本地
  * @param {Function} localGet - 本地读取函数 (key) => value
  * @param {Function} localSet - 本地写入函数 (key, value) => void
@@ -423,6 +517,15 @@ export async function pullAllFromCloud(localGet, localSet) {
             if (isLocalEmptyOrDefault(key, localData)) {
                 await localSet(key, cloudValue);
                 merged++;
+            } else if (
+                isCloudCanonicalArrayKey(key)
+                && Array.isArray(localData)
+                && Array.isArray(cloudValue)
+                && getCloudUpdatedAtMs(cloudData) > getLatestArrayItemUpdatedAtMs(localData)
+                && !areJsonEqual(localData, cloudValue)
+            ) {
+                await localSet(key, cloudValue);
+                merged++;
             } else if (Array.isArray(localData) && Array.isArray(cloudValue)) {
                 // 基于 id 和 updatedAt 的智能合并
                 let isIdBased = false;
@@ -479,6 +582,7 @@ export async function forcePullFromCloud(localSet) {
     const user = getCurrentUser();
     if (!isFirebaseConfigured || !db || !user) return 0;
 
+    _pendingWrites.clear();
     notifySyncStatus({ syncing: true, pending: 0 });
     try {
         const colRef = collection(db, 'users', user.uid, COLLECTION_NAME);

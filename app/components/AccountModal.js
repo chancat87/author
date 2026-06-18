@@ -7,6 +7,7 @@ import {
     Plus, Trash2, Camera
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
+import { useI18n } from '../lib/useI18n';
 
 /**
  * 账户管理弹窗
@@ -14,6 +15,7 @@ import { useAppStore } from '../store/useAppStore';
  */
 export default function AccountModal() {
     const { showAccountModal, accountModalSwitcher, setShowAccountModal, setShowLoginModal } = useAppStore();
+    const { text } = useI18n();
     const [authUser, setAuthUser] = useState(null);
     const [syncStatus, setSyncStatus] = useState(null);
     const [signingOut, setSigningOut] = useState(false);
@@ -71,11 +73,11 @@ export default function AccountModal() {
         try {
             const { updateUserProfile } = await import('../lib/auth');
             await updateUserProfile({ displayName: editName.trim() });
-            setSaveMsg('已保存');
+            setSaveMsg(text('已保存', 'Saved', 'Сохранено'));
             setEditing(false);
             setTimeout(() => setSaveMsg(''), 2000);
         } catch (err) {
-            setSaveMsg('保存失败: ' + (err.message || '未知错误'));
+            setSaveMsg(`${text('保存失败', 'Save failed', 'Ошибка сохранения')}: ${err.message || text('未知错误', 'Unknown error', 'Неизвестная ошибка')}`);
         } finally {
             setSaving(false);
         }
@@ -103,10 +105,10 @@ export default function AccountModal() {
                 try {
                     const { updateUserProfile } = await import('../lib/auth');
                     await updateUserProfile({ photoURL: dataUrl });
-                    setSaveMsg('头像已更新');
+                    setSaveMsg(text('头像已更新', 'Avatar updated', 'Аватар обновлён'));
                     setTimeout(() => setSaveMsg(''), 2000);
                 } catch (err) {
-                    setSaveMsg('上传失败');
+                    setSaveMsg(text('上传失败', 'Upload failed', 'Ошибка загрузки'));
                 }
             };
             img.src = ev.target.result;
@@ -126,7 +128,7 @@ export default function AccountModal() {
             setShowAccountModal(false);
         } catch (err) {
             console.error('Sign out error:', err);
-            setSaveMsg('退出前同步失败，请稍后重试');
+            setSaveMsg(text('退出前同步失败，请稍后重试', 'Sync failed before signing out. Please try again later.', 'Синхронизация перед выходом не удалась. Попробуйте позже.'));
         } finally {
             setSigningOut(false);
         }
@@ -142,7 +144,7 @@ export default function AccountModal() {
             await auth.signOut();
         } catch (err) {
             console.error('Switch account sync error:', err);
-            setSaveMsg('切换账号前同步失败，请稍后重试');
+            setSaveMsg(text('切换账号前同步失败，请稍后重试', 'Sync failed before switching accounts. Please try again later.', 'Синхронизация перед сменой аккаунта не удалась. Попробуйте позже.'));
             return;
         }
         setShowAccountModal(false);
@@ -168,12 +170,12 @@ export default function AccountModal() {
         try {
             setSaveMsg('');
             await useAppStore.getState().flushPendingEditorSave();
-            const { flushSync } = await import('../lib/firestore-sync');
-            await flushSync({ throwOnError: true });
-            setSaveMsg('已保存并同步到云端');
+            const { syncToCloud } = await import('../lib/persistence');
+            await syncToCloud();
+            setSaveMsg(text('已保存并同步到云端', 'Saved and synced to cloud', 'Сохранено и синхронизировано с облаком'));
             setTimeout(() => setSaveMsg(''), 2000);
         } catch (err) {
-            setSaveMsg('同步失败: ' + (err.message || '未知错误'));
+            setSaveMsg(`${text('同步失败', 'Sync failed', 'Ошибка синхронизации')}: ${err.message || text('未知错误', 'Unknown error', 'Неизвестная ошибка')}`);
         }
     };
 
@@ -184,19 +186,19 @@ export default function AccountModal() {
     const lastSignIn = authUser.metadata?.lastSignInTime
         ? new Date(authUser.metadata.lastSignInTime).toLocaleDateString()
         : null;
-    const providerName = authUser.providerData?.[0]?.providerId === 'google.com' ? 'Google' : '邮箱密码';
+    const providerName = authUser.providerData?.[0]?.providerId === 'google.com' ? 'Google' : text('邮箱密码', 'Email/password', 'Email/пароль');
 
     // 其他历史账号（排除当前）
     const otherAccounts = accountHistory.filter(a => a.uid !== authUser.uid);
 
     // 同步状态指示
     const syncInfo = (() => {
-        if (!syncStatus) return { icon: <Cloud size={16} />, text: '云同步已开启', color: 'var(--accent)' };
-        if (syncStatus.syncing) return { icon: <RefreshCw size={16} className="spin" />, text: '正在同步...', color: 'var(--accent)' };
-        if (syncStatus.pending > 0) return { icon: <Clock size={16} />, text: `${syncStatus.pending} 项待同步`, color: '#f59e0b' };
-        if (syncStatus.idle) return { icon: <Cloud size={16} />, text: '自动同步已暂停', color: '#94a3b8' };
-        if (syncStatus.lastSync) return { icon: <CheckCircle2 size={16} />, text: `已同步 · ${new Date(syncStatus.lastSync).toLocaleTimeString()}`, color: '#22c55e' };
-        return { icon: <Cloud size={16} />, text: '云同步已开启', color: 'var(--accent)' };
+        if (!syncStatus) return { icon: <Cloud size={16} />, text: text('云同步已开启', 'Cloud sync enabled', 'Облачная синхронизация включена'), color: 'var(--accent)' };
+        if (syncStatus.syncing) return { icon: <RefreshCw size={16} className="spin" />, text: text('正在同步...', 'Syncing...', 'Синхронизация...'), color: 'var(--accent)' };
+        if (syncStatus.pending > 0) return { icon: <Clock size={16} />, text: text(`${syncStatus.pending} 项待同步`, `${syncStatus.pending} pending`, `Ожидает синхронизации: ${syncStatus.pending}`), color: '#f59e0b' };
+        if (syncStatus.idle) return { icon: <Cloud size={16} />, text: text('自动同步已暂停', 'Auto sync paused', 'Автосинхронизация приостановлена'), color: '#94a3b8' };
+        if (syncStatus.lastSync) return { icon: <CheckCircle2 size={16} />, text: text(`已同步 · ${new Date(syncStatus.lastSync).toLocaleTimeString()}`, `Synced · ${new Date(syncStatus.lastSync).toLocaleTimeString()}`, `Синхронизировано · ${new Date(syncStatus.lastSync).toLocaleTimeString()}`), color: '#22c55e' };
+        return { icon: <Cloud size={16} />, text: text('云同步已开启', 'Cloud sync enabled', 'Облачная синхронизация включена'), color: 'var(--accent)' };
     })();
 
     return (
@@ -210,7 +212,7 @@ export default function AccountModal() {
                 {/* === 切换账号面板 === */}
                 {showSwitcher ? (
                     <div style={{ padding: '4px 0' }}>
-                        <h3 style={{ fontSize: 17, fontWeight: 700, textAlign: 'center', marginBottom: 16, color: 'var(--text-primary)' }}>切换账号</h3>
+                        <h3 style={{ fontSize: 17, fontWeight: 700, textAlign: 'center', marginBottom: 16, color: 'var(--text-primary)' }}>{text('切换账号', 'Switch Account', 'Сменить аккаунт')}</h3>
 
                         {/* 当前账号 */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 8, background: 'var(--accent-light)' }}>
@@ -222,10 +224,10 @@ export default function AccountModal() {
                                 )}
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{authUser.displayName || '用户'}</div>
+                                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{authUser.displayName || text('用户', 'User', 'Пользователь')}</div>
                                 <div style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{authUser.email}</div>
                             </div>
-                            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: 'var(--accent)', color: '#fff', fontWeight: 600, flexShrink: 0 }}>当前</span>
+                            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: 'var(--accent)', color: '#fff', fontWeight: 600, flexShrink: 0 }}>{text('当前', 'Current', 'Текущий')}</span>
                         </div>
 
                         {/* 历史账号 */}
@@ -239,13 +241,13 @@ export default function AccountModal() {
                                     )}
                                 </div>
                                 <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{acc.displayName || '用户'}</div>
+                                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{acc.displayName || text('用户', 'User', 'Пользователь')}</div>
                                     <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{acc.email}</div>
                                 </div>
                                 <button
                                     style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4, borderRadius: '50%', display: 'flex', alignItems: 'center' }}
                                     onClick={(e) => { e.stopPropagation(); handleRemoveFromHistory(acc.uid); }}
-                                    title="移除记录"
+                                    title={text('移除记录', 'Remove record', 'Удалить запись')}
                                 >
                                     <Trash2 size={13} />
                                 </button>
@@ -258,12 +260,12 @@ export default function AccountModal() {
                                 <Plus size={20} />
                             </div>
                             <div style={{ flex: 1 }}>
-                                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>添加其他账号</div>
+                                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{text('添加其他账号', 'Add another account', 'Добавить другой аккаунт')}</div>
                             </div>
                         </div>
 
                         <button style={{ display: 'block', width: '100%', textAlign: 'center', background: 'none', border: 'none', color: 'var(--accent)', fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: '14px 0 4px', fontFamily: 'var(--font-ui)' }} onClick={() => setShowSwitcher(false)}>
-                            ← 返回账户详情
+                            {text('← 返回账户详情', '← Back to Account Details', '← Назад к аккаунту')}
                         </button>
                     </div>
                 ) : (
@@ -271,7 +273,7 @@ export default function AccountModal() {
                     <>
                         {/* 用户头部 */}
                         <div className="account-modal-profile">
-                            <div className="account-modal-avatar-wrap" onClick={() => avatarInputRef.current?.click()} style={{ cursor: 'pointer' }} title="点击更换头像">
+                            <div className="account-modal-avatar-wrap" onClick={() => avatarInputRef.current?.click()} style={{ cursor: 'pointer' }} title={text('点击更换头像', 'Click to change avatar', 'Нажмите, чтобы сменить аватар')}>
                                 {authUser.photoURL ? (
                                     <img src={authUser.photoURL} alt="" className="account-modal-avatar" />
                                 ) : (
@@ -291,7 +293,7 @@ export default function AccountModal() {
                                         type="text"
                                         value={editName}
                                         onChange={e => setEditName(e.target.value)}
-                                        placeholder="输入昵称"
+                                        placeholder={text('输入昵称', 'Enter nickname', 'Введите имя')}
                                         className="account-modal-name-input"
                                         autoFocus
                                         onKeyDown={e => { if (e.key === 'Enter') handleSaveProfile(); if (e.key === 'Escape') setEditing(false); }}
@@ -306,8 +308,8 @@ export default function AccountModal() {
                                 </div>
                             ) : (
                                 <div className="account-modal-name-row">
-                                    <h2 className="account-modal-name">{authUser.displayName || '用户'}</h2>
-                                    <button className="account-modal-edit-btn" onClick={() => setEditing(true)} title="编辑昵称">
+                                    <h2 className="account-modal-name">{authUser.displayName || text('用户', 'User', 'Пользователь')}</h2>
+                                    <button className="account-modal-edit-btn" onClick={() => setEditing(true)} title={text('编辑昵称', 'Edit nickname', 'Редактировать имя')}>
                                         <Edit3 size={13} />
                                     </button>
                                 </div>
@@ -317,12 +319,12 @@ export default function AccountModal() {
                         </div>
 
                         {/* 同步状态卡片 */}
-                        <div className="account-modal-sync-card" onClick={handleManualSync} title="点击立即同步">
+                        <div className="account-modal-sync-card" onClick={handleManualSync} title={text('点击立即同步', 'Click to sync now', 'Нажмите, чтобы синхронизировать')}>
                             <div className="account-modal-sync-icon" style={{ color: syncInfo.color }}>
                                 {syncInfo.icon}
                             </div>
                             <div className="account-modal-sync-info">
-                                <div className="account-modal-sync-label">云同步状态</div>
+                                <div className="account-modal-sync-label">{text('云同步状态', 'Cloud Sync Status', 'Статус облачной синхронизации')}</div>
                                 <div className="account-modal-sync-value" style={{ color: syncInfo.color }}>
                                     {syncInfo.text}
                                 </div>
@@ -333,32 +335,32 @@ export default function AccountModal() {
                         <div className="account-modal-details">
                             <div className="account-modal-detail-row">
                                 <Mail size={14} />
-                                <span className="account-modal-detail-label">邮箱</span>
+                                <span className="account-modal-detail-label">{text('邮箱', 'Email', 'Email')}</span>
                                 <span className="account-modal-detail-value">{authUser.email}</span>
                             </div>
                             <div className="account-modal-detail-row">
                                 <Shield size={14} />
-                                <span className="account-modal-detail-label">登录方式</span>
+                                <span className="account-modal-detail-label">{text('登录方式', 'Sign-in Method', 'Способ входа')}</span>
                                 <span className="account-modal-detail-value">{providerName}</span>
                             </div>
                             {createdAt && (
                                 <div className="account-modal-detail-row">
                                     <UserIcon size={14} />
-                                    <span className="account-modal-detail-label">注册时间</span>
+                                    <span className="account-modal-detail-label">{text('注册时间', 'Joined', 'Дата регистрации')}</span>
                                     <span className="account-modal-detail-value">{createdAt}</span>
                                 </div>
                             )}
                             {lastSignIn && (
                                 <div className="account-modal-detail-row">
                                     <Clock size={14} />
-                                    <span className="account-modal-detail-label">上次登录</span>
+                                    <span className="account-modal-detail-label">{text('上次登录', 'Last Sign-in', 'Последний вход')}</span>
                                     <span className="account-modal-detail-value">{lastSignIn}</span>
                                 </div>
                             )}
                             <div className="account-modal-detail-row">
                                 <HardDrive size={14} />
-                                <span className="account-modal-detail-label">数据存储</span>
-                                <span className="account-modal-detail-value">本地 + 云端</span>
+                                <span className="account-modal-detail-label">{text('数据存储', 'Data Storage', 'Хранение данных')}</span>
+                                <span className="account-modal-detail-value">{text('本地 + 云端', 'Local + Cloud', 'Локально + облако')}</span>
                             </div>
                         </div>
 
@@ -369,7 +371,7 @@ export default function AccountModal() {
                                 onClick={() => setShowSwitcher(true)}
                             >
                                 <ArrowRightLeft size={15} />
-                                切换账号
+                                {text('切换账号', 'Switch Account', 'Сменить аккаунт')}
                             </button>
                             <button
                                 className="account-modal-action-btn account-modal-logout-btn"
@@ -377,12 +379,12 @@ export default function AccountModal() {
                                 disabled={signingOut}
                             >
                                 <LogOut size={15} />
-                                {signingOut ? '退出中...' : '退出登录'}
+                                {signingOut ? text('退出中...', 'Signing out...', 'Выход...') : text('退出登录', 'Sign Out', 'Выйти')}
                             </button>
                         </div>
 
                         <p className="account-modal-footer">
-                            退出后将停止云同步；AI 对话记录仍只保存在本机，不会参与云同步。
+                            {text('退出后将停止云同步；AI 对话记录仍只保存在本机，不会参与云同步。', 'Cloud sync stops after signing out. AI chat history remains on this device and is not synced.', 'После выхода облачная синхронизация остановится. История чатов ИИ остаётся на этом устройстве и не синхронизируется.')}
                         </p>
                     </>
                 )}

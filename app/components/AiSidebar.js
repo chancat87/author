@@ -142,6 +142,7 @@ function createInlineThinkingFilter() {
 function ContextViewerModal({ viewingContext, onClose }) {
     const [tab, setTab] = useState('context'); // 'context' | 'raw'
     const [copied, setCopied] = useState(false);
+    const { text } = useI18n();
     const { context, rawRequest } = viewingContext || {};
 
     const handleCopy = async () => {
@@ -172,19 +173,19 @@ function ContextViewerModal({ viewingContext, onClose }) {
                             background: tab === 'context' ? 'var(--bg-primary)' : 'transparent',
                             color: tab === 'context' ? 'var(--text-primary)' : 'var(--text-muted)',
                             boxShadow: tab === 'context' ? '0 1px 3px rgba(0,0,0,.08)' : 'none',
-                        }}><FileText size={13} />上下文</button>
+                        }}><FileText size={13} />{text('上下文', 'Context', 'Контекст')}</button>
                         <button onClick={() => setTab('raw')} style={{
                             display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', fontSize: 12, fontWeight: 500,
                             border: 'none', borderRadius: 'var(--radius-xs)', cursor: 'pointer', transition: 'all .15s',
                             background: tab === 'raw' ? 'var(--bg-primary)' : 'transparent',
                             color: tab === 'raw' ? 'var(--text-primary)' : 'var(--text-muted)',
                             boxShadow: tab === 'raw' ? '0 1px 3px rgba(0,0,0,.08)' : 'none',
-                        }}><Code2 size={13} />原始请求</button>
+                        }}><Code2 size={13} />{text('原始请求', 'Raw Request', 'Исходный запрос')}</button>
                     </div>
                     <button onClick={onClose} style={{
                         background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--text-muted)',
                         width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-xs)',
-                    }} title="关闭">✕</button>
+                    }} title={text('关闭', 'Close', 'Закрыть')}>✕</button>
                 </div>
 
                 {/* Body */}
@@ -198,7 +199,7 @@ function ContextViewerModal({ viewingContext, onClose }) {
                                     color: 'var(--text-secondary)', userSelect: 'none',
                                 }}>{key}
                                     <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-muted)' }}>
-                                        {typeof value === 'string' ? `${value.length} 字` : ''}
+                                        {typeof value === 'string' ? text(`${value.length} 字`, `${value.length} chars`, `${value.length} симв.`) : ''}
                                     </span>
                                 </summary>
                                 <pre style={{
@@ -220,7 +221,7 @@ function ContextViewerModal({ viewingContext, onClose }) {
                                     cursor: 'pointer', transition: 'all .15s',
                                 }}>
                                     <Copy size={12} />
-                                    {copied ? '✓ 已复制' : '复制 JSON'}
+                                    {copied ? text('✓ 已复制', '✓ Copied', '✓ Скопировано') : text('复制 JSON', 'Copy JSON', 'Копировать JSON')}
                                 </button>
                             </div>
                             {rawRequest ? (
@@ -233,7 +234,7 @@ function ContextViewerModal({ viewingContext, onClose }) {
                                 }}>{JSON.stringify(rawRequest, null, 2)}</pre>
                             ) : (
                                 <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)', fontSize: 13 }}>
-                                    本条消息没有保存原始请求数据（仅新请求会记录）
+                                    {text('本条消息没有保存原始请求数据（仅新请求会记录）', 'This message has no saved raw request data. Only new requests are recorded.', 'Для этого сообщения нет сохранённых исходных данных запроса. Записываются только новые запросы.')}
                                 </div>
                             )}
                         </div>
@@ -556,6 +557,20 @@ const SETTINGS_CATEGORY_LABEL = {
     bookInfo: '作品信息',
 };
 
+function getSettingsCategoryLabel(category, tx) {
+    const labels = {
+        character: tx('人物设定', 'Characters', 'Персонажи'),
+        world: tx('世界观/设定', 'Worldbuilding', 'Мир'),
+        location: tx('空间/地点', 'Places', 'Места'),
+        object: tx('物品/道具', 'Items / Props', 'Предметы / реквизит'),
+        plot: tx('大纲', 'Outline', 'План'),
+        rules: tx('写作规则', 'Writing Rules', 'Правила письма'),
+        custom: tx('自定义设定', 'Custom Settings', 'Пользовательские настройки'),
+        bookInfo: tx('作品信息', 'Book Info', 'Информация о произведении'),
+    };
+    return labels[category] || category;
+}
+
 function normalizeCategoryInput(rawCategory = '') {
     const text = String(rawCategory || '').trim();
     const lower = text.toLowerCase();
@@ -648,7 +663,8 @@ export default function AiSidebar({ onInsertText }) {
         chatSendShortcutMode,
         showToast
     } = useAppStore();
-    const { t } = useI18n();
+    const { t, text: tx, language } = useI18n();
+    const locale = language === 'ru' ? 'ru-RU' : language === 'en' ? 'en-US' : 'zh-CN';
     const chatInputMode = chatSendShortcutMode === 'ctrlEnter' ? 'ctrlEnter' : 'enter';
     const chatInputPlaceholder = chatInputMode === 'ctrlEnter'
         ? t('aiSidebar.inputPlaceholderCtrlEnter')
@@ -843,7 +859,7 @@ export default function AiSidebar({ onInsertText }) {
                         searchConfig: sc,
                     };
                 } else {
-                    showToast?.('⚠️ 联网搜索需要配置 Tavily 或 Exa API Key，请在设置 → API配置 → 联网搜索 中填入', 'warning');
+                    showToast?.(tx('⚠️ 联网搜索需要配置 Tavily 或 Exa API Key，请在设置 → API配置 → 联网搜索 中填入', '⚠️ Web search requires a Tavily or Exa API key. Add it in Settings -> API Config -> Web Search', '⚠️ Для веб-поиска нужен API-ключ Tavily или Exa. Добавьте его в Настройки -> API -> Веб-поиск'), 'warning');
                 }
             }
         }
@@ -869,7 +885,7 @@ export default function AiSidebar({ onInsertText }) {
         const contentType = res.headers.get('content-type') || '';
         if (contentType.includes('application/json')) {
             const data = await res.json();
-            throw new Error(data.error || '请求失败');
+            throw new Error(data.error || tx('请求失败', 'Request failed', 'Запрос не выполнен'));
         }
 
         const reader = res.body.getReader();
@@ -951,7 +967,7 @@ export default function AiSidebar({ onInsertText }) {
 
         onDone(fullText, fullThinking, toolCalls);
         return requestBody;
-    }, []);
+    }, [showToast, tx]);
 
     // 终止生成
     const handleStop = useCallback(() => {
@@ -985,19 +1001,19 @@ export default function AiSidebar({ onInsertText }) {
 
             // 保存上下文快照（不含提示词模板和安全策略）
             const contextSnapshot = {};
-            if (context.bookInfo) contextSnapshot['作品信息'] = context.bookInfo;
-            if (context.characters) contextSnapshot['人物档案'] = context.characters;
-            if (context.locations) contextSnapshot['空间/地点'] = context.locations;
-            if (context.worldbuilding) contextSnapshot['世界观'] = context.worldbuilding;
-            if (context.objects) contextSnapshot['物品/道具'] = context.objects;
-            if (context.plotOutline) contextSnapshot['剧情大纲'] = context.plotOutline;
-            if (context.writingRules) contextSnapshot['写作规则'] = context.writingRules;
-            if (context.customSettings) contextSnapshot['补充设定'] = context.customSettings;
-            if (context.previousChapters) contextSnapshot['前文概要'] = context.previousChapters;
-            if (context.currentChapter) contextSnapshot['当前章节'] = context.currentChapter;
-            if (context.previousChapterAnchor) contextSnapshot['上一章文风锚点'] = context.previousChapterAnchor;
-            if (historyForApi) contextSnapshot['对话历史'] = historyForApi;
-            contextSnapshot['当前提问'] = `${t('aiSidebar.roleYou')}: ${text}`;
+            if (context.bookInfo) contextSnapshot[tx('作品信息', 'Book Info', 'Информация о произведении')] = context.bookInfo;
+            if (context.characters) contextSnapshot[tx('人物档案', 'Characters', 'Персонажи')] = context.characters;
+            if (context.locations) contextSnapshot[tx('空间/地点', 'Places', 'Места')] = context.locations;
+            if (context.worldbuilding) contextSnapshot[tx('世界观', 'Worldbuilding', 'Мир')] = context.worldbuilding;
+            if (context.objects) contextSnapshot[tx('物品/道具', 'Items', 'Предметы')] = context.objects;
+            if (context.plotOutline) contextSnapshot[tx('剧情大纲', 'Plot Outline', 'План сюжета')] = context.plotOutline;
+            if (context.writingRules) contextSnapshot[tx('写作规则', 'Writing Rules', 'Правила письма')] = context.writingRules;
+            if (context.customSettings) contextSnapshot[tx('补充设定', 'Additional Settings', 'Дополнительные настройки')] = context.customSettings;
+            if (context.previousChapters) contextSnapshot[tx('前文概要', 'Previous Chapters', 'Предыдущие главы')] = context.previousChapters;
+            if (context.currentChapter) contextSnapshot[tx('当前章节', 'Current Chapter', 'Текущая глава')] = context.currentChapter;
+            if (context.previousChapterAnchor) contextSnapshot[tx('上一章文风锚点', 'Previous Chapter Style Anchor', 'Стилевой ориентир предыдущей главы')] = context.previousChapterAnchor;
+            if (historyForApi) contextSnapshot[tx('对话历史', 'Chat History', 'История чата')] = historyForApi;
+            contextSnapshot[tx('当前提问', 'Current Question', 'Текущий вопрос')] = `${t('aiSidebar.roleYou')}: ${text}`;
 
             const aiPlaceholder = { id: aiMsgId, role: 'assistant', content: '', thinking: '', toolCalls: [], timestamp: Date.now(), _context: contextSnapshot, _rawRequest: null, _workId: targetWorkId };
             setSessionStore(prev => addMessage(prev, aiPlaceholder));
@@ -1017,7 +1033,7 @@ export default function AiSidebar({ onInsertText }) {
                             ...prev, sessions: prev.sessions.map(s => {
                                 if (s.id !== targetSessionId) return s;
                                 return {
-                                    ...s, messages: s.messages.map(m => m.id === aiMsgId ? { ...m, content: finalText || '（AI 未返回内容）', thinking: finalThinking, toolCalls: finalToolCalls } : m),
+                                    ...s, messages: s.messages.map(m => m.id === aiMsgId ? { ...m, content: finalText || tx('（AI 未返回内容）', '(AI returned no content)', '(ИИ не вернул содержимое)'), thinking: finalThinking, toolCalls: finalToolCalls } : m),
                                     updatedAt: Date.now(),
                                 };
                             }),
@@ -1051,7 +1067,7 @@ export default function AiSidebar({ onInsertText }) {
                             return {
                                 ...s, messages: s.messages.map(m => {
                                     if (m.id !== aiMsgId) return m;
-                                    return { ...m, content: (m.content || '') + '\n\n*（已终止生成）*' };
+                                    return { ...m, content: (m.content || '') + tx('\n\n*（已终止生成）*', '\n\n*(Generation stopped)*', '\n\n*(Генерация остановлена)*') };
                                 }), updatedAt: Date.now(),
                             };
                         }),
@@ -1078,7 +1094,7 @@ export default function AiSidebar({ onInsertText }) {
             abortRef.current = null;
             setChatStreaming(false);
         }
-    }, [activeChapterId, contextSelection, ensureActiveSessionForWork, inputTokenBudget, streamResponse, setSessionStore, setChatStreaming]);
+    }, [activeChapterId, contextSelection, ensureActiveSessionForWork, inputTokenBudget, streamResponse, setSessionStore, setChatStreaming, t, tx]);
 
     const onRegenerate = useCallback(async (aiMsgId) => {
         if (chatStreaming) return;
@@ -1140,7 +1156,7 @@ export default function AiSidebar({ onInsertText }) {
                 },
                 (finalText, finalThinking, finalToolCalls) => {
                     setSessionStore(prev => {
-                        const variantData = { content: finalText || '（AI 未返回内容）', thinking: finalThinking, toolCalls: finalToolCalls, timestamp: Date.now() };
+                        const variantData = { content: finalText || tx('（AI 未返回内容）', '(AI returned no content)', '(ИИ не вернул содержимое)'), thinking: finalThinking, toolCalls: finalToolCalls, timestamp: Date.now() };
                         const newStore = {
                             ...prev,
                             sessions: prev.sessions.map(s => {
@@ -1183,7 +1199,7 @@ export default function AiSidebar({ onInsertText }) {
                             return {
                                 ...s, messages: s.messages.map(m => {
                                     if (m.id !== aiMsgId) return m;
-                                    return { ...m, content: (m.content || '') + '\n\n*（已终止生成）*' };
+                                    return { ...m, content: (m.content || '') + tx('\n\n*（已终止生成）*', '\n\n*(Generation stopped)*', '\n\n*(Генерация остановлена)*') };
                                 }), updatedAt: Date.now(),
                             };
                         }),
@@ -1207,7 +1223,7 @@ export default function AiSidebar({ onInsertText }) {
             abortRef.current = null;
             setChatStreaming(false);
         }
-    }, [activeSession, sessionStore, chatHistory, chatStreaming, activeChapterId, contextSelection, inputTokenBudget, streamResponse, setSessionStore, setChatStreaming]);
+    }, [activeSession, sessionStore, chatHistory, chatStreaming, activeChapterId, contextSelection, inputTokenBudget, streamResponse, setSessionStore, setChatStreaming, tx]);
 
     const onApplySettingsAction = useCallback(async (action, actionKey) => {
         try {
@@ -1238,7 +1254,7 @@ export default function AiSidebar({ onInsertText }) {
                 let bookInfoNode = nodes.find(n => n.parentId === workId && n.category === 'bookInfo' && n.type === 'special');
                 if (!bookInfoNode) {
                     bookInfoNode = await addSettingsNode({
-                        name: '作品信息',
+                        name: tx('作品信息', 'Book Info', 'Информация о произведении'),
                         type: 'special',
                         category: 'bookInfo',
                         parentId: workId,
@@ -1250,12 +1266,12 @@ export default function AiSidebar({ onInsertText }) {
                 }
                 if (action.action === 'delete') {
                     await updateSettingsNode(bookInfoNode.id, { content: {} }, nodes, workId);
-                    showToast('已清空作品信息', 'success');
+                    showToast(tx('已清空作品信息', 'Book info cleared', 'Информация о произведении очищена'), 'success');
                 } else {
                     const nextContent = { ...(bookInfoNode.content || {}), ...(action.content || {}) };
                     if (action.name && !nextContent.title) nextContent.title = action.name;
                     await updateSettingsNode(bookInfoNode.id, { content: nextContent }, nodes, workId);
-                    showToast('已更新作品信息', 'success');
+                    showToast(tx('已更新作品信息', 'Book info updated', 'Информация о произведении обновлена'), 'success');
                 }
                 markApplied();
                 return;
@@ -1265,8 +1281,8 @@ export default function AiSidebar({ onInsertText }) {
             if (!parentNode) {
                 parentNode = await addSettingsNode({
                     name: categoryInfo.matchedAlias
-                        ? (SETTINGS_CATEGORY_LABEL[normalizedCat] || '自定义设定')
-                        : (rawCategory || '自定义设定'),
+                        ? getSettingsCategoryLabel(normalizedCat, tx)
+                        : (rawCategory || tx('自定义设定', 'Custom Settings', 'Пользовательские настройки')),
                     type: 'folder',
                     category: normalizedCat,
                     parentId: workId,
@@ -1299,7 +1315,7 @@ export default function AiSidebar({ onInsertText }) {
                     const mergedContent = { ...(existing.content || {}), ...(action.content || {}) };
                     await updateSettingsNode(existing.id, { name: action.name || existing.name, content: mergedContent }, nodes, workId);
                 } else {
-                    await addSettingsNode({ name: action.name || '新条目', type: 'item', category: itemCategory, parentId, content: action.content || {}, workId });
+                    await addSettingsNode({ name: action.name || tx('新条目', 'New Item', 'Новый элемент'), type: 'item', category: itemCategory, parentId, content: action.content || {}, workId });
                 }
             } else if (action.action === 'update') {
                 const target = resolveNode();
@@ -1309,27 +1325,27 @@ export default function AiSidebar({ onInsertText }) {
                     if (action.content) updates.content = { ...(target.content || {}), ...action.content };
                     await updateSettingsNode(target.id, updates, nodes, workId);
                 } else {
-                    await addSettingsNode({ name: action.name || '新条目', type: 'item', category: itemCategory, parentId, content: action.content || {}, workId });
+                    await addSettingsNode({ name: action.name || tx('新条目', 'New Item', 'Новый элемент'), type: 'item', category: itemCategory, parentId, content: action.content || {}, workId });
                 }
             } else if (action.action === 'delete') {
                 const target = resolveNode();
                 if (target) {
-                    const deletedName = target.name || action.name || '未命名条目';
+                    const deletedName = target.name || action.name || tx('未命名条目', 'Unnamed Item', 'Безымянный элемент');
                     await deleteSettingsNode(target.id, workId);
-                    showToast(`已删除「${deletedName}」`, 'success');
+                    showToast(tx(`已删除「${deletedName}」`, `Deleted "${deletedName}"`, `Удалено: «${deletedName}»`), 'success');
                 } else {
-                    showToast(`未找到要删除的条目「${action.name || action.nodeId || ''}」`, 'error');
+                    showToast(tx(`未找到要删除的条目「${action.name || action.nodeId || ''}」`, `Could not find item to delete: "${action.name || action.nodeId || ''}"`, `Не найден элемент для удаления: «${action.name || action.nodeId || ''}»`), 'error');
                     return;
                 }
             }
 
             markApplied();
-            if (action.action !== 'delete') showToast('应用设定成功', 'success');
+            if (action.action !== 'delete') showToast(tx('应用设定成功', 'Settings applied', 'Настройки применены'), 'success');
         } catch (err) {
             console.error('Settings action failed:', err);
-            showToast('应用操作失败：' + err.message, 'error');
+            showToast(tx('应用操作失败：', 'Apply failed: ', 'Не удалось применить: ') + err.message, 'error');
         }
-    }, [activeSession, sessionStore, setSessionStore, showToast]);
+    }, [activeSession, sessionStore, setSessionStore, showToast, tx]);
 
     // 发送消息
     const handleSend = useCallback(() => {
@@ -1631,7 +1647,7 @@ export default function AiSidebar({ onInsertText }) {
                                         URL.revokeObjectURL(url);
                                         showToast(t('aiSidebar.exportSessionsOk') || '对话记录已导出', 'success');
                                     }}
-                                >导出</button>
+                                >{tx('导出', 'Export', 'Экспорт')}</button>
                                 <button
                                     className="btn btn-ghost btn-sm"
                                     style={{ fontSize: 11, padding: '2px 8px', lineHeight: 1.4 }}
@@ -1668,26 +1684,26 @@ export default function AiSidebar({ onInsertText }) {
                                         };
                                         input.click();
                                     }}
-                                >导入</button>
+                                >{tx('导入', 'Import', 'Импорт')}</button>
                                 <div style={{ width: 1, height: 14, background: 'var(--border-light)' }} />
                                 <button
                                     className="btn btn-ghost btn-sm"
                                     style={{ fontSize: 11, padding: '2px 8px', lineHeight: 1.4, color: 'var(--danger, #e53e3e)' }}
                                     onClick={() => {
-                                        if (!confirm('确定要清空所有对话历史吗？此操作不可撤销。')) return;
+                                        if (!confirm(tx('确定要清空所有对话历史吗？此操作不可撤销。', 'Clear all chat history? This cannot be undone.', 'Очистить всю историю чата? Это действие нельзя отменить.'))) return;
                                         setSessionStore(prev => {
                                             const cleared = { activeSessionId: prev.activeSessionId, sessions: prev.sessions.filter(s => s.id === prev.activeSessionId) };
                                             if (cleared.sessions.length === 0) {
-                                                const fresh = { id: `session-${Date.now()}`, title: '新对话', createdAt: Date.now(), updatedAt: Date.now(), messages: [] };
+                                                const fresh = { id: `session-${Date.now()}`, title: t('aiSidebar.btnNewSession'), createdAt: Date.now(), updatedAt: Date.now(), messages: [] };
                                                 cleared.sessions = [fresh];
                                                 cleared.activeSessionId = fresh.id;
                                             }
                                             saveSessionStore(cleared);
                                             return cleared;
                                         });
-                                        showToast('已清空对话历史', 'success');
+                                        showToast(tx('已清空对话历史', 'Chat history cleared', 'История чата очищена'), 'success');
                                     }}
-                                >清空</button>
+                                >{tx('清空', 'Clear', 'Очистить')}</button>
                             </div>
                         </div>
                         <div className="session-list">
@@ -1722,7 +1738,7 @@ export default function AiSidebar({ onInsertText }) {
                                             <div className="session-item-info">
                                                 <span className="session-item-title">{s.title}</span>
                                                 <span className="session-item-meta">
-                                                    {s.messages?.length || 0} 条 · {new Date(s.updatedAt || s.createdAt).toLocaleDateString('zh-CN')}
+                                                    {tx(`${s.messages?.length || 0} 条`, `${s.messages?.length || 0} messages`, `${s.messages?.length || 0} сообщений`)} · {new Date(s.updatedAt || s.createdAt).toLocaleDateString(locale)}
                                                 </span>
                                             </div>
                                             <div className="session-item-actions" onClick={e => e.stopPropagation()}>
@@ -1850,7 +1866,7 @@ export default function AiSidebar({ onInsertText }) {
                                             />
                                             <span className="chat-role">{msg.role === 'user' ? t('aiSidebar.roleYou') : msg.isSummary ? t('aiSidebar.roleSummary') : t('aiSidebar.roleAi')}</span>
                                             <span className="chat-time">
-                                                {new Date(msg.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                                                {new Date(msg.timestamp).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}
                                             </span>
                                             {msg.editedAt && <span className="chat-edited-badge">{t('aiSidebar.edited')}</span>}
                                             <div className="chat-msg-actions">
@@ -1879,7 +1895,7 @@ export default function AiSidebar({ onInsertText }) {
                                                     <button
                                                         className="btn-mini-icon"
                                                         onClick={() => setViewingContext({ context: msg._context, rawRequest: msg._rawRequest })}
-                                                        title="查看发送给 AI 的上下文"
+                                                        title={tx('查看发送给 AI 的上下文', 'View context sent to AI', 'Просмотреть контекст, отправленный ИИ')}
                                                     ><ClipboardList size={13} /></button>
                                                 )}
                                                 <button
@@ -1968,7 +1984,7 @@ export default function AiSidebar({ onInsertText }) {
                                         ) : (
                                             <div className={`chat-bubble-content${isStreaming ? ' streaming' : ''}`}>
                                                 {(() => {
-                                                    const { parts, actions } = parseSettingsActions(msg.content || '正在思考…');
+                                                    const { parts, actions } = parseSettingsActions(msg.content || tx('正在思考…', 'Thinking...', 'Думаю...'));
                                                     return parts.map((part, pi) => {
                                                         if (typeof part === 'object' && part._action) {
                                                             const action = actions[part.index];
@@ -2010,7 +2026,7 @@ export default function AiSidebar({ onInsertText }) {
                                                                         <button
                                                                             className="btn-mini settings-action-delete"
                                                                             onClick={() => onApplySettingsAction?.({ action: 'delete', category: action.category, name: action.name, nodeId: action.nodeId }, actionKey + '-del')}
-                                                                            title="删除此设定条目"
+                                                                            title={tx('删除此设定条目', 'Delete this settings item', 'Удалить этот элемент настроек')}
                                                                             style={{
                                                                                 background: 'transparent',
                                                                                 border: '1px solid var(--border-color, rgba(200,200,200,0.3))',
@@ -2122,7 +2138,7 @@ export default function AiSidebar({ onInsertText }) {
                                     <button
                                         className="chat-send-btn chat-stop-btn"
                                         onClick={handleStop}
-                                        title="终止生成"
+                                        title={tx('终止生成', 'Stop Generation', 'Остановить генерацию')}
                                     >
                                         ■
                                     </button>
@@ -2173,7 +2189,7 @@ export default function AiSidebar({ onInsertText }) {
                                             </span>
                                             <span className="archive-mode">{t(`aiSidebar.modes.${item.mode}`) || item.mode}</span>
                                             <span className="archive-time">
-                                                {new Date(item.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                                                {new Date(item.timestamp).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}
                                             </span>
                                         </div>
                                         <div className="archive-preview">
@@ -2215,7 +2231,7 @@ export default function AiSidebar({ onInsertText }) {
                                     </span>
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '6px 0 8px' }}>
-                                    <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>上限</span>
+                                    <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{tx('上限', 'Limit', 'Лимит')}</span>
                                     <input
                                         type="number"
                                         min="1000"
@@ -2238,10 +2254,10 @@ export default function AiSidebar({ onInsertText }) {
                                             color: 'var(--text-primary)',
                                             fontSize: 12,
                                         }}
-                                        title="发送给 AI 的参考上下文 token 上限"
+                                        title={tx('发送给 AI 的参考上下文 token 上限', 'Reference context token limit sent to AI', 'Лимит токенов справочного контекста для ИИ')}
                                     />
                                     <button className="btn-mini" onClick={() => updateInputTokenBudget(DEFAULT_INPUT_TOKEN_BUDGET)}>
-                                        默认 200k
+                                        {tx('默认 200k', 'Default 200k', 'По умолчанию 200k')}
                                     </button>
                                 </div>
                                 <div className="context-budget-track">

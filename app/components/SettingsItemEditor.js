@@ -26,7 +26,7 @@ const CATEGORY_COLORS = {
 // ==================== 通用字段组件 ====================
 
 function TextField({ label, value, onChange, placeholder, multiline = false, rows = 3, aiBtn = false }) {
-    const { t } = useI18n();
+    const { t, text } = useI18n();
     const [localValue, setLocalValue] = useState(value || '');
     const [isExpanded, setIsExpanded] = useState(false);
     const isComposingRef = useRef(false);
@@ -127,7 +127,7 @@ function TextField({ label, value, onChange, placeholder, multiline = false, row
                     {multiline && (
                         <button
                             className="field-expand-btn"
-                            title="展开编辑"
+                            title={text('展开编辑', 'Expand editor', 'Развернуть редактор')}
                             onClick={() => setIsExpanded(true)}
                             style={{
                                 border: 'none', background: 'transparent', cursor: 'pointer',
@@ -229,6 +229,7 @@ function TextField({ label, value, onChange, placeholder, multiline = false, row
 }
 
 function ButtonGroup({ label, value, options: defaultOptions, onChange, customOptions, onOptionsChange }) {
+    const { text } = useI18n();
     const [editing, setEditing] = useState(false);
     const options = customOptions && customOptions.length > 0 ? customOptions : defaultOptions;
 
@@ -249,7 +250,7 @@ function ButtonGroup({ label, value, options: defaultOptions, onChange, customOp
     const handleAdd = () => {
         if (!onOptionsChange) return;
         const id = 'tag_' + Date.now().toString(36);
-        const updated = [...options, { value: id, label: '新标签' }];
+        const updated = [...options, { value: id, label: text('新标签', 'New Tag', 'Новый тег') }];
         onOptionsChange(updated);
     };
 
@@ -271,10 +272,10 @@ function ButtonGroup({ label, value, options: defaultOptions, onChange, customOp
                         }}
                         onMouseEnter={e => { if (!editing) { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; } }}
                         onMouseLeave={e => { if (!editing) { e.currentTarget.style.borderColor = 'var(--border-light, #e5e7eb)'; e.currentTarget.style.color = 'var(--text-muted)'; } }}
-                        title="编辑标签选项"
+                        title={text('编辑标签选项', 'Edit tag options', 'Редактировать варианты тегов')}
                     >
                         <Pencil size={9} />
-                        {editing ? '完成' : '编辑'}
+                        {editing ? text('完成', 'Done', 'Готово') : text('编辑', 'Edit', 'Редактировать')}
                     </button>
                 )}
             </div>
@@ -341,7 +342,7 @@ function ButtonGroup({ label, value, options: defaultOptions, onChange, customOp
                         onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; }}
                         onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-light)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
                     >
-                        + 添加
+                        + {text('添加', 'Add', 'Добавить')}
                     </button>
                 )}
             </div>
@@ -409,7 +410,7 @@ function ExtraFieldsSection({ content, knownFields, onUpdate }) {
 // ==================== 角色卡片预览 ====================
 
 function CharacterCardPreview({ name, content, onUpdate }) {
-    const { t } = useI18n();
+    const { t, text } = useI18n();
     const c = content || {};
     const catColor = CATEGORY_COLORS.character;
     const fileInputRef = useRef(null);
@@ -466,7 +467,7 @@ function CharacterCardPreview({ name, content, onUpdate }) {
         const file = e.target.files?.[0];
         if (!file) return;
         if (file.size > 2 * 1024 * 1024) {
-            alert('图片大小不能超过 2MB');
+            alert(text('图片大小不能超过 2MB', 'Image size cannot exceed 2 MB', 'Размер изображения не должен превышать 2 МБ'));
             return;
         }
         const reader = new FileReader();
@@ -479,7 +480,7 @@ function CharacterCardPreview({ name, content, onUpdate }) {
     // Remove avatar
     const handleRemoveAvatar = (e) => {
         e.preventDefault();
-        if (c.avatar && confirm('移除头像？')) {
+        if (c.avatar && confirm(text('移除头像？', 'Remove avatar?', 'Удалить аватар?'))) {
             onUpdate?.('avatar', '');
         }
     };
@@ -585,7 +586,7 @@ function CharacterCardPreview({ name, content, onUpdate }) {
 // ==================== 各分类编辑器 ====================
 
 function CharacterEditor({ node, onUpdate }) {
-    const { t } = useI18n();
+    const { t, text } = useI18n();
     const content = node.content || {};
     const update = (field, value) => onUpdate(node.id, { content: { ...content, [field]: value } });
     const catColor = CATEGORY_COLORS.character;
@@ -646,10 +647,10 @@ function CharacterEditor({ node, onUpdate }) {
                         border: `1px solid ${catColor.color}20`,
                     }}>
                         <h4 style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 700, color: catColor.color, fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <Heart size={13} /> 灵感私语
+                            <Heart size={13} /> {text('灵感私语', 'Inspiration Whisper', 'Шепот вдохновения')}
                         </h4>
                         <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6, fontStyle: 'italic' }}>
-                            “赋予角色弱点，他才拥有被拯救的价值。内心的矛盾让角色鲜活，外在的行动让故事前进。”
+                            {text('“赋予角色弱点，他才拥有被拯救的价值。内心的矛盾让角色鲜活，外在的行动让故事前进。”', '"Give a character a weakness, and they become worth saving. Inner conflict makes them vivid; outward action moves the story forward."', '«Дайте персонажу слабость, и его захочется спасти. Внутренний конфликт оживляет героя, внешнее действие двигает историю.»')}
                         </p>
                     </div>
                 </div>
@@ -800,6 +801,7 @@ function GenericEditor({ node, onUpdate }) {
 // ==================== 面包屑导航 ====================
 
 function Breadcrumb({ node, allNodes, onSelect }) {
+    const { text } = useI18n();
     const [copied, setCopied] = useState(false);
     const path = [];
     let current = node;
@@ -846,7 +848,7 @@ function Breadcrumb({ node, allNodes, onSelect }) {
             <span style={{ marginLeft: 'auto', flexShrink: 0 }}>
                 <button
                     onClick={handleCopyId}
-                    title={`复制 ID: ${node.id}`}
+                    title={text(`复制 ID: ${node.id}`, `Copy ID: ${node.id}`, `Копировать ID: ${node.id}`)}
                     style={{
                         display: 'inline-flex', alignItems: 'center', gap: 4,
                         padding: '3px 10px', borderRadius: 8,
@@ -860,7 +862,7 @@ function Breadcrumb({ node, allNodes, onSelect }) {
                     onMouseLeave={e => { if (!copied) { e.currentTarget.style.borderColor = 'var(--border-light)'; e.currentTarget.style.color = 'var(--text-muted)'; } }}
                 >
                     <Copy size={10} />
-                    {copied ? '已复制!' : `ID: ${node.id}`}
+                    {copied ? text('已复制!', 'Copied!', 'Скопировано!') : `ID: ${node.id}`}
                 </button>
             </span>
         </div>
@@ -896,7 +898,7 @@ const CATEGORY_DEFAULT_ICONS = {
 };
 
 function FolderInfo({ node, nodes, onAdd, onUpdate }) {
-    const { t } = useI18n();
+    const { t, text } = useI18n();
     const catColor = CATEGORY_COLORS[node.category] || CATEGORY_COLORS.custom;
     const children = nodes.filter(n => n.parentId === node.id);
     const folders = children.filter(n => n.type === 'folder');
@@ -936,7 +938,7 @@ function FolderInfo({ node, nodes, onAdd, onUpdate }) {
                             cursor: isCustomCategory ? 'pointer' : 'default', position: 'relative',
                         }}
                         onClick={() => isCustomCategory && setShowIconPicker(!showIconPicker)}
-                        title={isCustomCategory ? '点击更换图标' : ''}
+                        title={isCustomCategory ? text('点击更换图标', 'Change icon', 'Сменить значок') : ''}
                     >
                         <CurrentIcon size={32} style={{ color: catColor.color }} />
                         {isCustomCategory && (
@@ -947,8 +949,8 @@ function FolderInfo({ node, nodes, onAdd, onUpdate }) {
                     </div>
                     <h3 style={{ fontSize: 22, fontWeight: 800, marginBottom: 6, color: 'var(--text-primary)', letterSpacing: '0.01em' }}>{node.name}</h3>
                     <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
-                        {folders.length > 0 && `${folders.length} 个子文件夹 · `}
-                        {items.length} 个设定项
+                        {folders.length > 0 && `${text(`${folders.length} 个子文件夹`, `${folders.length} subfolders`, `Подпапок: ${folders.length}`)} · `}
+                        {text(`${items.length} 个设定项`, `${items.length} entries`, `Записей: ${items.length}`)}
                     </p>
                 </div>
 

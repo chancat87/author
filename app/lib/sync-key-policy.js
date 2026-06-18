@@ -11,6 +11,7 @@ const SYNCABLE_EXACT_KEYS = new Set([
 
 const SYNCABLE_PREFIXES = [
     'author-chapters-',
+    'author-chapter-memory-groups-',
     'author-settings-nodes-',
 ];
 

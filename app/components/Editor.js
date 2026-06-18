@@ -33,21 +33,14 @@ import { useAppStore } from '../store/useAppStore';
 import { WRITING_FONT_FAMILIES } from '../lib/typography';
 import ModelPicker from './ModelPicker';
 import { PanelLeftOpen, PanelLeftClose } from 'lucide-react';
-
-// ==================== AI 模式配置 ====================
-const AI_MODES = [
-    { key: 'continue', label: '✦ 续写', desc: '从光标处自然续写', needsSelection: false },
-    { key: 'rewrite', label: '✎ 润色', desc: '提升选中文字质量', needsSelection: true },
-    { key: 'expand', label: '⊕ 扩写', desc: '丰富细节与描写', needsSelection: true },
-    { key: 'condense', label: '⊖ 精简', desc: '浓缩核心内容', needsSelection: true },
-    { key: 'chat', label: '💬 问答', desc: '向 AI 提问，不改变原文', needsSelection: false },
-];
+import { useI18n } from '../lib/useI18n';
 
 // ==================== 虚拟分页常量 ====================
 const PAGE_HEIGHT = 1056; // A4 纸 @ 96dpi
 const PAGE_GAP = 24;      // 页间灰色间隙
 const EDITOR_POSITION_KEY_PREFIX = 'author-editor-position-';
 const MAX_EDITOR_POSITION_ITEMS = 300;
+const AI_SELECTION_REQUIRED_MODES = new Set(['rewrite', 'expand', 'condense']);
 
 function escapeHtml(text) {
     return String(text)
@@ -117,6 +110,30 @@ function clampDocPosition(doc, pos) {
     return Math.max(0, Math.min(Math.round(pos), max));
 }
 
+function getMountedEditorView(targetEditor) {
+    if (!targetEditor || targetEditor.isDestroyed) return null;
+    const view = targetEditor.editorView;
+    if (!view || view.isDestroyed) return null;
+    return view;
+}
+
+function focusMountedEditor(targetEditor) {
+    const view = getMountedEditorView(targetEditor);
+    if (!view) return false;
+
+    try {
+        view.dom.focus({ preventScroll: true });
+    } catch {
+        try {
+            view.focus();
+        } catch {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 const MAX_PASTE_BLANK_RUN = 8;
 const PRESERVED_PASTE_BLANK_RUN = 4;
 
@@ -139,7 +156,7 @@ function limitPastedHtmlBlankRuns(html) {
 }
 
 function saveEditorPositionSnapshot(targetEditor, workId, chapterId, container) {
-    if (!targetEditor || !chapterId) return;
+    if (!targetEditor || targetEditor.isDestroyed || !targetEditor.state || !chapterId) return;
     const { selection } = targetEditor.state;
     saveEditorPositionRecord(workId, chapterId, {
         from: selection.from,
@@ -153,7 +170,11 @@ function restoreEditorPositionSnapshot(targetEditor, workId, chapterId, containe
     const record = loadEditorPositionRecord(workId, chapterId);
     if (!record) return false;
 
-    const { doc } = targetEditor.state;
+    const view = getMountedEditorView(targetEditor);
+    if (!view) return null;
+
+    const { state } = view;
+    const { doc } = state;
     const from = clampDocPosition(doc, record.from);
     const to = clampDocPosition(doc, record.to ?? record.from);
     const safeFrom = Math.min(from, to);
@@ -161,8 +182,8 @@ function restoreEditorPositionSnapshot(targetEditor, workId, chapterId, containe
 
     try {
         const selection = TextSelection.create(doc, safeFrom, safeTo);
-        targetEditor.view.dispatch(
-            targetEditor.state.tr
+        view.dispatch(
+            state.tr
                 .setSelection(selection)
                 .setMeta('addToHistory', false),
         );
@@ -170,8 +191,8 @@ function restoreEditorPositionSnapshot(targetEditor, workId, chapterId, containe
         try {
             const resolved = doc.resolve(safeFrom);
             const selection = Selection.near(resolved, -1);
-            targetEditor.view.dispatch(
-                targetEditor.state.tr
+            view.dispatch(
+                state.tr
                     .setSelection(selection)
                     .setMeta('addToHistory', false),
             );
@@ -188,11 +209,7 @@ function restoreEditorPositionSnapshot(targetEditor, workId, chapterId, containe
         container.scrollTop = rememberedScrollTop;
     }
 
-    try {
-        targetEditor.view.dom.focus({ preventScroll: true });
-    } catch {
-        targetEditor.view.focus();
-    }
+    focusMountedEditor(targetEditor);
 
     if (container && rememberedScrollTop !== null) {
         container.scrollTop = rememberedScrollTop;
@@ -204,6 +221,7 @@ function restoreEditorPositionSnapshot(targetEditor, workId, chapterId, containe
 }
 
 const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-default', onUpdate, editable = true, onAiRequest, onArchiveGeneration, chapterNumberingIgnored = false, onToggleSpecialChapter, onSplitChapter, onMergeNextChapter, contextItems, contextSelection, setContextSelection }, ref) {
+    const { text } = useI18n();
     const clipPathId = useId();
     const debounceRef = useRef(null);
     const positionSaveTimerRef = useRef(null);
@@ -337,18 +355,30 @@ const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-d
         const restoreSeq = positionRestoreSeqRef.current + 1;
         positionRestoreSeqRef.current = restoreSeq;
 
-        requestAnimationFrame(() => {
+        const runRestore = (attempt = 0) => {
             requestAnimationFrame(() => {
-                if (positionRestoreSeqRef.current !== restoreSeq) return;
-                const latest = latestPositionTargetRef.current;
-                if (getEditorPositionIdentity(latest.workId, latest.chapterId) !== targetIdentity) return;
-                const restored = restoreEditorPositionSnapshot(targetEditor, targetWorkId, targetChapterId, containerRef.current);
-                if (!restored && containerRef.current) {
-                    containerRef.current.scrollTop = 0;
-                }
-                restoredPositionKeyRef.current = targetIdentity;
+                requestAnimationFrame(() => {
+                    if (positionRestoreSeqRef.current !== restoreSeq) return;
+                    const latest = latestPositionTargetRef.current;
+                    if (getEditorPositionIdentity(latest.workId, latest.chapterId) !== targetIdentity) return;
+                    const restored = restoreEditorPositionSnapshot(targetEditor, targetWorkId, targetChapterId, containerRef.current);
+
+                    if (restored === null) {
+                        if (attempt < 8) {
+                            setTimeout(() => runRestore(attempt + 1), 50);
+                        }
+                        return;
+                    }
+
+                    if (!restored && containerRef.current) {
+                        containerRef.current.scrollTop = 0;
+                    }
+                    restoredPositionKeyRef.current = targetIdentity;
+                });
             });
-        });
+        };
+
+        runRestore();
     }, []);
 
     const editor = useEditor({
@@ -359,7 +389,7 @@ const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-d
                 underline: false, // 避免与下方显式 Underline 重复注册
             }),
             Placeholder.configure({
-                placeholder: '开始写作…让灵感自由流淌',
+                placeholder: text('开始写作…让灵感自由流淌', 'Start writing... let inspiration flow', 'Начните писать... пусть вдохновение течёт'),
             }),
             CharacterCount,
             Highlight.configure({ multicolor: true }),
@@ -702,11 +732,7 @@ const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-d
                     if (!e.currentTarget._mouseDownInTiptap && e.target.closest('.editor-container') && !e.target.closest('.tiptap')) {
                         const container = e.currentTarget;
                         const previousScrollTop = container.scrollTop;
-                        try {
-                            editor?.view.dom.focus({ preventScroll: true });
-                        } catch {
-                            editor?.view.focus();
-                        }
+                        focusMountedEditor(editor);
                         container.scrollTop = previousScrollTop;
                         requestAnimationFrame(() => {
                             container.scrollTop = previousScrollTop;
@@ -926,6 +952,7 @@ function RemarkLayer({ editor, workspaceRef, contentRef }) {
 
 // ==================== 搜索栏 ====================
 function FindBar({ editor, visible, onClose }) {
+    const { text } = useI18n();
     const [query, setQuery] = useState('');
     const [replaceText, setReplaceText] = useState('');
     const [showReplace, setShowReplace] = useState(false);
@@ -1138,7 +1165,9 @@ function FindBar({ editor, visible, onClose }) {
                 <button
                     className="find-bar-toggle"
                     onClick={() => setShowReplace(r => !r)}
-                    title={showReplace ? '收起替换' : '展开替换'}
+                    title={showReplace
+                        ? text('收起替换', 'Collapse replace', 'Свернуть замену')
+                        : text('展开替换', 'Expand replace', 'Развернуть замену')}
                 >
                     {showReplace ? '▾' : '▸'}
                 </button>
@@ -1146,7 +1175,7 @@ function FindBar({ editor, visible, onClose }) {
                 <input
                     ref={inputRef}
                     className="find-bar-input"
-                    placeholder="搜索..."
+                    placeholder={text('搜索...', 'Search...', 'Поиск...')}
                     value={query}
                     onChange={e => setQuery(e.target.value)}
                     onKeyDown={e => {
@@ -1161,15 +1190,15 @@ function FindBar({ editor, visible, onClose }) {
                     {query ? `${matches.length > 0 ? currentIndex + 1 : 0}/${matches.length}` : ''}
                 </span>
 
-                <button className="find-bar-btn" onClick={goPrev} disabled={matches.length === 0} title="上一个 (Shift+Enter)">↑</button>
-                <button className="find-bar-btn" onClick={goNext} disabled={matches.length === 0} title="下一个 (Enter)">↓</button>
+                <button className="find-bar-btn" onClick={goPrev} disabled={matches.length === 0} title={text('上一个 (Shift+Enter)', 'Previous (Shift+Enter)', 'Предыдущее (Shift+Enter)')}>↑</button>
+                <button className="find-bar-btn" onClick={goNext} disabled={matches.length === 0} title={text('下一个 (Enter)', 'Next (Enter)', 'Следующее (Enter)')}>↓</button>
                 <button
                     className={`find-bar-btn ${caseSensitive ? 'active' : ''}`}
                     onClick={() => setCaseSensitive(c => !c)}
-                    title="区分大小写"
+                    title={text('区分大小写', 'Match case', 'Учитывать регистр')}
                     style={{ fontSize: 11, fontWeight: caseSensitive ? 700 : 400 }}
                 >Aa</button>
-                <button className="find-bar-btn find-bar-close" onClick={onClose} title="关闭 (Esc)">✕</button>
+                <button className="find-bar-btn find-bar-close" onClick={onClose} title={text('关闭 (Esc)', 'Close (Esc)', 'Закрыть (Esc)')}>✕</button>
             </div>
 
             {showReplace && (
@@ -1177,7 +1206,7 @@ function FindBar({ editor, visible, onClose }) {
                     <div style={{ width: 22 }} /> {/* spacer aligning with toggle */}
                     <input
                         className="find-bar-input"
-                        placeholder="替换为..."
+                        placeholder={text('替换为...', 'Replace with...', 'Заменить на...')}
                         value={replaceText}
                         onChange={e => setReplaceText(e.target.value)}
                         onKeyDown={e => {
@@ -1187,8 +1216,8 @@ function FindBar({ editor, visible, onClose }) {
                             }
                         }}
                     />
-                    <button className="find-bar-btn" onClick={replaceCurrent} disabled={currentIndex < 0} title="替换当前">替换</button>
-                    <button className="find-bar-btn" onClick={replaceAll} disabled={matches.length === 0} title="全部替换">全部</button>
+                    <button className="find-bar-btn" onClick={replaceCurrent} disabled={currentIndex < 0} title={text('替换当前', 'Replace current', 'Заменить текущее')}>{text('替换', 'Replace', 'Заменить')}</button>
+                    <button className="find-bar-btn" onClick={replaceAll} disabled={matches.length === 0} title={text('全部替换', 'Replace all', 'Заменить все')}>{text('全部', 'All', 'Все')}</button>
                 </div>
             )}
         </div>
@@ -1198,6 +1227,7 @@ function FindBar({ editor, visible, onClose }) {
 // ==================== Inline AI 组件 ====================
 function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, contextSelection, setContextSelection }) {
     const { setShowSettings, setJumpToNodeId } = useAppStore();
+    const { text } = useI18n();
     const [visible, setVisible] = useState(false);
     const [mode, setMode] = useState('continue');
     const [instruction, setInstruction] = useState('');
@@ -1500,7 +1530,7 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
             });
         } catch (err) {
             if (err.name !== 'AbortError') {
-                fullAnswer += '\n\n❌ 请求出错: ' + (err.message || '未知错误');
+                fullAnswer += `\n\n❌ ${text('请求出错', 'Request failed', 'Ошибка запроса')}: ${err.message || text('未知错误', 'Unknown error', 'Неизвестная ошибка')}`;
                 setChatAnswer(fullAnswer);
             }
         } finally {
@@ -1511,7 +1541,7 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
                 setChatAnswer('');
             }
         }
-    }, [onAiRequest, chatStreaming, getContextText]);
+    }, [onAiRequest, chatStreaming, getContextText, text]);
 
     const generate = useCallback(async () => {
         if (!onAiRequest || streaming) return;
@@ -1527,7 +1557,7 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
         const contextText = getContextText();
         let actualMode = mode;
 
-        if (AI_MODES.find(m => m.key === mode)?.needsSelection && !selectedText) {
+        if (AI_SELECTION_REQUIRED_MODES.has(mode) && !selectedText) {
             actualMode = 'continue';
             setMode('continue');
         }
@@ -1676,23 +1706,30 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
                 className="ghost-inline-bar"
                 style={{ top: Math.max(16, Math.min(ghostPos.top, window.innerHeight - 60)), left: ghostPos.left }}
             >
-                <button className="ghost-accept-btn" onClick={acceptGhost} title="接受 (Tab)">
-                    {isReplacementDiff ? '✓ 采用 AI' : '✓ 接受'}
+                <button className="ghost-accept-btn" onClick={acceptGhost} title={text('接受 (Tab)', 'Accept (Tab)', 'Принять (Tab)')}>
+                    {isReplacementDiff ? text('✓ 采用 AI', '✓ Use AI', '✓ Использовать ИИ') : text('✓ 接受', '✓ Accept', '✓ Принять')}
                 </button>
-                <button className="ghost-reject-btn" onClick={rejectGhost} title="拒绝 (Esc)">
-                    {isReplacementDiff ? '✗ 保留原文' : '✗ 拒绝'}
+                <button className="ghost-reject-btn" onClick={rejectGhost} title={text('拒绝 (Esc)', 'Reject (Esc)', 'Отклонить (Esc)')}>
+                    {isReplacementDiff ? text('✗ 保留原文', '✗ Keep original', '✗ Оставить исходное') : text('✗ 拒绝', '✗ Reject', '✗ Отклонить')}
                 </button>
-                <button className="ghost-regen-btn" onClick={regenerate} title="重新生成">
+                <button className="ghost-regen-btn" onClick={regenerate} title={text('重新生成', 'Regenerate', 'Сгенерировать заново')}>
                     ⟳
                 </button>
-                <span className="ghost-bar-shortcut">Tab 接受 · Esc 拒绝</span>
+                <span className="ghost-bar-shortcut">{text('Tab 接受 · Esc 拒绝', 'Tab accept · Esc reject', 'Tab принять · Esc отклонить')}</span>
             </div>
         );
     }
     const selectedText = getSelectedText();
+    const aiModes = [
+        { key: 'continue', label: text('✦ 续写', '✦ Continue', '✦ Продолжить'), desc: text('从光标处自然续写', 'Continue naturally from the cursor', 'Продолжить от курсора'), needsSelection: false },
+        { key: 'rewrite', label: text('✎ 润色', '✎ Polish', '✎ Улучшить'), desc: text('提升选中文字质量', 'Improve the selected text', 'Улучшить выбранный текст'), needsSelection: true },
+        { key: 'expand', label: text('⊕ 扩写', '⊕ Expand', '⊕ Расширить'), desc: text('丰富细节与描写', 'Add detail and description', 'Добавить детали и описание'), needsSelection: true },
+        { key: 'condense', label: text('⊖ 精简', '⊖ Condense', '⊖ Сократить'), desc: text('浓缩核心内容', 'Condense to the core', 'Сжать до сути'), needsSelection: true },
+        { key: 'chat', label: text('💬 问答', '💬 Q&A', '💬 Вопросы'), desc: text('向 AI 提问，不改变原文', 'Ask AI without changing the text', 'Задать вопрос ИИ без изменения текста'), needsSelection: false },
+    ];
     const availableModes = selectedText
-        ? AI_MODES
-        : AI_MODES.filter(m => !m.needsSelection);
+        ? aiModes
+        : aiModes.filter(m => !m.needsSelection);
 
     return (
         <div
@@ -1720,9 +1757,9 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
                     className="inline-ai-close-btn"
                     onClick={close}
                     disabled={streaming || pendingGhost}
-                    title="关闭，保留未提交的补充指示"
+                    title={text('关闭，保留未提交的补充指示', 'Close and keep unsent instructions', 'Закрыть и сохранить неотправленные инструкции')}
                 >
-                    关闭
+                    {text('关闭', 'Close', 'Закрыть')}
                 </button>
             </div>
 
@@ -1733,8 +1770,8 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
                     <div className="chat-header" onMouseDown={onDragStart} style={{ cursor: 'grab' }}>
                         <div className="chat-header-icon">✦</div>
                         <div className="chat-header-text">
-                            <span className="chat-header-title">AI 问答助手</span>
-                            <span className="chat-header-subtitle">基于你的作品上下文回答，不修改原文</span>
+                            <span className="chat-header-title">{text('AI 问答助手', 'AI Q&A Assistant', 'ИИ-помощник Q&A')}</span>
+                            <span className="chat-header-subtitle">{text('基于你的作品上下文回答，不修改原文', 'Answers from your story context without changing the text', 'Отвечает по контексту произведения, не меняя текст')}</span>
                         </div>
                     </div>
 
@@ -1743,11 +1780,11 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
                         {chatMessages.length === 0 && !chatAnswer && (
                             <div className="inline-ai-chat-empty">
                                 <div className="chat-empty-icon">💬</div>
-                                <div className="chat-empty-title">向 AI 提问</div>
+                                <div className="chat-empty-title">{text('向 AI 提问', 'Ask AI', 'Спросить ИИ')}</div>
                                 <div className="chat-empty-hints">
-                                    <span className="chat-empty-hint">📖 这段情节的伏笔是什么？</span>
-                                    <span className="chat-empty-hint">🧑 角色性格分析</span>
-                                    <span className="chat-empty-hint">✍️ 写作手法建议</span>
+                                    <span className="chat-empty-hint">{text('📖 这段情节的伏笔是什么？', '📖 What foreshadowing is in this scene?', '📖 Какие здесь намёки?')}</span>
+                                    <span className="chat-empty-hint">{text('🧑 角色性格分析', '🧑 Character analysis', '🧑 Анализ персонажа')}</span>
+                                    <span className="chat-empty-hint">{text('✍️ 写作手法建议', '✍️ Writing technique suggestions', '✍️ Советы по приёмам письма')}</span>
                                 </div>
                             </div>
                         )}
@@ -1776,7 +1813,7 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
                             <input
                                 ref={chatInputRef}
                                 className="inline-ai-input"
-                                placeholder="问问关于你作品的任何问题…"
+                                placeholder={text('问问关于你作品的任何问题…', 'Ask anything about your work...', 'Спросите что угодно о произведении...')}
                                 value={instruction}
                                 onChange={e => setInstruction(e.target.value)}
                                 onKeyDown={e => {
@@ -1804,8 +1841,8 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
                                 </button>
                             )}
                             {chatMessages.length > 0 && !chatStreaming && (
-                                <button className="chat-clear-btn" onClick={() => { setChatMessages([]); setChatAnswer(''); }} title="清空对话">
-                                    清空
+                                <button className="chat-clear-btn" onClick={() => { setChatMessages([]); setChatAnswer(''); }} title={text('清空对话', 'Clear chat', 'Очистить чат')}>
+                                    {text('清空', 'Clear', 'Очистить')}
                                 </button>
                             )}
                         </div>
@@ -1832,7 +1869,9 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
                         <textarea
                             ref={inputRef}
                             className="inline-ai-input inline-ai-textarea"
-                            placeholder={mode === 'continue' ? '补充指示（可选），如：写一段打斗场景' : '改写指示（可选），如：更有诗意'}
+                            placeholder={mode === 'continue'
+                                ? text('补充指示（可选），如：写一段打斗场景', 'Optional instruction, e.g. write a fight scene', 'Доп. инструкция, напр.: написать сцену боя')
+                                : text('改写指示（可选），如：更有诗意', 'Optional rewrite instruction, e.g. make it more poetic', 'Инструкция к переписыванию, напр.: сделать поэтичнее')}
                             value={instruction}
                             onChange={e => setInstruction(e.target.value)}
                             onKeyDown={e => {
@@ -1846,11 +1885,11 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
                         />
                         {streaming ? (
                             <button className="inline-ai-stop-btn" onClick={stop}>
-                                ⬛ 停止
+                                {text('⬛ 停止', '⬛ Stop', '⬛ Стоп')}
                             </button>
                         ) : (
                             <button className="inline-ai-go-btn" onClick={generate}>
-                                ✦ 生成
+                                {text('✦ 生成', '✦ Generate', '✦ Сгенерировать')}
                             </button>
                         )}
                     </div>
@@ -1858,17 +1897,17 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
                     {/* 状态提示 */}
                     {streaming && (
                         <div className="inline-ai-status">
-                            <span className="streaming-cursor">▊</span> AI 正在写入编辑器…
+                            <span className="streaming-cursor">▊</span> {text('AI 正在写入编辑器…', 'AI is writing into the editor...', 'ИИ пишет в редактор...')}
                         </div>
                     )}
                     {!streaming && selectedText && (
                         <div className="inline-ai-hint">
-                            已选中 {selectedText.length} 字
+                            {text('已选中', 'Selected', 'Выбрано')} {selectedText.length} {text('字', 'chars', 'симв.')}
                         </div>
                     )}
                     {!streaming && !selectedText && (
                         <div className="inline-ai-hint">
-                            将在光标处续写 · Ctrl/⌘+Enter 生成 · 点击“关闭”保留草稿
+                            {text('将在光标处续写 · Ctrl/⌘+Enter 生成 · 点击“关闭”保留草稿', 'Continues at the cursor · Ctrl/⌘+Enter generates · Close keeps the draft', 'Продолжит от курсора · Ctrl/⌘+Enter генерирует · Закрытие сохранит черновик')}
                         </div>
                     )}
                 </>
@@ -1878,6 +1917,7 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
 }
 // ==================== Inline 参考面板（设定集勾选 + Graph RAG 推荐） ====================
 function InlineContextPanel({ contextItems, contextSelection, setContextSelection, onJumpToNode, editor, ragLoadingRef }) {
+    const { text } = useI18n();
     const [expanded, setExpanded] = useState(false);
     const [ragLoading, setRagLoading] = useState(false);
     const [ragScores, setRagScores] = useState({}); // { itemId: score }
@@ -1891,12 +1931,12 @@ function InlineContextPanel({ contextItems, contextSelection, setContextSelectio
     const grouped = useMemo(() => {
         const groups = {};
         for (const item of settingsItems) {
-            const g = item.group || '其他';
+            const g = item.group || text('其他', 'Other', 'Другое');
             if (!groups[g]) groups[g] = [];
             groups[g].push(item);
         }
         return groups;
-    }, [settingsItems]);
+    }, [settingsItems, text]);
 
     const selectedCount = settingsItems.filter(it => contextSelection?.has(it.id)).length;
     const totalCount = settingsItems.length;
@@ -1980,7 +2020,7 @@ function InlineContextPanel({ contextItems, contextSelection, setContextSelectio
                     style={{ flex: 1 }}
                 >
                     <span className="inline-context-chevron">{expanded ? '▼' : '▶'}</span>
-                    <span>📚 参考</span>
+                    <span>{text('📚 参考', '📚 Reference', '📚 Справка')}</span>
                     <span className="inline-context-count">({selectedCount}/{totalCount})</span>
                 </button>
                 <button
@@ -1988,7 +2028,7 @@ function InlineContextPanel({ contextItems, contextSelection, setContextSelectio
                     onMouseDown={e => e.preventDefault()}
                     onClick={handleRagRecommend}
                     disabled={ragLoading}
-                    title="基于当前正文智能推荐最相关的设定"
+                    title={text('基于当前正文智能推荐最相关的设定', 'Recommend the most relevant settings from the current text', 'Рекомендовать самые релевантные настройки по текущему тексту')}
                     style={{
                         fontSize: 11, padding: '2px 6px', border: '1px solid var(--accent)',
                         borderRadius: 4, background: 'var(--bg-primary)', color: 'var(--accent)',
@@ -1996,7 +2036,7 @@ function InlineContextPanel({ contextItems, contextSelection, setContextSelectio
                         whiteSpace: 'nowrap', flexShrink: 0, lineHeight: 1.4,
                     }}
                 >
-                    {ragLoading ? '⏳ 分析中…' : '🎯 智能推荐'}
+                    {ragLoading ? text('⏳ 分析中…', '⏳ Analyzing...', '⏳ Анализ...') : text('🎯 智能推荐', '🎯 Smart Recommend', '🎯 Рекомендации')}
                 </button>
             </div>
             {expanded && (
@@ -2031,7 +2071,7 @@ function InlineContextPanel({ contextItems, contextSelection, setContextSelectio
                                                 fontSize: 10, color: '#fff', background: 'var(--accent)',
                                                 borderRadius: 3, padding: '0 4px', lineHeight: '16px',
                                                 flexShrink: 0, fontFamily: 'monospace',
-                                            }} title={`相似度: ${ragScores[item.id].toFixed(3)}`}>
+                                            }} title={`${text('相似度', 'Similarity', 'Сходство')}: ${ragScores[item.id].toFixed(3)}`}>
                                                 {ragScores[item.id].toFixed(2)}
                                             </span>
                                         )}
@@ -2043,7 +2083,7 @@ function InlineContextPanel({ contextItems, contextSelection, setContextSelectio
                                                     fontSize: 11, color: 'var(--accent)', padding: '0 4px',
                                                     opacity: 0.7, lineHeight: 1, flexShrink: 0,
                                                 }}
-                                                title="跳转到设定集"
+                                                title={text('跳转到设定集', 'Jump to settings', 'Перейти к настройкам')}
                                             >→</button>
                                         )}
                                     </div>
@@ -2083,6 +2123,7 @@ const PRESET_COLORS = [
 ];
 
 function ColorPicker({ label, currentColor, onSelect, onClose, style }) {
+    const { text } = useI18n();
     return (
         <div className="color-picker-popover" style={style} onMouseDown={e => e.preventDefault()} onClick={e => e.stopPropagation()}>
             <div className="color-picker-label">{label}</div>
@@ -2101,7 +2142,7 @@ function ColorPicker({ label, currentColor, onSelect, onClose, style }) {
                 className="color-picker-clear"
                 onClick={() => { onSelect(null); onClose(); }}
             >
-                清除颜色
+                {text('清除颜色', 'Clear color', 'Очистить цвет')}
             </button>
         </div>
     );
@@ -2109,14 +2150,15 @@ function ColorPicker({ label, currentColor, onSelect, onClose, style }) {
 
 // ==================== 字体族选项 ====================
 const FONT_FAMILIES = [
-    { label: '默认（正文默认）', value: '' },
-    ...WRITING_FONT_FAMILIES.map(font => ({ label: font.label, value: font.value })),
+    { label: '默认（正文默认）', labelKey: 'preferences.writingFontSongti', value: '' },
+    ...WRITING_FONT_FAMILIES.map(font => ({ label: font.label, labelKey: font.labelKey, value: font.value })),
 ];
 
 const FONT_SIZES = [12, 14, 15, 16, 17, 18, 20, 22, 24, 28, 32];
 
 // ==================== 工具栏 ====================
 function EditorToolbar({ editor, margins, setMargins, chapterNumberingIgnored = false, onToggleSpecialChapter, onSplitChapter, onMergeNextChapter }) {
+    const { t, text } = useI18n();
     const [showFontColor, setShowFontColor] = useState(false);
     const [showBgColor, setShowBgColor] = useState(false);
     const [showFontFamily, setShowFontFamily] = useState(false);
@@ -2176,7 +2218,10 @@ function EditorToolbar({ editor, margins, setMargins, chapterNumberingIgnored = 
     if (!editor) return null;
 
     const currentFontFamily = editor.getAttributes('textStyle').fontFamily || '';
-    const currentFontLabel = FONT_FAMILIES.find(f => f.value === currentFontFamily)?.label || '默认';
+    const currentFont = FONT_FAMILIES.find(f => f.value === currentFontFamily);
+    const currentFontLabel = currentFont
+        ? (currentFont.value ? t(currentFont.labelKey) : text('默认', 'Default', 'По умолчанию'))
+        : text('默认', 'Default', 'По умолчанию');
     const currentColor = editor.getAttributes('textStyle').color || '';
     const currentHighlight = editor.getAttributes('highlight').color || '';
 
@@ -2262,10 +2307,12 @@ function EditorToolbar({ editor, margins, setMargins, chapterNumberingIgnored = 
                         <button
                             className={`toolbar-btn special-chapter-toggle ${chapterNumberingIgnored ? 'active' : ''}`}
                             onClick={onToggleSpecialChapter}
-                            title={chapterNumberingIgnored ? '取消特殊章节标记' : '设为特殊章节，重排编号时忽略'}
+                            title={chapterNumberingIgnored
+                                ? text('取消特殊章节标记', 'Unset special chapter', 'Снять отметку особой главы')
+                                : text('设为特殊章节，重排编号时忽略', 'Mark as special chapter and skip during renumbering', 'Отметить как особую главу и пропускать при перенумерации')}
                         >
                             <Flag size={15} strokeWidth={2.4} />
-                            <span>特殊章节</span>
+                            <span>{text('特殊章节', 'Special', 'Особая')}</span>
                         </button>
                     </div>
 
@@ -2280,18 +2327,18 @@ function EditorToolbar({ editor, margins, setMargins, chapterNumberingIgnored = 
                             <button
                                 className="toolbar-btn"
                                 onClick={onSplitChapter}
-                                title="从当前光标处拆分为两章"
+                                title={text('从当前光标处拆分为两章', 'Split into two chapters at the cursor', 'Разделить на две главы от курсора')}
                             >
-                                拆分
+                                {text('拆分', 'Split', 'Разделить')}
                             </button>
                         )}
                         {onMergeNextChapter && (
                             <button
                                 className="toolbar-btn"
                                 onClick={onMergeNextChapter}
-                                title="把下一章节合并到当前章节"
+                                title={text('把下一章节合并到当前章节', 'Merge the next chapter into this one', 'Объединить следующую главу с текущей')}
                             >
-                                合并
+                                {text('合并', 'Merge', 'Объединить')}
                             </button>
                         )}
                     </div>
@@ -2302,16 +2349,16 @@ function EditorToolbar({ editor, margins, setMargins, chapterNumberingIgnored = 
 
             {/* 一键排版/撤销/重做 */}
             <div className="toolbar-group">
-                <button className="toolbar-btn" onClick={() => editor.chain().focus().undo().run()} title="撤销 (Ctrl+Z)"><Undo2 size={16} strokeWidth={2.5} /></button>
-                <button className="toolbar-btn" onClick={handleAutoFormat} title="一键排版 (去除多余空格与空行)"><Wand2 size={16} strokeWidth={2.5} /></button>
-                <button className="toolbar-btn" onClick={() => editor.chain().focus().redo().run()} title="重做 (Ctrl+Y)"><Redo2 size={16} strokeWidth={2.5} /></button>
+                <button className="toolbar-btn" onClick={() => editor.chain().focus().undo().run()} title={text('撤销 (Ctrl+Z)', 'Undo (Ctrl+Z)', 'Отменить (Ctrl+Z)')}><Undo2 size={16} strokeWidth={2.5} /></button>
+                <button className="toolbar-btn" onClick={handleAutoFormat} title={text('一键排版 (去除多余空格与空行)', 'Auto format (trim extra spaces and blank lines)', 'Автоформат (убрать лишние пробелы и пустые строки)')}><Wand2 size={16} strokeWidth={2.5} /></button>
+                <button className="toolbar-btn" onClick={() => editor.chain().focus().redo().run()} title={text('重做 (Ctrl+Y)', 'Redo (Ctrl+Y)', 'Повторить (Ctrl+Y)')}><Redo2 size={16} strokeWidth={2.5} /></button>
             </div>
 
             <div className="toolbar-divider" />
 
             {/* 字体族 */}
             <div className="toolbar-dropdown-wrap" onClick={e => e.stopPropagation()}>
-                <button className="toolbar-btn toolbar-dropdown-btn" onClick={e => { closeAll(); setDropPos(getDropdownPos(e.currentTarget)); setShowFontFamily(!showFontFamily); }} title="字体">
+                <button className="toolbar-btn toolbar-dropdown-btn" onClick={e => { closeAll(); setDropPos(getDropdownPos(e.currentTarget)); setShowFontFamily(!showFontFamily); }} title={text('字体', 'Font', 'Шрифт')}>
                     {currentFontLabel} <span className="dropdown-arrow">▾</span>
                 </button>
                 {showFontFamily && (
@@ -2331,7 +2378,7 @@ function EditorToolbar({ editor, margins, setMargins, chapterNumberingIgnored = 
                                     setShowFontFamily(false);
                                 }}
                             >
-                                {f.label}
+                                {f.value ? t(f.labelKey) : text('默认（正文默认）', 'Default (body default)', 'По умолчанию')}
                             </button>
                         ))}
                     </div>
@@ -2342,13 +2389,13 @@ function EditorToolbar({ editor, margins, setMargins, chapterNumberingIgnored = 
 
             {/* 格式按钮 */}
             <div className="toolbar-group">
-                <button className={`toolbar-btn ${editor.isActive('bold') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleBold().run()} title="加粗 (Ctrl+B)" style={{ fontWeight: 'bold' }}>B</button>
-                <button className={`toolbar-btn ${editor.isActive('italic') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleItalic().run()} title="斜体 (Ctrl+I)" style={{ fontStyle: 'italic' }}>I</button>
-                <button className={`toolbar-btn ${editor.isActive('underline') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleUnderline().run()} title="下划线 (Ctrl+U)" style={{ textDecoration: 'underline' }}>U</button>
-                <button className={`toolbar-btn ${editor.isActive('strike') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleStrike().run()} title="删除线" style={{ textDecoration: 'line-through' }}>S</button>
-                <button className={`toolbar-btn ${editor.isActive('superscript') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleSuperscript().run()} title="上标" style={{ fontSize: 11 }}>X²</button>
-                <button className={`toolbar-btn ${editor.isActive('subscript') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleSubscript().run()} title="下标" style={{ fontSize: 11 }}>X₂</button>
-                <button className={`toolbar-btn ${editor.isActive('remark') ? 'active' : ''}`} onClick={() => promptForRemark(editor)} title="备注 / 批注">
+                <button className={`toolbar-btn ${editor.isActive('bold') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleBold().run()} title={text('加粗 (Ctrl+B)', 'Bold (Ctrl+B)', 'Жирный (Ctrl+B)')} style={{ fontWeight: 'bold' }}>B</button>
+                <button className={`toolbar-btn ${editor.isActive('italic') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleItalic().run()} title={text('斜体 (Ctrl+I)', 'Italic (Ctrl+I)', 'Курсив (Ctrl+I)')} style={{ fontStyle: 'italic' }}>I</button>
+                <button className={`toolbar-btn ${editor.isActive('underline') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleUnderline().run()} title={text('下划线 (Ctrl+U)', 'Underline (Ctrl+U)', 'Подчёркивание (Ctrl+U)')} style={{ textDecoration: 'underline' }}>U</button>
+                <button className={`toolbar-btn ${editor.isActive('strike') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleStrike().run()} title={text('删除线', 'Strikethrough', 'Зачёркивание')} style={{ textDecoration: 'line-through' }}>S</button>
+                <button className={`toolbar-btn ${editor.isActive('superscript') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleSuperscript().run()} title={text('上标', 'Superscript', 'Верхний индекс')} style={{ fontSize: 11 }}>X²</button>
+                <button className={`toolbar-btn ${editor.isActive('subscript') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleSubscript().run()} title={text('下标', 'Subscript', 'Нижний индекс')} style={{ fontSize: 11 }}>X₂</button>
+                <button className={`toolbar-btn ${editor.isActive('remark') ? 'active' : ''}`} onClick={() => promptForRemark(editor)} title={text('备注 / 批注', 'Note / Comment', 'Заметка / комментарий')}>
                     <MessageSquareText size={16} />
                 </button>
             </div>
@@ -2360,14 +2407,14 @@ function EditorToolbar({ editor, margins, setMargins, chapterNumberingIgnored = 
                 <button
                     className="toolbar-btn toolbar-color-btn"
                     onClick={e => { closeAll(); setDropPos(getDropdownPos(e.currentTarget, 'center')); setShowFontColor(!showFontColor); }}
-                    title="字体颜色"
+                    title={text('字体颜色', 'Text color', 'Цвет текста')}
                 >
                     <span style={{ borderBottom: `3px solid ${currentColor || 'var(--text-primary)'}` }}>A</span>
                     <span className="dropdown-arrow">▾</span>
                 </button>
                 {showFontColor && (
                     <ColorPicker
-                        label="字体颜色"
+                        label={text('字体颜色', 'Text color', 'Цвет текста')}
                         currentColor={currentColor}
                         onSelect={color => {
                             if (color) editor.chain().focus().setColor(color).run();
@@ -2384,19 +2431,19 @@ function EditorToolbar({ editor, margins, setMargins, chapterNumberingIgnored = 
                 <button
                     className="toolbar-btn toolbar-color-btn"
                     onClick={e => { closeAll(); setDropPos(getDropdownPos(e.currentTarget, 'center')); setShowBgColor(!showBgColor); }}
-                    title="背景颜色（高亮）"
+                    title={text('背景颜色（高亮）', 'Background color (highlight)', 'Цвет фона (выделение)')}
                 >
                     <span style={{
                         background: currentHighlight || 'var(--warning)',
                         padding: '0 3px',
                         borderRadius: 2,
                         color: currentHighlight ? '#fff' : 'inherit',
-                    }}>高亮</span>
+                    }}>{text('高亮', 'Highlight', 'Выделение')}</span>
                     <span className="dropdown-arrow">▾</span>
                 </button>
                 {showBgColor && (
                     <ColorPicker
-                        label="背景颜色"
+                        label={text('背景颜色', 'Background color', 'Цвет фона')}
                         currentColor={currentHighlight}
                         onSelect={color => {
                             if (color) editor.chain().focus().toggleHighlight({ color }).run();
@@ -2412,19 +2459,19 @@ function EditorToolbar({ editor, margins, setMargins, chapterNumberingIgnored = 
 
             {/* 标题 */}
             <div className="toolbar-group">
-                <button className={`toolbar-btn ${editor.isActive('heading', { level: 1 }) ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} title="一级标题" style={{ fontSize: 13, fontWeight: 700 }}>H1</button>
-                <button className={`toolbar-btn ${editor.isActive('heading', { level: 2 }) ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} title="二级标题" style={{ fontSize: 12, fontWeight: 700 }}>H2</button>
-                <button className={`toolbar-btn ${editor.isActive('heading', { level: 3 }) ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} title="三级标题" style={{ fontSize: 11, fontWeight: 700 }}>H3</button>
+                <button className={`toolbar-btn ${editor.isActive('heading', { level: 1 }) ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} title={text('一级标题', 'Heading 1', 'Заголовок 1')} style={{ fontSize: 13, fontWeight: 700 }}>H1</button>
+                <button className={`toolbar-btn ${editor.isActive('heading', { level: 2 }) ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} title={text('二级标题', 'Heading 2', 'Заголовок 2')} style={{ fontSize: 12, fontWeight: 700 }}>H2</button>
+                <button className={`toolbar-btn ${editor.isActive('heading', { level: 3 }) ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} title={text('三级标题', 'Heading 3', 'Заголовок 3')} style={{ fontSize: 11, fontWeight: 700 }}>H3</button>
             </div>
 
             <div className="toolbar-divider" />
 
             {/* 对齐 */}
             <div className="toolbar-group">
-                <button className={`toolbar-btn ${editor.isActive({ textAlign: 'left' }) ? 'active' : ''}`} onClick={() => editor.chain().focus().setTextAlign('left').run()} title="左对齐">≡</button>
-                <button className={`toolbar-btn ${editor.isActive({ textAlign: 'center' }) ? 'active' : ''}`} onClick={() => editor.chain().focus().setTextAlign('center').run()} title="居中">═</button>
-                <button className={`toolbar-btn ${editor.isActive({ textAlign: 'right' }) ? 'active' : ''}`} onClick={() => editor.chain().focus().setTextAlign('right').run()} title="右对齐">≢</button>
-                <button className={`toolbar-btn ${editor.isActive({ textAlign: 'justify' }) ? 'active' : ''}`} onClick={() => editor.chain().focus().setTextAlign('justify').run()} title="两端对齐">☰</button>
+                <button className={`toolbar-btn ${editor.isActive({ textAlign: 'left' }) ? 'active' : ''}`} onClick={() => editor.chain().focus().setTextAlign('left').run()} title={text('左对齐', 'Align left', 'По левому краю')}>≡</button>
+                <button className={`toolbar-btn ${editor.isActive({ textAlign: 'center' }) ? 'active' : ''}`} onClick={() => editor.chain().focus().setTextAlign('center').run()} title={text('居中', 'Align center', 'По центру')}>═</button>
+                <button className={`toolbar-btn ${editor.isActive({ textAlign: 'right' }) ? 'active' : ''}`} onClick={() => editor.chain().focus().setTextAlign('right').run()} title={text('右对齐', 'Align right', 'По правому краю')}>≢</button>
+                <button className={`toolbar-btn ${editor.isActive({ textAlign: 'justify' }) ? 'active' : ''}`} onClick={() => editor.chain().focus().setTextAlign('justify').run()} title={text('两端对齐', 'Justify', 'По ширине')}>☰</button>
             </div>
 
             <div className="toolbar-divider" />
@@ -2434,7 +2481,7 @@ function EditorToolbar({ editor, margins, setMargins, chapterNumberingIgnored = 
                 <button
                     className={`toolbar-btn ${showTypeset ? 'active' : ''}`}
                     onClick={e => { closeAll(); setDropPos(getDropdownPos(e.currentTarget, 'right')); setShowTypeset(!showTypeset); }}
-                    title="字号与行距"
+                    title={text('字号与行距', 'Font size and line height', 'Размер шрифта и интервал')}
                     style={{ fontSize: 12 }}
                 >
                     Aa <span className="dropdown-arrow">▾</span>
@@ -2442,7 +2489,7 @@ function EditorToolbar({ editor, margins, setMargins, chapterNumberingIgnored = 
                 {showTypeset && (
                     <div className="typeset-popover" style={{ position: 'fixed', ...dropPos, zIndex: 9999 }}>
                         <div className="typeset-row">
-                            <label>字号</label>
+                            <label>{text('字号', 'Size', 'Размер')}</label>
                             <input
                                 type="range" min="14" max="24" step="1"
                                 value={fontSize}
@@ -2451,7 +2498,7 @@ function EditorToolbar({ editor, margins, setMargins, chapterNumberingIgnored = 
                             <span className="typeset-value">{fontSize}px</span>
                         </div>
                         <div className="typeset-row">
-                            <label>行距</label>
+                            <label>{text('行距', 'Line height', 'Интервал')}</label>
                             <input
                                 type="range" min="1.4" max="2.6" step="0.1"
                                 value={lineHeight}
@@ -2460,7 +2507,7 @@ function EditorToolbar({ editor, margins, setMargins, chapterNumberingIgnored = 
                             <span className="typeset-value">{lineHeight.toFixed(1)}</span>
                         </div>
                         <button className="typeset-reset" onClick={() => { setFontSize(17); setLineHeight(1.9); }}>
-                            恢复默认
+                            {text('恢复默认', 'Reset default', 'Сбросить')}
                         </button>
                     </div>
                 )}
@@ -2471,7 +2518,7 @@ function EditorToolbar({ editor, margins, setMargins, chapterNumberingIgnored = 
                 <button
                     className={`toolbar-btn ${showMargins ? 'active' : ''}`}
                     onClick={e => { closeAll(); setDropPos(getDropdownPos(e.currentTarget, 'right')); setShowMargins(!showMargins); }}
-                    title="页面设置"
+                    title={text('页面设置', 'Page settings', 'Настройки страницы')}
                     style={{ fontSize: 12 }}
                 >
                     📄 <span className="dropdown-arrow">▾</span>
@@ -2479,7 +2526,7 @@ function EditorToolbar({ editor, margins, setMargins, chapterNumberingIgnored = 
                 {showMargins && (
                     <div className="typeset-popover" style={{ position: 'fixed', ...dropPos, zIndex: 9999 }}>
                         <div className="typeset-row">
-                            <label>上下</label>
+                            <label>{text('上下', 'Top/bottom', 'Верх/низ')}</label>
                             <input
                                 type="range" min="40" max="160" step="8"
                                 value={margins.y}
@@ -2488,7 +2535,7 @@ function EditorToolbar({ editor, margins, setMargins, chapterNumberingIgnored = 
                             <span className="typeset-value">{margins.y}px</span>
                         </div>
                         <div className="typeset-row">
-                            <label>左右</label>
+                            <label>{text('左右', 'Left/right', 'Лево/право')}</label>
                             <input
                                 type="range" min="40" max="160" step="8"
                                 value={margins.x}
@@ -2497,7 +2544,7 @@ function EditorToolbar({ editor, margins, setMargins, chapterNumberingIgnored = 
                             <span className="typeset-value">{margins.x}px</span>
                         </div>
                         <button className="typeset-reset" onClick={() => setMargins({ x: 96, y: 96 })}>
-                            恢复默认
+                            {text('恢复默认', 'Reset default', 'Сбросить')}
                         </button>
                     </div>
                 )}
@@ -2507,17 +2554,17 @@ function EditorToolbar({ editor, margins, setMargins, chapterNumberingIgnored = 
 
             {/* 列表和引用 */}
             <div className="toolbar-group">
-                <button className={`toolbar-btn ${editor.isActive('bulletList') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleBulletList().run()} title="无序列表"><List size={16} strokeWidth={2.3} /></button>
-                <button className={`toolbar-btn ${editor.isActive('orderedList') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleOrderedList().run()} title="有序列表"><ListOrdered size={16} strokeWidth={2.3} /></button>
-                <button className={`toolbar-btn ${editor.isActive('taskList') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleTaskList().run()} title="任务列表"><ListChecks size={16} strokeWidth={2.3} /></button>
-                <button className={`toolbar-btn ${editor.isActive('blockquote') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleBlockquote().run()} title="引用块"><Quote size={16} strokeWidth={2.3} /></button>
-                <button className={`toolbar-btn ${editor.isActive('codeBlock') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleCodeBlock().run()} title="代码块"><Code2 size={16} strokeWidth={2.3} /></button>
+                <button className={`toolbar-btn ${editor.isActive('bulletList') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleBulletList().run()} title={text('无序列表', 'Bulleted list', 'Маркированный список')}><List size={16} strokeWidth={2.3} /></button>
+                <button className={`toolbar-btn ${editor.isActive('orderedList') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleOrderedList().run()} title={text('有序列表', 'Numbered list', 'Нумерованный список')}><ListOrdered size={16} strokeWidth={2.3} /></button>
+                <button className={`toolbar-btn ${editor.isActive('taskList') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleTaskList().run()} title={text('任务列表', 'Task list', 'Список задач')}><ListChecks size={16} strokeWidth={2.3} /></button>
+                <button className={`toolbar-btn ${editor.isActive('blockquote') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleBlockquote().run()} title={text('引用块', 'Blockquote', 'Цитата')}><Quote size={16} strokeWidth={2.3} /></button>
+                <button className={`toolbar-btn ${editor.isActive('codeBlock') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleCodeBlock().run()} title={text('代码块', 'Code block', 'Блок кода')}><Code2 size={16} strokeWidth={2.3} /></button>
                 <button className="toolbar-btn" onClick={() => {
                     openMathEditor('', (latex) => {
                         editor.chain().focus().insertContent({ type: 'mathInline', attrs: { latex } }).run();
                     });
-                }} title="插入公式 (也可直接输入 $公式$)">∑</button>
-                <button className="toolbar-btn" onClick={() => editor.chain().focus().setHorizontalRule().run()} title="分割线">——</button>
+                }} title={text('插入公式 (也可直接输入 $公式$)', 'Insert formula (you can also type $formula$)', 'Вставить формулу (можно ввести $formula$)')}>∑</button>
+                <button className="toolbar-btn" onClick={() => editor.chain().focus().setHorizontalRule().run()} title={text('分割线', 'Horizontal rule', 'Горизонтальная линия')}>——</button>
             </div>
         </div>
     );
@@ -2525,6 +2572,7 @@ function EditorToolbar({ editor, margins, setMargins, chapterNumberingIgnored = 
 
 // ==================== 状态栏 ====================
 function StatusBar({ editor, pageCount }) {
+    const { text } = useI18n();
     if (!editor) return null;
 
     const characterCount = editor.storage.characterCount;
@@ -2534,13 +2582,13 @@ function StatusBar({ editor, pageCount }) {
     return (
         <div className="status-bar">
             <div className="status-bar-left">
-                <span>{words} 字</span>
-                <span>{chars} 字符</span>
-                <span style={{ color: 'var(--accent)', fontWeight: 600 }}>共 {pageCount} 页</span>
+                <span>{words} {text('字', 'words', 'слов')}</span>
+                <span>{chars} {text('字符', 'chars', 'симв.')}</span>
+                <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{text('共', 'Total', 'Всего')} {pageCount} {text('页', 'pages', 'стр.')}</span>
             </div>
             <div className="status-bar-right">
-                <span className="status-bar-shortcut">Ctrl+J AI助手</span>
-                <span>自动保存</span>
+                <span className="status-bar-shortcut">{text('Ctrl+J AI助手', 'Ctrl+J AI Assistant', 'Ctrl+J ИИ-помощник')}</span>
+                <span>{text('自动保存', 'Auto saved', 'Автосохранение')}</span>
                 <span style={{ opacity: 0.5, fontSize: '11px' }}>© 2026 YuanShiJiLoong</span>
             </div>
         </div>

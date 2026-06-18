@@ -6,6 +6,12 @@
  */
 export function promptInput(message, defaultValue = '') {
     return new Promise((resolve) => {
+        const lang = localStorage.getItem('author-lang') || 'zh';
+        const pickText = (zh, en, ru = en) => {
+            if (lang === 'en') return en;
+            if (lang === 'ru') return ru;
+            return zh;
+        };
         // 遮罩
         const overlay = document.createElement('div');
         Object.assign(overlay.style, {
@@ -25,9 +31,9 @@ export function promptInput(message, defaultValue = '') {
         });
 
         // 标题
-        const label = document.createElement('div');
-        label.textContent = message;
-        Object.assign(label.style, {
+        const titleEl = document.createElement('div');
+        titleEl.textContent = message;
+        Object.assign(titleEl.style, {
             fontSize: '14px', fontWeight: '600',
             color: 'var(--text-primary, #1a1a1a)',
         });
@@ -54,7 +60,7 @@ export function promptInput(message, defaultValue = '') {
         });
 
         const btnCancel = document.createElement('button');
-        btnCancel.textContent = '取消';
+        btnCancel.textContent = pickText('取消', 'Cancel', 'Отмена');
         Object.assign(btnCancel.style, {
             padding: '8px 20px', border: '1px solid var(--border-light, #e5e7eb)',
             borderRadius: '10px', background: 'var(--bg-secondary, #f9fafb)',
@@ -63,7 +69,7 @@ export function promptInput(message, defaultValue = '') {
         });
 
         const btnOk = document.createElement('button');
-        btnOk.textContent = '确定';
+        btnOk.textContent = pickText('确定', 'OK', 'OK');
         Object.assign(btnOk.style, {
             padding: '8px 20px', border: 'none', borderRadius: '10px',
             background: 'var(--accent, #6366f1)', cursor: 'pointer',
@@ -84,7 +90,7 @@ export function promptInput(message, defaultValue = '') {
         });
 
         btnRow.append(btnCancel, btnOk);
-        panel.append(label, input, btnRow);
+        panel.append(titleEl, input, btnRow);
         overlay.appendChild(panel);
         document.body.appendChild(overlay);
         requestAnimationFrame(() => { input.focus(); input.select(); });
