@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { spawn } from 'child_process';
+import { authorizeSourceUpdate, redactSensitiveText } from '../../lib/server-security.mjs';
 
 // 服务启动时记录的版本（Node require 缓存，不会变）
 const RUNNING_VERSION = (() => {
@@ -15,7 +16,15 @@ const RUNNING_VERSION = (() => {
  * SSE 流式更新源码：git pull → npm install → npm run build
  * 实时推送每个步骤的进度
  */
-export async function POST() {
+export async function POST(request) {
+    const authorization = authorizeSourceUpdate(request);
+    if (!authorization.ok) {
+        return Response.json(
+            { error: 'Source update is not authorized', code: authorization.code },
+            { status: authorization.status, headers: { 'Cache-Control': 'no-store' } },
+        );
+    }
+
     const cwd = process.cwd();
     const gitDir = join(cwd, '.git');
 
@@ -36,8 +45,8 @@ export async function POST() {
 
             const steps = [
                 { step: 1, total: 3, label: '🔄 拉取最新代码', cmd: 'git', args: ['pull'], timeout: 60000 },
-                { step: 2, total: 3, label: '📦 安装依赖', cmd: 'npm', args: ['install'], timeout: 300000 },
-                { step: 3, total: 3, label: '🔨 构建项目', cmd: 'npm', args: ['run', 'build'], timeout: 300000 },
+                { step: 2, total: 3, label: '📦 安装依赖', cmd: process.platform === 'win32' ? 'npm.cmd' : 'npm', args: ['install'], timeout: 300000 },
+                { step: 3, total: 3, label: '🔨 构建项目', cmd: process.platform === 'win32' ? 'npm.cmd' : 'npm', args: ['run', 'build'], timeout: 300000 },
             ];
 
             try {
@@ -49,7 +58,7 @@ export async function POST() {
                     if (!result.success) {
                         send({
                             step: stepInfo.step, total: stepInfo.total, label: stepInfo.label,
-                            status: 'error', log: result.output,
+                            status: 'error', log: redactSensitiveText(result.output, 2000),
                         });
                         send({ done: true, success: false, error: `步骤 ${stepInfo.step} 失败: ${stepInfo.label}`, code: 'UPDATE_STEP_FAILED', step: stepInfo.step, label: stepInfo.label });
                         controller.close();
@@ -87,7 +96,7 @@ export async function POST() {
                 // 完整更新成功（git pull + npm install + build），必须重启
                 send({ done: true, success: true, alreadyUpToDate: false, needRestart: true });
             } catch (err) {
-                send({ done: true, success: false, error: err.message });
+                send({ done: true, success: false, error: redactSensitiveText(err?.message) });
             }
 
             controller.close();
@@ -108,10 +117,9 @@ function runCommand(cmd, args, cwd, timeout) {
         let output = '';
         let timer;
 
-        // Windows 下用 shell 模式
         const proc = spawn(cmd, args, {
             cwd,
-            shell: true,
+            shell: false,
             env: { ...process.env },
             stdio: ['ignore', 'pipe', 'pipe'],
         });

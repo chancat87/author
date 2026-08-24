@@ -7,16 +7,23 @@ export const maxDuration = 120;
 import { applyContentSafety } from '../../../lib/content-safety';
 import { proxyFetch } from '../../../lib/proxy-fetch';
 import { rotateKey } from '../../../lib/keyRotator';
-import { isOutboundRequestBlocked, redactSensitiveText, safeUpstreamDetail } from '../../../lib/server-security.mjs';
+import { isOutboundRequestBlocked, isServerCredentialBlocked, redactSensitiveText, resolveAiCredential, safeUpstreamDetail } from '../../../lib/server-security.mjs';
 
 export async function POST(request) {
     try {
         const { systemPrompt, userPrompt, apiConfig, maxTokens, temperature, topP, reasoningEffort, tools: toolsConfig } = await request.json();
         const proxyUrl = apiConfig?.proxyUrl || '';
 
-        const apiKey = rotateKey(apiConfig?.apiKey || process.env.GEMINI_API_KEY);
+        const credential = resolveAiCredential({
+            request,
+            clientApiKey: apiConfig?.apiKey,
+            clientBaseUrl: apiConfig?.baseUrl,
+            envApiKey: process.env.GEMINI_API_KEY,
+            envBaseUrl: process.env.GEMINI_BASE_URL,
+        });
+        const apiKey = rotateKey(credential.apiKey);
         // 不内置官方默认地址：baseUrl 必须由用户填写（open core 边界）
-        const baseUrl = String(apiConfig?.baseUrl || process.env.GEMINI_BASE_URL || '').trim().replace(/\/+$/, '');
+        const baseUrl = credential.baseUrl;
         const model = apiConfig?.model || process.env.GEMINI_MODEL || 'gemini-2.0-flash';
 
         if (!apiKey) {
@@ -201,6 +208,12 @@ export async function POST(request) {
 
     } catch (error) {
         console.error('Gemini 接口错误:', error?.code || error?.name || 'UNKNOWN');
+        if (isServerCredentialBlocked(error)) {
+            return new Response(
+                JSON.stringify({ error: error.message, code: error.code }),
+                { status: 403, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }
+            );
+        }
         if (isOutboundRequestBlocked(error)) {
             return new Response(
                 JSON.stringify({ error: error.message, code: error.code }),

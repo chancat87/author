@@ -8,10 +8,10 @@ import { legalDocPath, POLICY_VERSION, getAgreedPolicyVersion, setAgreedPolicyVe
 
 /**
  * 政策更新同意闸 —— 已登录用户在《服务条款》/《隐私政策》实质更新后，必须重新阅读并同意
- * 才能继续使用登录账号与云同步；不同意则登出（自建 + 旧版 Firebase 一并登出）。
+ * 才能继续使用登录账号与云同步；不同意则退出 Author Cloud。
  * 未登录 / 开源未配置服务器的用户不受影响。
  *
- * 自包含：订阅两套登录态，命中"已登录且已同意版本 ≠ 当前 POLICY_VERSION"即弹出；
+ * 自包含：订阅 Author Cloud 登录态，命中"已登录且已同意版本 ≠ 当前 POLICY_VERSION"即弹出；
  * 弹窗不可点背景关闭，必须"同意并继续"或"不同意，退出登录"二选一。
  */
 export default function PolicyConsentGate() {
@@ -22,7 +22,6 @@ export default function PolicyConsentGate() {
     useEffect(() => {
         let mounted = true;
         let unsubCustom = () => {};
-        let unsubFb = () => {};
         const check = (hasUser) => {
             if (!mounted) return;
             if (hasUser && getAgreedPolicyVersion() !== POLICY_VERSION) setOpen(true);
@@ -33,15 +32,10 @@ export default function PolicyConsentGate() {
                 const custom = await import('../lib/custom-auth');
                 unsubCustom = custom.onCustomAuthChange?.((u) => check(!!u)) || (() => {});
             } catch { /* ignore */ }
-            try {
-                const auth = await import('../lib/auth');
-                unsubFb = auth.onAuthChange?.((u) => check(!!u)) || (() => {});
-            } catch { /* ignore */ }
         })();
         return () => {
             mounted = false;
             try { unsubCustom(); } catch { /* ignore */ }
-            try { unsubFb(); } catch { /* ignore */ }
         };
     }, []);
 
@@ -53,7 +47,6 @@ export default function PolicyConsentGate() {
     const disagree = useCallback(async () => {
         setBusy(true);
         try { const custom = await import('../lib/custom-auth'); await custom.signOutCustom?.(); } catch { /* ignore */ }
-        try { const auth = await import('../lib/auth'); await auth.signOut?.(); } catch { /* ignore */ }
         setBusy(false);
         setOpen(false);
     }, []);

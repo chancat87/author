@@ -57,15 +57,15 @@ I watched the versatility of these models being gutted. I don't want us to live 
 - Settings automatically injected into AI context
 
 ### 💾 Data Management
-- **Local-first** — all data stored in browser IndexedDB, never uploaded to servers
+- **Local-first** — creative data stays in browser IndexedDB by default; selected data is sent only when you explicitly enable cloud sync, WebDAV, or LAN transfer
 - **Snapshot system** — manual/auto versioning with one-click rollback
 - **Project import/export** — full project JSON backup
 - **Multi-format export** — one-click export current chapter or batch export (TXT / Markdown / DOCX / EPUB / PDF), with body-only or annotated versions
 
 ### 📱 Mobile App
-- **Android app** — native Flutter app with Google Sign-In cloud sync and richer reading mode controls
+- **Android app** — native Flutter app with local-first writing and richer reading mode controls
 - Read and write your novels on the go
-- Syncs with desktop client via the same cloud account, with desktop WebDAV/LAN transfer options for portable workflows
+- Author Cloud account sign-in is available only in the official web app; the mobile app does not provide account sign-in
 
 ### 🌐 Internationalization
 - 🇨🇳 简体中文 / 🇺🇸 English / 🇷🇺 Русский
@@ -102,7 +102,7 @@ If you encounter a white screen, crash, or startup failure:
 
 ## 🚀 Getting Started
 
-> 💡 **Highly Recommended**: For most users who only need daily writing and multi-device synchronization, please [directly download and install the client](https://github.com/YuanShiJiLoong/author/releases/latest). Source code deployment or Vercel deployment is only recommended for advanced users who need **secondary development** or are willing to configure Firebase/WebDAV storage themselves.
+> 💡 **Highly Recommended**: For most users who only need daily writing, please [directly download and install the client](https://github.com/YuanShiJiLoong/author/releases/latest). Source code or Vercel deployment is intended for advanced users who need **secondary development** or want to configure WebDAV or their own Author sync server.
 
 ### Requirements
 - **Node.js** 18+
@@ -156,54 +156,16 @@ Keep real domains, registration values, service endpoints, credentials, and oper
 
 ### Deploy to Vercel
 
-> 💡 **⚠️ Note:** The version deployed via Vercel does **not** have Firebase cloud sync configured by default. You can either configure Firebase yourself or use the in-app WebDAV/LAN sync options. If you just want multi-device synchronization with minimal setup, please **download the client directly**.
+> 💡 **⚠️ Note:** A Vercel deployment does not include the official Author Cloud account service. Use local storage, WebDAV/LAN, or your own Author sync server.
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/YuanShiJiLoong/author)
 
-### ☁️ Sync Setup (Self-Deploy)
+### ☁️ Sync Options
 
-> 💡 **Tip:** The desktop client (Windows/macOS) supports optional WebDAV sync and temporary LAN transfer — open **Preferences → Cloud Sync** to set either up. The legacy built-in cloud sync (Firebase / Google sign-in) will shut down on August 15, 2026; please migrate before then. Account-based cloud sync is now provided by the official web app at https://free.author2.com/app.
-
-If you insist on self-deploying via source code or Vercel and want Firebase multi-device sync, follow these steps to configure your own Firebase database. WebDAV and LAN sync can be configured in the app without Firebase.
-
-#### 1. Create a Firebase Project
-
-1. Go to [Firebase Console](https://console.firebase.google.com/) → **Create Project**
-2. Enable **Authentication** → Sign-in method → **Google**
-3. Create a **Firestore Database** (Start in production mode)
-4. Set Firestore Security Rules to restrict per-user access:
-
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-  }
-}
-```
-
-#### 2. Configure Environment Variables
-
-Copy `.env.example` to `.env.local` and fill in the Firebase section:
-
-```bash
-NEXT_PUBLIC_FIREBASE_API_KEY=your_api_key
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
-NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
-```
-
-> You can find these values in Firebase Console → Project Settings → General → Your Apps → SDK Config.
-
-#### 3. For Vercel Deployment
-
-Add the same variables in **Vercel Dashboard → Project Settings → Environment Variables**, then redeploy.
-
-> 💡 Firebase API keys are designed to be public (client-side identifiers). Data security is enforced by Firebase Auth + Firestore Security Rules, not by hiding the API key.
+- Account-based Author Cloud sync is available only in the [official web app](https://free.author2.com/app).
+- The desktop client does not connect to the official Author Cloud. It supports WebDAV, temporary LAN transfer, and user-owned Author sync servers under **Preferences → Cloud Sync**.
+- The mobile app does not provide Author Cloud account sign-in. Use local backup and export for data portability.
+- Source and Vercel deployments do not include the official account service; use WebDAV/LAN or connect your own Author sync server.
 
 ---
 
@@ -472,26 +434,18 @@ In Word, use **Heading styles and bolding** to mark structure:
 ## 🔒 Privacy & Data Security
 
 ### Local Storage (Safe)
-- All creative data (chapters, settings, snapshots) is **stored 100% locally in your browser (IndexedDB)** — never uploaded to any server
-- API Keys are stored in browser localStorage
+- Creative data (chapters, settings, snapshots) is stored locally in browser IndexedDB by default. If you explicitly enable Author Cloud, WebDAV, or LAN transfer, the selected sync data is sent to the configured service or peer.
+- Browser deployments store AI API keys in localStorage; the desktop client protects them with the operating system's secure storage.
 
 ### ⚠️ Data Flow When Using AI Features
 
-When using AI features (continue, rewrite, chat, etc.), the following data passes through the **deployer's server** on its way to the AI provider:
-- Your **API Key**
-- The **text content** you send to AI
+When the provider supports browser access and no proxy or web search is enabled, the official web app sends your **API key** and **AI request text** directly from your browser to the provider.
 
-```
-Your Browser → Deployer's Server → AI Provider (ZhipuAI/Gemini/DeepSeek/etc.)
-```
+For providers that block direct browser access, configured proxy endpoints, web search, or deployments that disable direct calls, the request passes through that deployment's API routes before reaching the provider. The desktop client uses a loopback service on the same computer.
 
-**If you're using someone else's deployed public instance**, while the deployer promises not to inspect logs, the technical capability to intercept data exists. Therefore:
-
-1. ✅ You can use a public instance for a **quick trial**
-2. ⚠️ After trying it, **immediately destroy your API Key at your provider's website**
-3. 🔐 **For real use, fork and deploy your own private instance** — then all data only passes through your own server
-
-> 💡 Deploying your own instance is easy: Fork this repo → One-click deploy to Vercel → Done. Takes less than 5 minutes.
+- Enter API keys only in deployments you trust.
+- Prefer restricted, revocable provider keys where available.
+- Self-host the application if you need full control over the relay environment.
 
 ---
 
@@ -539,12 +493,10 @@ By using Author, you agree to our **Privacy Policy** and **Terms of Service**. T
 
 ### 🔌 MCP Tools
 - [Chrome DevTools MCP](https://developer.chrome.com/) — Browser testing, performance analysis, DOM inspection
-- [Firebase MCP](https://firebase.google.com/) — Cloud database management, security rules validation, project config
 - [GitHub MCP](https://github.com/) — Repository management, automated releases, code search
 
-### ☁️ Backend & Database
-- [Firebase Firestore](https://firebase.google.com/docs/firestore) — Multi-device cloud synchronization, NoSQL data storage
-- [Firebase Hosting / Vercel](https://vercel.com/) — Full-stack deployment and hosting
+### ☁️ Deployment
+- [Vercel](https://vercel.com/) — Optional full-stack hosting for self-deployed copies
 
 ### 📦 Frontend & Open Source
 - [Next.js](https://nextjs.org/) — React full-stack framework

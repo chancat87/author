@@ -27,13 +27,25 @@ function uniqueStrings(values) {
         .filter(Boolean)));
 }
 
+function cloneData(value) {
+    if (Array.isArray(value)) return value.map(cloneData);
+    if (value && typeof value === 'object') {
+        return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, cloneData(item)]));
+    }
+    return value;
+}
+
 export function normalizeChapterMemoryGroup(value) {
     const data = value && typeof value === 'object' ? value : {};
+    const schemaVersion = Number(data.schemaVersion) || CHAPTER_MEMORY_GROUP_SCHEMA_VERSION;
+    if (schemaVersion > CHAPTER_MEMORY_GROUP_SCHEMA_VERSION) {
+        return cloneData(data);
+    }
     const synopsis = normalizeChapterSynopsis(data);
     const now = new Date().toISOString();
     return {
         ...synopsis,
-        schemaVersion: Number(data.schemaVersion) || CHAPTER_MEMORY_GROUP_SCHEMA_VERSION,
+        schemaVersion,
         synopsisSchemaVersion: Number(data.synopsisSchemaVersion) || CHAPTER_SYNOPSIS_SCHEMA_VERSION,
         id: cleanString(data.id) || makeId(),
         name: cleanString(data.name),
@@ -49,14 +61,7 @@ export function normalizeChapterMemoryGroup(value) {
 
 export function hasChapterMemoryGroup(value) {
     const group = normalizeChapterMemoryGroup(value);
-    return !!(
-        group.summary ||
-        group.beats.length ||
-        group.events.length ||
-        group.entityDeltas.length ||
-        group.foreshadowing.length ||
-        group.timelineRefs.length
-    );
+    return hasChapterSynopsis(group);
 }
 
 export async function getChapterMemoryGroups(workId) {

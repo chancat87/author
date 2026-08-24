@@ -122,11 +122,24 @@ export default function UpdateBanner() {
 
     // 源码部署：SSE 流式更新
     const handleSourceUpdate = async () => {
+        const updateToken = window.prompt(tt(
+            '请输入此源码部署的更新访问令牌',
+            'Enter the update access token for this source deployment',
+            'Введите токен обновления для этой установки из исходного кода',
+        ));
+        if (!updateToken?.trim()) return;
         setUpdating(true);
         setUpdateResult(null);
         setSourceProgress(null);
         try {
-            const res = await fetch(apiPath('/api/update-source-stream'), { method: 'POST' });
+            const res = await fetch(apiPath('/api/update-source-stream'), {
+                method: 'POST',
+                headers: { 'x-author-update-token': updateToken.trim() },
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(localizeApiError(data, tt) || `HTTP ${res.status}`);
+            }
             const reader = res.body.getReader();
             const decoder = new TextDecoder();
             let buffer = '';

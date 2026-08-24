@@ -1,15 +1,19 @@
-name: Open Core Boundary
+name: CI
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 on:
   pull_request:
   push:
     branches:
       - main
-      - 1.2-maintenance
+
+permissions:
+  contents: read
 
 jobs:
-  boundary:
-    if: github.repository == 'YuanShiJiLoong/author'
+  verify:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -19,6 +23,10 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24
+          cache: npm
 
-      - name: Check open-core boundary
-        run: npm run check:open-core-boundary
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify source, tests, build, and open-core boundary
+        run: npm run check

@@ -61,12 +61,9 @@ const AndroidDownloadMenu = dynamic(() => importWithChunkRecovery(() => import('
 const BookInfoPanel = dynamic(() => importWithChunkRecovery(() => import('./components/BookInfoPanel')), { ssr: false });
 const CloudSyncIndicator = dynamic(() => importWithChunkRecovery(() => import('./components/CloudSyncIndicator')), { ssr: false });
 const LoginModal = dynamic(() => importWithChunkRecovery(() => import('./components/LoginModal')), { ssr: false });
-const MigrationWizard = dynamic(() => importWithChunkRecovery(() => import('./components/MigrationWizard')), { ssr: false });
 const PolicyConsentGate = dynamic(() => importWithChunkRecovery(() => import('./components/PolicyConsentGate')), { ssr: false });
 const OpenSourceSyncNotice = dynamic(() => importWithChunkRecovery(() => import('./components/OpenSourceSyncNotice')), { ssr: false });
-const FirebaseShutdownNotice = dynamic(() => importWithChunkRecovery(() => import('./components/FirebaseShutdownNotice')), { ssr: false });
 const AccountModal = dynamic(() => importWithChunkRecovery(() => import('./components/AccountModal')), { ssr: false });
-const RegisterModal = dynamic(() => importWithChunkRecovery(() => import('./components/RegisterModal')), { ssr: false });
 const SyncMethodModal = dynamic(() => importWithChunkRecovery(() => import('./components/SyncMethodModal')), { ssr: false });
 const WebDavSyncModal = dynamic(() => importWithChunkRecovery(() => import('./components/WebDavSyncModal')), { ssr: false });
 const LanSyncModal = dynamic(() => importWithChunkRecovery(() => import('./components/LanSyncModal')), { ssr: false });
@@ -427,7 +424,7 @@ export default function Home() {
   // 初始化数据
   useEffect(() => {
     const initData = async () => {
-      // 初始化 Firebase（如果已配置）
+      // 初始化本地持久化与当前同步方式
       await initPersistence();
 
       const workId = getActiveWorkId();
@@ -1042,12 +1039,9 @@ export default function Home() {
       {/* ===== 首次引导 ===== */}
       <TourOverlay onOpenHelp={() => setShowHelp(true)} />
       <LoginModal />
-      <MigrationWizard />
       <PolicyConsentGate />
-      <FirebaseShutdownNotice />
       <OpenSourceSyncNotice />
       <AccountModal />
-      <RegisterModal />
       <SyncMethodModal />
       <WebDavSyncModal />
       <LanSyncModal />
