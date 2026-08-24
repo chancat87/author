@@ -5,24 +5,33 @@
 import { Agent } from 'undici';
 import {
     assertSafeOutboundUrl,
-    isOfficialWebServer,
+    OutboundRequestBlockedError,
     redactSensitiveText,
     rejectOfficialProxy,
     secureDnsLookup,
 } from './server-security.mjs';
 
-let officialDispatcher;
+let secureDispatcher;
 
-function getOfficialDispatcher() {
-    officialDispatcher ||= new Agent({ connect: { lookup: secureDnsLookup } });
-    return officialDispatcher;
+function getSecureDispatcher() {
+    secureDispatcher ||= new Agent({ connect: { lookup: secureDnsLookup } });
+    return secureDispatcher;
 }
 
-export async function proxyFetch(url, options = {}, proxyUrl) {
-    if (isOfficialWebServer()) {
+export async function proxyFetch(url, options = {}, proxyUrl, policy = {}) {
+    // Electron's proxy.js gate authenticates every request with a per-launch
+    // HttpOnly capability before route code can run. Other deployments stay
+    // public-network-only unless a narrowly scoped caller opts in.
+    const allowPrivateNetwork = policy?.allowPrivateNetwork === true
+        || Boolean(process.env.AUTHOR_DESKTOP_CAPABILITY);
+    await assertSafeOutboundUrl(url, { allowPrivateNetwork });
+
+    if (!allowPrivateNetwork) {
         rejectOfficialProxy(proxyUrl);
-        await assertSafeOutboundUrl(url);
-        return fetch(url, { ...options, dispatcher: getOfficialDispatcher() });
+        if (String(proxyUrl || '').trim()) {
+            throw new OutboundRequestBlockedError('未授权的请求不能使用自定义代理');
+        }
+        return fetch(url, { ...options, dispatcher: getSecureDispatcher() });
     }
 
     if (proxyUrl) {

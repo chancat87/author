@@ -7,7 +7,7 @@ export const maxDuration = 120;
 import { applyContentSafety } from '../../../lib/content-safety';
 import { proxyFetch } from '../../../lib/proxy-fetch';
 import { rotateKey } from '../../../lib/keyRotator';
-import { isOutboundRequestBlocked, redactSensitiveText, safeUpstreamDetail } from '../../../lib/server-security.mjs';
+import { isOutboundRequestBlocked, isServerCredentialBlocked, redactSensitiveText, resolveAiCredential, safeUpstreamDetail } from '../../../lib/server-security.mjs';
 
 // Anthropic 格式的搜索工具定义
 const WEB_SEARCH_TOOL = {
@@ -58,8 +58,15 @@ export async function POST(request) {
         const { systemPrompt, userPrompt, apiConfig, maxTokens, temperature, topP, reasoningEffort, tools: toolsConfig } = await request.json();
         const proxyUrl = apiConfig?.proxyUrl || '';
 
-        const apiKey = rotateKey(apiConfig?.apiKey || process.env.CLAUDE_API_KEY);
-        const baseUrl = String(apiConfig?.baseUrl || process.env.CLAUDE_BASE_URL || '').trim().replace(/\/+$/, '');
+        const credential = resolveAiCredential({
+            request,
+            clientApiKey: apiConfig?.apiKey,
+            clientBaseUrl: apiConfig?.baseUrl,
+            envApiKey: process.env.CLAUDE_API_KEY,
+            envBaseUrl: process.env.CLAUDE_BASE_URL,
+        });
+        const apiKey = rotateKey(credential.apiKey);
+        const baseUrl = credential.baseUrl;
         const model = apiConfig?.model || process.env.CLAUDE_MODEL || 'claude-sonnet-4-20250514';
 
         if (!apiKey) {
@@ -261,6 +268,12 @@ export async function POST(request) {
 
     } catch (error) {
         console.error('Claude 兼容接口错误:', error?.code || error?.name || 'UNKNOWN');
+        if (isServerCredentialBlocked(error)) {
+            return new Response(
+                JSON.stringify({ error: error.message, code: error.code }),
+                { status: 403, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }
+            );
+        }
         if (isOutboundRequestBlocked(error)) {
             return new Response(
                 JSON.stringify({ error: error.message, code: error.code }),

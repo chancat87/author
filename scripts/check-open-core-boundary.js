@@ -24,6 +24,12 @@ const forbiddenExtensions = new Set([
   '.keystore',
   '.p12',
   '.pfx',
+  '.patch',
+  '.diff',
+  '.zip',
+  '.sqlite',
+  '.db',
+  '.log',
 ]);
 
 const forbiddenNames = new Set([
@@ -31,11 +37,17 @@ const forbiddenNames = new Set([
   'upload-keystore.properties',
 ]);
 
+const forbiddenPathPatterns = [
+  /(?:^|\/)(?:customer|client)[-_ ]?(?:data|export)(?:[-_ /]|$)/i,
+  /(?:^|\/)(?:internal|backend)[-_ ]?(?:plan|roadmap)(?:[-_. /]|$)/i,
+  /(?:^|\/)(?:内部|后端)[^/]*(?:计划|路线)(?:[-_. /]|$)/i,
+];
+
 function trackedFiles() {
   const repoRoot = process.cwd();
   const result = spawnSync(
     'git',
-    ['-c', `safe.directory=${repoRoot}`, 'ls-files', '-z'],
+    ['-c', `safe.directory=${repoRoot}`, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
     { cwd: repoRoot, encoding: 'utf8' },
   );
   if (result.error || result.status !== 0) {
@@ -57,6 +69,9 @@ function reasonFor(file) {
   const rootPattern = forbiddenRootPatterns.find((item) => item.test(file));
   if (rootPattern) {
     return 'non-public root workspace path';
+  }
+  if (forbiddenPathPatterns.some((pattern) => pattern.test(file))) {
+    return 'internal plan, customer export, or private operational material';
   }
   const basename = path.posix.basename(file);
   if (forbiddenNames.has(basename)) {

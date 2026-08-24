@@ -1,6 +1,6 @@
 {
   "name": "author-app",
-  "version": "1.2.52",
+  "version": "1.2.53",
   "private": true,
   "main": "electron/main.js",
   "scripts": {
@@ -12,14 +12,17 @@
     "postbuild": "node scripts/check-standalone-safety.js",
     "start": "next start",
     "lint": "eslint",
+    "test": "node --test tests/*.test.mjs",
     "test:ai-routing": "node --test tests/ai-provider-compat.test.mjs",
     "test:built-in-labels": "node --test tests/built-in-labels.test.mjs",
     "test:chat-markdown": "node --test tests/chat-markdown.test.mjs",
     "test:remarks": "node --test tests/remarks.test.mjs",
+    "test:security": "node --test tests/server-security.test.mjs",
     "test:synopsis-language": "node --test tests/synopsis-prompts.test.mjs",
     "test:local-save": "node --test tests/local-save-status.test.mjs",
+    "check": "npm run lint && npm test && npm run check:open-core-boundary && npm run build",
     "check:open-core-boundary": "node scripts/check-open-core-boundary.js",
-    "electron:dev": "npm run dev & npx electron . --dev",
+    "electron:dev": "node scripts/electron-dev.mjs",
     "electron:build": "node -e \"const fs=require('fs');['dist','.next'].forEach(d=>{if(fs.existsSync(d)){fs.rmSync(d,{recursive:true,force:true})}})\" && npm run build && npx electron-builder --win",
     "electron:start": "npx electron ."
   },

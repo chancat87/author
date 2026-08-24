@@ -788,13 +788,22 @@ export async function parsePdfToText(file) {
 
 // ==================== PDF 导出 ====================
 
+function escapePdfHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 /**
  * 将节点数组导出为 PDF（通过浏览器打印）
  * 条目名前加 ◆ 标记、分类名前加 ■ 标记，便于导入时识别
  */
 export function exportSettingsAsPdf(nodes) {
     const workNode = nodes.find(n => n.type === 'work');
-    const title = `${workNode?.name || '设定集'} — 设定集`;
+    const title = `${escapePdfHtml(workNode?.name || '设定集')} — 设定集`;
 
     let html = '';
     const knownCategories = ['character', 'location', 'world', 'object', 'plot', 'rules'];
@@ -804,20 +813,20 @@ export function exportSettingsAsPdf(nodes) {
         const items = nodes.filter(n => n.type === 'item' && n.category === cat);
         if (items.length === 0) continue;
 
-        const catName = CATEGORY_NAMES[cat] || cat;
+        const catName = escapePdfHtml(CATEGORY_NAMES[cat] || cat);
         html += `<h2 style="color:#8b6914;border-bottom:2px solid #d4a853;padding-bottom:4px;margin-top:28px;">■ ${catName}</h2>`;
 
         const labels = FIELD_LABELS[cat] || {};
         for (const item of items) {
-            html += `<h3 style="margin:16px 0 8px;">◆ ${item.name}</h3>`;
+            html += `<h3 style="margin:16px 0 8px;">◆ ${escapePdfHtml(item.name)}</h3>`;
             const content = item.content || {};
             for (const [key, label] of Object.entries(labels)) {
                 if (content[key]) {
-                    const lines = content[key].split('\n');
-                    const escaped0 = lines[0].replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-                    html += `<p style="margin:4px 0;line-height:1.7;"><b>▸ ${label}：</b>${escaped0}</p>`;
+                    const lines = String(content[key]).split('\n');
+                    const escaped0 = escapePdfHtml(lines[0]);
+                    html += `<p style="margin:4px 0;line-height:1.7;"><b>▸ ${escapePdfHtml(label)}：</b>${escaped0}</p>`;
                     for (let i = 1; i < lines.length; i++) {
-                        const escaped = lines[i].replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                        const escaped = escapePdfHtml(lines[i]);
                         html += `<p style="margin:2px 0 2px 2em;line-height:1.7;">${escaped}</p>`;
                     }
                 }
@@ -825,11 +834,11 @@ export function exportSettingsAsPdf(nodes) {
             const knownKeys = new Set(Object.keys(labels));
             for (const [key, val] of Object.entries(content)) {
                 if (!knownKeys.has(key) && val) {
-                    const lines = val.split('\n');
-                    const escaped0 = lines[0].replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-                    html += `<p style="margin:4px 0;line-height:1.7;"><b>▸ ${key}：</b>${escaped0}</p>`;
+                    const lines = String(val).split('\n');
+                    const escaped0 = escapePdfHtml(lines[0]);
+                    html += `<p style="margin:4px 0;line-height:1.7;"><b>▸ ${escapePdfHtml(key)}：</b>${escaped0}</p>`;
                     for (let i = 1; i < lines.length; i++) {
-                        const escaped = lines[i].replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                        const escaped = escapePdfHtml(lines[i]);
                         html += `<p style="margin:2px 0 2px 2em;line-height:1.7;">${escaped}</p>`;
                     }
                 }

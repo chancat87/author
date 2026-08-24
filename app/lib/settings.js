@@ -5,9 +5,94 @@
 import { persistGet, persistSet, persistDel } from './persistence';
 import { getEmbedding } from './embeddings';
 import { migrateApiConfigToCompatible } from './ai-provider-compat';
+import { containsNonEmptyApiSecrets, mergeApiSecrets, splitApiSecrets } from './api-secret-storage';
 import { localizedError } from './runtime-i18n';
 
 const SETTINGS_KEY = 'author-project-settings';
+const API_CONFIG_STORAGE_KEY = 'author-api-config';
+let volatileAiCredentialBundle = null;
+
+function isElectronCredentialStore() {
+    return typeof window !== 'undefined'
+        && typeof window.electronAPI?.getAiCredentialBundle === 'function'
+        && typeof window.electronAPI?.setAiCredentialBundle === 'function';
+}
+
+function splitApiConfigData(apiConfigData) {
+    const api = splitApiSecrets(apiConfigData?.apiConfig ?? null);
+    const chat = splitApiSecrets(apiConfigData?.chatApiConfig ?? null);
+    return {
+        publicData: {
+            apiConfig: api.publicValue,
+            chatApiConfig: chat.publicValue,
+        },
+        credentialBundle: {
+            version: 1,
+            apiConfig: api.secrets,
+            chatApiConfig: chat.secrets,
+        },
+        hasPlaintextSecrets: containsNonEmptyApiSecrets(api.secrets)
+            || containsNonEmptyApiSecrets(chat.secrets),
+    };
+}
+
+function readElectronCredentialBundle() {
+    if (!isElectronCredentialStore()) return null;
+    try {
+        const result = window.electronAPI.getAiCredentialBundle();
+        if (!result?.success || !result.value) return volatileAiCredentialBundle;
+        const parsed = JSON.parse(result.value);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return volatileAiCredentialBundle;
+        volatileAiCredentialBundle = parsed;
+        return parsed;
+    } catch {
+        return volatileAiCredentialBundle;
+    }
+}
+
+function writeElectronCredentialBundle(bundle) {
+    volatileAiCredentialBundle = bundle;
+    try {
+        const result = window.electronAPI.setAiCredentialBundle(JSON.stringify(bundle));
+        return result?.success === true;
+    } catch {
+        return false;
+    }
+}
+
+function hydrateApiConfigData(apiConfigData) {
+    if (!isElectronCredentialStore()) return apiConfigData;
+    const split = splitApiConfigData(apiConfigData);
+    let credentialBundle = readElectronCredentialBundle();
+
+    if (split.hasPlaintextSecrets) {
+        // Migrate old localStorage secrets only after the OS-encrypted write
+        // succeeds. A secure-storage failure must never silently lose a key.
+        if (!writeElectronCredentialBundle(split.credentialBundle)) return apiConfigData;
+        credentialBundle = split.credentialBundle;
+        localStorage.setItem(API_CONFIG_STORAGE_KEY, JSON.stringify(split.publicData));
+    }
+
+    return {
+        apiConfig: mergeApiSecrets(split.publicData.apiConfig, credentialBundle?.apiConfig),
+        chatApiConfig: mergeApiSecrets(split.publicData.chatApiConfig, credentialBundle?.chatApiConfig),
+    };
+}
+
+function saveLocalApiConfigData(apiConfigData) {
+    if (!isElectronCredentialStore()) {
+        localStorage.setItem(API_CONFIG_STORAGE_KEY, JSON.stringify(apiConfigData));
+        return;
+    }
+
+    const split = splitApiConfigData(apiConfigData);
+    const secured = writeElectronCredentialBundle(split.credentialBundle);
+    // Even if the OS keychain is temporarily unavailable, never create a new
+    // plaintext-at-rest copy. Keep the prior on-disk state unchanged and use
+    // the in-memory bundle for the remainder of this session.
+    if (!secured && split.hasPlaintextSecrets) return;
+    localStorage.setItem(API_CONFIG_STORAGE_KEY, JSON.stringify(split.publicData));
+}
 
 function isPlainObject(value) {
     return value && typeof value === 'object' && !Array.isArray(value);
@@ -525,7 +610,7 @@ export function getProjectSettings() {
         const settings = { ...DEFAULT_SETTINGS, ...(parsed || {}) };
 
         // 从独立的 author-api-config 中读取 API 设置（防止从云同步覆盖或缺失）
-        const apiDataRaw = localStorage.getItem('author-api-config');
+        const apiDataRaw = localStorage.getItem(API_CONFIG_STORAGE_KEY);
         if (apiDataRaw) {
             try {
                 const apiData = JSON.parse(apiDataRaw);
@@ -534,16 +619,25 @@ export function getProjectSettings() {
             } catch { /* ignore */ }
         }
 
+        const hydratedApiData = hydrateApiConfigData({
+            apiConfig: settings.apiConfig,
+            chatApiConfig: settings.chatApiConfig,
+        });
+        settings.apiConfig = hydratedApiData.apiConfig || settings.apiConfig;
+        settings.chatApiConfig = hydratedApiData.chatApiConfig !== undefined
+            ? hydratedApiData.chatApiConfig
+            : settings.chatApiConfig;
+
         // 两类迁移都必须执行；使用 || 会在嵌入配置发生迁移时短路，跳过供应商纠正。
         const migratedEmbeddingConfig = migrateEmbeddingConfig(settings.apiConfig);
         const migratedProviderConfig = migrateApiConfigToCompatible(settings.apiConfig);
         const migratedApiConfig = migratedEmbeddingConfig || migratedProviderConfig;
         const migratedChatConfig = migrateApiConfigToCompatible(settings.chatApiConfig);
         if (migratedApiConfig || migratedChatConfig) {
-            localStorage.setItem('author-api-config', JSON.stringify({
+            saveLocalApiConfigData({
                 apiConfig: settings.apiConfig,
                 chatApiConfig: settings.chatApiConfig,
-            }));
+            });
         }
 
         // 自动迁移：如果旧的 SETTINGS_KEY 里还存在 apiConfig（特别是包含配置时），并且还没有独立的 author-api-config，分离它
@@ -552,7 +646,7 @@ export function getProjectSettings() {
                  apiConfig: settings.apiConfig,
                  chatApiConfig: settings.chatApiConfig
              };
-             localStorage.setItem('author-api-config', JSON.stringify(apiConfigData));
+             saveLocalApiConfigData(apiConfigData);
 
              const syncSettings = { ...settings };
              delete syncSettings.apiConfig;
@@ -612,7 +706,7 @@ export function saveProjectSettings(settings) {
         apiConfig: settings.apiConfig,
         chatApiConfig: settings.chatApiConfig,
     };
-    localStorage.setItem('author-api-config', JSON.stringify(apiConfigData));
+    saveLocalApiConfigData(apiConfigData);
 
     // 从 settings 拷贝一份剔除 API 配置后用于云同步
     const syncSettings = { ...settings };

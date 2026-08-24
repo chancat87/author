@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { proxyFetch } from '../../../lib/proxy-fetch';
-import { isOutboundRequestBlocked, redactSensitiveText } from '../../../lib/server-security.mjs';
+import { isAuthorizedDesktopRequest, isOutboundRequestBlocked, redactSensitiveText } from '../../../lib/server-security.mjs';
 
 export const runtime = 'nodejs';
 
@@ -20,15 +20,6 @@ function isLocalHost(hostname) {
     if (host === '[::1]') return true;
     if (host.includes(':') && (host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80'))) return true;
     return false;
-}
-
-function isLocalRequest(requestUrl, hostHeader) {
-    try {
-        const requestHost = new URL(requestUrl).hostname || String(hostHeader || '').split(':')[0];
-        return isLocalHost(requestHost);
-    } catch {
-        return isLocalHost(String(hostHeader || '').split(':')[0]);
-    }
 }
 
 function normalizePath(inputPath) {
@@ -133,7 +124,7 @@ async function proxyWebDav({ action, path, body, config }, options = {}) {
         headers,
         body: requestBody,
         cache: 'no-store',
-    });
+    }, undefined, { allowPrivateNetwork: options.allowPrivateNetwork === true });
 
     if (action === 'get') {
         if (response.status === 404) return { ok: true, missing: true, status: 404 };
@@ -163,7 +154,7 @@ async function proxyWebDav({ action, path, body, config }, options = {}) {
                     Depth: '0',
                 },
                 cache: 'no-store',
-            });
+            }, undefined, { allowPrivateNetwork: options.allowPrivateNetwork === true });
             if ([200, 207, 301, 302].includes(exists.status)) {
                 return { ok: true, status: response.status, existed: true };
             }
@@ -194,7 +185,7 @@ export async function POST(request) {
     try {
         const payload = await request.json();
         const result = await proxyWebDav(payload || {}, {
-            allowPrivateNetwork: isLocalRequest(request.url, request.headers.get('host')),
+            allowPrivateNetwork: isAuthorizedDesktopRequest(request),
         });
         if (!result.ok) {
             return NextResponse.json({ error: safeErrorMessage(result), status: result.status }, { status: 502 });

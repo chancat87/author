@@ -1,8 +1,8 @@
 'use client';
 
 // ==================== 自建服务器（Author Cloud）同步层 ====================
-// 与 firestore-sync.js 平级、触发机制一致（变动防抖 5 分钟、空闲 5 分钟停、手动、
-// 首次登录强制同步），但后端是"按条目增量"的 Author Cloud（/api/free/sync/push|pull）。
+// 使用变动防抖、空闲暂停、手动同步和首次登录强制同步；后端采用“按条目增量”的
+// Author Cloud（/api/free/sync/push|pull）。
 //
 // 本地按 key 存数组（章节/设定/记忆组）；本模块把变化的数组"拆成条目"只推改动/新增/
 // 删除的条目，拉取时把云端条目"重组"回数组合并进本地。拆分/合并的纯逻辑在
@@ -92,7 +92,7 @@ function commitPulledState(key, items) {
     _state.keys[key] = cur;
 }
 
-// ==================== 触发机制（复刻 firestore-sync） ====================
+// ==================== 触发机制 ====================
 
 export function customEnqueue(key) {
     if (!isCustomSignedIn() || !isSyncableKey(key)) return;

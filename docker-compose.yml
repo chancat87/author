@@ -17,7 +17,8 @@ services:
     build: .
     container_name: author-studio
     ports:
-      - "${PORT:-3000}:3000"
+      # 默认仅允许本机访问；如需公网部署，请在单独的反向代理配置中显式开放并加认证。
+      - "127.0.0.1:${PORT:-3000}:3000"
     env_file:
       - path: .env
         required: false

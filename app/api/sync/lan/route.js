@@ -7,6 +7,9 @@ export const runtime = 'nodejs';
 
 const MAX_TTL_MS = 2 * 60 * 60 * 1000;
 const MIN_TTL_MS = 5 * 60 * 1000;
+const MAX_SNAPSHOT_BYTES = 10 * 1024 * 1024;
+const MAX_SNAPSHOT_ENTRIES = 20_000;
+const MAX_ACTIVE_SHARES = 8;
 
 const shares = globalThis.__AUTHOR_LAN_SYNC_SHARES__ || new Map();
 globalThis.__AUTHOR_LAN_SYNC_SHARES__ = shares;
@@ -64,6 +67,12 @@ function validateSnapshot(bundle) {
     if (!bundle || bundle.type !== 'author-sync-snapshot-v1' || !Array.isArray(bundle.entries)) {
         throw new Error('无效的同步快照');
     }
+    if (bundle.entries.length > MAX_SNAPSHOT_ENTRIES) {
+        throw new Error('同步快照条目过多');
+    }
+    if (Buffer.byteLength(JSON.stringify(bundle), 'utf8') > MAX_SNAPSHOT_BYTES) {
+        throw new Error('同步快照体积过大');
+    }
     return bundle;
 }
 
@@ -79,6 +88,13 @@ export async function POST(request) {
         const payload = await request.json();
         if (payload?.action !== 'create') {
             return withCors(NextResponse.json({ error: 'Unsupported LAN sync action' }, { status: 400 }));
+        }
+
+        if (shares.size >= MAX_ACTIVE_SHARES) {
+            return withCors(NextResponse.json(
+                { error: '当前临时分享数量已达上限', code: 'TOO_MANY_ACTIVE_SHARES' },
+                { status: 429 },
+            ));
         }
 
         const bundle = validateSnapshot(payload.bundle);

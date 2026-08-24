@@ -9,38 +9,17 @@ import { useI18n } from '../lib/useI18n';
 /**
  * 顶栏云同步状态指示器
  * - 未登录：显示灰色云图标 + "同步方式"，点击弹出登录弹窗
- * - 已登录（Firebase 或自建服务器）：显示用户头像 + 绿色圆点，点击弹出账户菜单
- *
- * 登录态来自两个来源：Firebase 与自建服务器（Author Cloud）。单后端跟随登录，
- * 两者不会并存；Firebase 优先。
+ * - 已登录 Author Cloud：显示用户头像 + 绿色圆点，点击弹出账户菜单
  */
 export default function CloudSyncIndicator() {
     const { setShowAccountModal, setShowSyncMethodModal } = useAppStore();
     const { text } = useI18n();
-    const [firebaseUser, setFirebaseUser] = useState(null);
     const [customUser, setCustomUser] = useState(null);
     const [syncStatus, setSyncStatus] = useState(null);
     const [menuOpen, setMenuOpen] = useState(false);
     const btnRef = useRef(null);
 
-    // Firebase 登录态
-    useEffect(() => {
-        let unmounted = false;
-        (async () => {
-            try {
-                const { isFirebaseConfigured } = await import('../lib/firebase');
-                if (!isFirebaseConfigured || unmounted) return;
-                const { onAuthChange, initAuth } = await import('../lib/auth');
-                const { onSyncStatusChange } = await import('../lib/firestore-sync');
-                initAuth();
-                onAuthChange(user => { if (!unmounted) setFirebaseUser(user); });
-                onSyncStatusChange(status => { if (!unmounted) setSyncStatus(status); });
-            } catch { /* Firebase 未配置 */ }
-        })();
-        return () => { unmounted = true; };
-    }, []);
-
-    // 自建服务器登录态
+    // Author Cloud 登录态
     useEffect(() => {
         let unmounted = false;
         let unsub = null;
@@ -52,8 +31,7 @@ export default function CloudSyncIndicator() {
                 unsub = onCustomAuthChange(() => {
                     if (!unmounted) setCustomUser(getCustomUserProfile());
                 });
-                // 自建同步状态（待同步 / 同步中 / 已同步）也要接到指示器上，
-                // 否则走自建同步时指示器只反映 Firebase 状态、永远显示旧的“已同步”。
+                // 同步状态（待同步 / 同步中 / 已同步）也要接到指示器上。
                 const { onCustomSyncStatusChange } = await import('../lib/custom-server-sync');
                 onCustomSyncStatusChange(status => { if (!unmounted) setSyncStatus(status); });
             } catch { /* 自建服务器未配置 */ }
@@ -61,12 +39,9 @@ export default function CloudSyncIndicator() {
         return () => { unmounted = true; if (unsub) unsub(); };
     }, []);
 
-    // 统一登录态：Firebase 优先，其次自建服务器
-    const account = firebaseUser
-        ? { provider: 'firebase', displayName: firebaseUser.displayName, email: firebaseUser.email, photoURL: firebaseUser.photoURL }
-        : customUser
-            ? { provider: 'custom', displayName: customUser.displayName, email: customUser.email, photoURL: customUser.photoURL || '' }
-            : null;
+    const account = customUser
+        ? { displayName: customUser.displayName, email: customUser.email, photoURL: customUser.photoURL || '' }
+        : null;
 
     const openSyncMethod = () => {
         setMenuOpen(false);
@@ -78,20 +53,15 @@ export default function CloudSyncIndicator() {
             await useAppStore.getState().flushPendingLocalSave();
             const { stopCloudSync } = await import('../lib/persistence');
             await stopCloudSync();
-            if (account?.provider === 'custom') {
-                const { signOutCustom } = await import('../lib/custom-auth');
-                await signOutCustom();
-            } else {
-                const auth = await import('../lib/auth');
-                await auth.signOut();
-            }
+            const { signOutCustom } = await import('../lib/custom-auth');
+            await signOutCustom();
         } catch (err) {
             console.error('Sign out error:', err);
         }
         setMenuOpen(false);
     };
 
-    // 同步状态文字（目前来自 Firebase；自建服务器同步状态在后续接入）
+    // 同步状态文字
     const getSyncText = () => {
         if (!syncStatus) return null;
         if (syncStatus.syncing) return text('同步中...', 'Syncing...', 'Синхронизация...');

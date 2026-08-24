@@ -17,8 +17,6 @@ const PROJECT_FILE_VERSION = 2;
 const IMPORT_COMPAT_LOCAL_KEYS = {
     settings:    'author-project-settings',
     activeWork:  'author-active-work',
-    apiConfig:   'author-api-config',
-    apiProfiles: 'author-api-profiles',
     tokenStats:  'author-token-stats',
     theme:       'author-theme',
     lang:        'author-lang',
@@ -142,13 +140,17 @@ export async function importProject(file) {
         }
 
         const isV2 = data._version >= 2;
+        const ignoredLegacyApiConfig = data.apiConfig !== undefined || data.apiProfiles !== undefined;
 
         // 1. 恢复 localStorage 轻量配置
         for (const [key, storageKey] of Object.entries(IMPORT_COMPAT_LOCAL_KEYS)) {
             if (data[key] !== undefined && data[key] !== null) {
+                const importedValue = key === 'settings'
+                    ? sanitizeProjectSettingsForExport(data[key])
+                    : data[key];
                 const value = RAW_LOCAL_IMPORT_FIELDS.has(key)
-                    ? String(data[key])
-                    : JSON.stringify(data[key]);
+                    ? String(importedValue)
+                    : JSON.stringify(importedValue);
                 localStorage.setItem(storageKey, value);
             }
         }
@@ -222,7 +224,10 @@ export async function importProject(file) {
             }
         }
 
-        return { success: true, message: `成功导入存档（导出时间：${data._exportedAt || '未知'}）` };
+        return {
+            success: true,
+            message: `成功导入存档（导出时间：${data._exportedAt || '未知'}）${ignoredLegacyApiConfig ? '；出于安全考虑，旧存档中的 API 地址和密钥配置未导入' : ''}`,
+        };
     } catch (err) {
         return { success: false, message: `导入失败：${err.message}` };
     }
@@ -581,7 +586,10 @@ function textToHtml(lines) {
     const blocks = normalized.split(/\n\n+/);
     return blocks
         .map(block => {
-            const blockLines = block.split('\n').map(l => l.trimEnd()).filter(l => l);
+            const blockLines = block
+                .split('\n')
+                .map(l => escapeHtml(l.trimEnd()))
+                .filter(l => l);
             if (blockLines.length === 0) return '';
             return `<p>${blockLines.join('<br>')}</p>`;
         })

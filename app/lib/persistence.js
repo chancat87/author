@@ -4,7 +4,7 @@
 // 统一的存储接口：
 //   1. 浏览器 IndexedDB/localStorage（本地，始终优先）
 //   2. 服务端文件系统 /api/storage（Docker/自建部署模式）
-//   3. Firebase Firestore（云同步模式，5分钟去抖）
+//   3. Author Cloud（云同步模式，5分钟去抖）
 // 多用户隔离：首次访问自动生成 userId 并存入 cookie
 
 import { get, set, del } from 'idb-keyval';
@@ -97,58 +97,23 @@ async function serverDel(key) {
     }
 }
 
-// ==================== Firebase 同步 ====================
+// ==================== Author Cloud 同步 ====================
 
-let _firebaseReady = false;
-let _firestoreSync = null;
-let _authModule = null;
-
-/**
- * 懒加载 Firebase 模块（避免未配置时报错）
- */
-async function ensureFirebase() {
-    if (_firebaseReady) return _firestoreSync;
-    try {
-        const { isFirebaseConfigured } = await import('./firebase');
-        if (!isFirebaseConfigured) {
-            _firebaseReady = true;
-            return null;
-        }
-        _firestoreSync = await import('./firestore-sync');
-        _authModule = await import('./auth');
-        _firebaseReady = true;
-        return _firestoreSync;
-    } catch {
-        _firebaseReady = true;
-        return null;
-    }
-}
-
-function isFirebaseSignedIn() {
-    return _authModule?.isSignedIn?.() || false;
-}
-
-// ==================== 自建服务器（Author Cloud）同步 ====================
-
-let _customReady = false;
 let _customSync = null;
 let _customAuthModule = null;
 
 // 懒加载自建服务器同步模块（仅当配置了服务器地址时）
 async function ensureCustomSync() {
-    if (_customReady) return _customSync;
+    if (_customSync) return _customSync;
     try {
-        _customAuthModule = await import('./custom-auth');
+        _customAuthModule ||= await import('./custom-auth');
         if (!_customAuthModule.isCustomServerConfigured()) {
-            _customReady = true;
             return null;
         }
         _customSync = await import('./custom-server-sync');
         _customSync.bindLocalIO(persistGet, persistSet); // 注入本地读写，避免循环依赖
-        _customReady = true;
         return _customSync;
     } catch {
-        _customReady = true;
         return null;
     }
 }
@@ -167,7 +132,7 @@ function enqueuePortableSync(key, value, options = {}) {
 // ==================== 统一存储接口 ====================
 
 /**
- * 读取数据（本地优先，Firebase 已登录时作为补充）
+ * 读取数据（本地优先）
  * @param {string} key - 存储键名
  * @returns {Promise<any>} 存储的值，不存在时返回 undefined
  */
@@ -199,7 +164,7 @@ export async function persistGet(key) {
 }
 
 /**
- * 写入数据（本地实时 + Firebase 去抖同步）
+ * 写入数据（本地实时 + Author Cloud 去抖同步）
  * @param {string} key - 存储键名
  * @param {any} value - 要存储的值
  */
@@ -223,12 +188,8 @@ export async function persistSet(key, value) {
         if (awaitServerWrite) await serverWrite;
     }
 
-    // 3. 云同步（去抖队列，5分钟批量写入）。单后端跟随登录：Firebase 或自建服务器
+    // 3. 云同步（去抖队列，5分钟批量写入）。
     if (isSyncableKey(key)) {
-        const sync = await ensureFirebase();
-        if (sync && isFirebaseSignedIn()) {
-            sync.firestoreEnqueue(key, value);
-        }
         const custom = await ensureCustomSync();
         if (custom && isCustomSignedIn()) {
             custom.customEnqueue(key);
@@ -250,12 +211,8 @@ export async function persistDel(key) {
         serverDel(key).catch(() => { });
     }
 
-    // 云端删除（Firebase 或自建服务器）
+    // 云端删除
     if (isSyncableKey(key)) {
-        const sync = await ensureFirebase();
-        if (sync && isFirebaseSignedIn()) {
-            sync.firestoreDel(key).catch(() => { });
-        }
         const custom = await ensureCustomSync();
         if (custom && isCustomSignedIn()) {
             custom.customDel(key);
@@ -322,7 +279,7 @@ export function persistGetSync(key) {
 }
 
 /**
- * 初始化：确保 userId 存在，触发服务端检测，初始化 Firebase Auth
+ * 初始化：确保 userId 存在，触发服务端检测并初始化 Author Cloud。
  * 应在应用启动时调用一次
  */
 export async function initPersistence() {
@@ -330,15 +287,7 @@ export async function initPersistence() {
     ensureUserId();
     await checkServerAvailable();
 
-    // 初始化 Firebase Auth（如果已配置）
-    const sync = await ensureFirebase();
-    if (sync && _authModule) {
-        _authModule.initAuth();
-        // 页面卸载前尝试同步
-        sync.setupBeforeUnloadSync();
-    }
-
-    // 初始化自建服务器 Auth（如果配置了服务器地址）
+    // 初始化 Author Cloud Auth（如果配置了服务器地址）
     const custom = await ensureCustomSync();
     if (custom && _customAuthModule) {
         _customAuthModule.initCustomAuth();
@@ -347,23 +296,20 @@ export async function initPersistence() {
 }
 
 /**
- * Firebase 登录后调用：从云端拉取数据合并到本地
+ * 登录后调用：从 Author Cloud 拉取数据合并到本地
  * @returns {Promise<number>} 合并的条数
  */
 export async function syncFromCloud() {
-    // 单后端跟随登录：优先自建服务器，否则 Firebase
     const custom = await ensureCustomSync();
     if (custom && isCustomSignedIn()) return await custom.pullFromCloud();
-    const sync = await ensureFirebase();
-    if (!sync || !isFirebaseSignedIn()) return 0;
-    return await sync.pullAllFromCloud(persistGet, persistSet);
+    return 0;
 }
 
-// 手动“从云端同步”：强制用云端覆盖本地（恢复误删、拉回全量）。单后端分流：优先自建，否则 Firebase。
+// 手动“从云端同步”：强制用云端覆盖本地（恢复误删、拉回全量）。
 export async function forcePullFromCloud() {
     const custom = await ensureCustomSync();
     if (custom && isCustomSignedIn()) {
-        // 自建路径必须和下方 Firebase 路径一样设 bypass：否则 forcePull 内部的 persistSet 会命中
+        // 设置 bypass，避免 forcePull 内部的 persistSet 命中
         // 开头的 _isAppForcePulling 短路（persistSet 第 203 行），拉到的云端数据写不进本地，
         // 却仍 restored++ 并推进游标 → 提示“成功覆盖 N 项”、刷新仍为空、游标被错误推进。
         if (typeof window !== 'undefined') window._isForcePullingBypass = true;
@@ -373,15 +319,7 @@ export async function forcePullFromCloud() {
             if (typeof window !== 'undefined') window._isForcePullingBypass = false;
         }
     }
-    const sync = await ensureFirebase();
-    if (!sync || !isFirebaseSignedIn()) return 0;
-    // Firebase 路径：写本地时设 bypass 标志，防止 forcePull 覆盖又触发回推
-    const localSet = async (key, value) => {
-        if (typeof window !== 'undefined') window._isForcePullingBypass = true;
-        try { await persistSet(key, value); }
-        finally { if (typeof window !== 'undefined') window._isForcePullingBypass = false; }
-    };
-    return await sync.forcePullFromCloud(localSet);
+    return 0;
 }
 
 async function collectSyncableKeysForCloudPush() {
@@ -410,24 +348,21 @@ async function collectSyncableKeysForCloudPush() {
 }
 
 /**
- * Firebase 手动“同步到云端”：将本机当前作品图谱全量写入云端。
+ * 将本机当前作品图谱全量同步到 Author Cloud。
  * 这比 flush pending 更适合登录后补传已有本地稿件。
  */
 export async function syncToCloud() {
     const keys = await collectSyncableKeysForCloudPush();
-    // 单后端跟随登录：优先自建服务器，否则 Firebase
     const custom = await ensureCustomSync();
     if (custom && isCustomSignedIn()) return await custom.pushAllToCloud(keys);
-    const sync = await ensureFirebase();
-    if (!sync || !isFirebaseSignedIn()) return 0;
-    return await sync.pushAllToCloud(persistGet, keys);
+    return 0;
 }
 
 /**
- * Firebase 退出登录前调用：同步剩余数据 + 停止同步
+ * 退出登录前调用：同步剩余数据 + 停止同步
  */
 export async function stopCloudSync() {
-    // 自建服务器：先补传剩余，再停并清增量状态（换用户不能沿用旧游标）
+    // 先补传剩余，再停并清增量状态（换用户不能沿用旧游标）
     const custom = await ensureCustomSync();
     if (custom && isCustomSignedIn()) {
         const keys = await collectSyncableKeysForCloudPush();
@@ -443,17 +378,4 @@ export async function stopCloudSync() {
         return;
     }
 
-    const sync = await ensureFirebase();
-    if (!sync) return;
-    try {
-        if (isFirebaseSignedIn()) {
-            const keys = await collectSyncableKeysForCloudPush();
-            await sync.pushAllToCloud(persistGet, keys);
-        } else {
-            await sync.flushSync(); // 先同步剩余
-        }
-    } catch (err) {
-        console.warn('[stopCloudSync] 退出前同步失败，继续退出流程:', err?.message || err);
-    }
-    sync.stopSync();        // 再停止
 }

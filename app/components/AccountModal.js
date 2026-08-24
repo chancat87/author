@@ -1,10 +1,9 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import {
     X, Cloud, LogOut, Shield, Mail, User as UserIcon, RefreshCw,
-    CheckCircle2, Clock, HardDrive, Edit3, Save, ArrowRightLeft,
-    Plus, Trash2, Camera
+    CheckCircle2, Clock, HardDrive, ArrowRightLeft, Plus, Trash2
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { useI18n } from '../lib/useI18n';
@@ -16,37 +15,15 @@ import { useI18n } from '../lib/useI18n';
 export default function AccountModal() {
     const { showAccountModal, accountModalSwitcher, setShowAccountModal, setShowLoginModal } = useAppStore();
     const { text } = useI18n();
-    const [firebaseUser, setFirebaseUser] = useState(null);
     const [customUser, setCustomUser] = useState(null);
     const [syncStatus, setSyncStatus] = useState(null);
     const [signingOut, setSigningOut] = useState(false);
 
-    // 编辑状态
-    const [editing, setEditing] = useState(false);
-    const [editName, setEditName] = useState('');
-    const [saving, setSaving] = useState(false);
     const [saveMsg, setSaveMsg] = useState('');
 
     // 切换账号面板
     const [showSwitcher, setShowSwitcher] = useState(false);
     const [accountHistory, setAccountHistory] = useState([]);
-    const avatarInputRef = useRef(null);
-
-    // Firebase 登录态（老账号）
-    useEffect(() => {
-        let unmounted = false;
-        (async () => {
-            try {
-                const { isFirebaseConfigured } = await import('../lib/firebase');
-                if (!isFirebaseConfigured || unmounted) return;
-                const { onAuthChange } = await import('../lib/auth');
-                const { onSyncStatusChange } = await import('../lib/firestore-sync');
-                onAuthChange(user => { if (!unmounted) setFirebaseUser(user); });
-                onSyncStatusChange(status => { if (!unmounted) setSyncStatus(status); });
-            } catch { }
-        })();
-        return () => { unmounted = true; };
-    }, []);
 
     // 自建服务器登录态（邮箱账号）
     useEffect(() => {
@@ -57,7 +34,7 @@ export default function AccountModal() {
                 const { onCustomAuthChange, getCustomUserProfile, isCustomServerConfigured } = await import('../lib/custom-auth');
                 if (unmounted || !isCustomServerConfigured()) return;
                 unsub = onCustomAuthChange(() => { if (!unmounted) setCustomUser(getCustomUserProfile()); });
-                // 自建同步状态也接进来（否则走自建时账户菜单的同步状态永远显示 Firebase 的）
+                // 同步状态用于展示待同步、同步中与完成时间。
                 const { onCustomSyncStatusChange } = await import('../lib/custom-server-sync');
                 onCustomSyncStatusChange(status => { if (!unmounted) setSyncStatus(status); });
             } catch { }
@@ -65,34 +42,24 @@ export default function AccountModal() {
         return () => { unmounted = true; if (unsub) unsub(); };
     }, []);
 
-    // 载入对应后端的账号历史（切换账号用）
+    // 载入 Author Cloud 账号历史（切换账号用）
     useEffect(() => {
         if (!showAccountModal) return;
         let unmounted = false;
         (async () => {
             try {
-                if (firebaseUser) {
-                    const { getAccountHistory } = await import('../lib/auth');
-                    if (!unmounted) setAccountHistory(getAccountHistory());
-                } else if (customUser) {
+                if (customUser) {
                     const { getCustomAccountHistory } = await import('../lib/custom-auth');
                     if (!unmounted) setAccountHistory(getCustomAccountHistory());
                 }
             } catch { }
         })();
         return () => { unmounted = true; };
-    }, [showAccountModal, firebaseUser, customUser]);
-
-    // 昵称输入框跟随当前账号（非编辑态）
-    useEffect(() => {
-        if (editing) return;
-        setEditName(firebaseUser?.displayName || customUser?.displayName || '');
-    }, [firebaseUser, customUser, editing]);
+    }, [showAccountModal, customUser]);
 
     // 重置状态 & 初始化 switcher
     useEffect(() => {
         if (!showAccountModal) {
-            setEditing(false);
             setSaveMsg('');
             setShowSwitcher(false);
         } else if (accountModalSwitcher) {
@@ -100,65 +67,9 @@ export default function AccountModal() {
         }
     }, [showAccountModal, accountModalSwitcher]);
 
-    // 统一登录态：Firebase 优先，其次自建服务器。渲染层沿用 authUser 的字段
-    // （email/displayName/photoURL/metadata/providerData）；自建账号无 metadata/providerData，
-    // 注册时间/Google 判断会自动落空、登录方式回退为「邮箱密码」，无需分支处理。
-    const authUser = firebaseUser || customUser || null;
-    const isCustomAccount = !firebaseUser && !!customUser;
-    const canEdit = !!firebaseUser; // 改昵称/头像走 Firebase 接口；自建后端暂无对应端点，先隐藏入口
+    const authUser = customUser || null;
 
     if (!showAccountModal || !authUser) return null;
-
-    const handleSaveProfile = async () => {
-        if (!editName.trim()) return;
-        setSaving(true);
-        setSaveMsg('');
-        try {
-            const { updateUserProfile } = await import('../lib/auth');
-            await updateUserProfile({ displayName: editName.trim() });
-            setSaveMsg(text('已保存', 'Saved', 'Сохранено'));
-            setEditing(false);
-            setTimeout(() => setSaveMsg(''), 2000);
-        } catch (err) {
-            setSaveMsg(`${text('保存失败', 'Save failed', 'Ошибка сохранения')}: ${err.message || text('未知错误', 'Unknown error', 'Неизвестная ошибка')}`);
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const handleAvatarChange = async (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        // 压缩为 200x200 的 data URL
-        const reader = new FileReader();
-        reader.onload = async (ev) => {
-            const img = new Image();
-            img.onload = async () => {
-                const canvas = document.createElement('canvas');
-                const size = 200;
-                canvas.width = size;
-                canvas.height = size;
-                const ctx = canvas.getContext('2d');
-                // 居中裁剪
-                const min = Math.min(img.width, img.height);
-                const sx = (img.width - min) / 2;
-                const sy = (img.height - min) / 2;
-                ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size);
-                const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-                try {
-                    const { updateUserProfile } = await import('../lib/auth');
-                    await updateUserProfile({ photoURL: dataUrl });
-                    setSaveMsg(text('头像已更新', 'Avatar updated', 'Аватар обновлён'));
-                    setTimeout(() => setSaveMsg(''), 2000);
-                } catch (err) {
-                    setSaveMsg(text('上传失败', 'Upload failed', 'Ошибка загрузки'));
-                }
-            };
-            img.src = ev.target.result;
-        };
-        reader.readAsDataURL(file);
-        e.target.value = ''; // 重置以允许再次选择同一文件
-    };
 
     const handleSignOut = async () => {
         setSigningOut(true);
@@ -166,13 +77,8 @@ export default function AccountModal() {
             await useAppStore.getState().flushPendingLocalSave();
             const { stopCloudSync } = await import('../lib/persistence');
             await stopCloudSync();
-            if (isCustomAccount) {
-                const { signOutCustom } = await import('../lib/custom-auth');
-                await signOutCustom();
-            } else {
-                const auth = await import('../lib/auth');
-                await auth.signOut();
-            }
+            const { signOutCustom } = await import('../lib/custom-auth');
+            await signOutCustom();
             setShowAccountModal(false);
         } catch (err) {
             console.error('Sign out error:', err);
@@ -188,13 +94,8 @@ export default function AccountModal() {
             await useAppStore.getState().flushPendingLocalSave();
             const { stopCloudSync } = await import('../lib/persistence');
             await stopCloudSync();
-            if (isCustomAccount) {
-                const { signOutCustom } = await import('../lib/custom-auth');
-                await signOutCustom();
-            } else {
-                const auth = await import('../lib/auth');
-                await auth.signOut();
-            }
+            const { signOutCustom } = await import('../lib/custom-auth');
+            await signOutCustom();
         } catch (err) {
             console.error('Switch account sync error:', err);
             setSaveMsg(text('切换账号前同步失败，请稍后重试', 'Sync failed before switching accounts. Please try again later.', 'Синхронизация перед сменой аккаунта не удалась. Попробуйте позже.'));
@@ -206,23 +107,15 @@ export default function AccountModal() {
     };
 
     const handleAddNewAccount = () => {
-        // 不退出当前账号，直接打开登录窗
-        // 如果用户成功登录新账号，Firebase 会自动切换
-        // 如果用户取消，原账号状态保持不变
+        // 不退出当前账号，直接打开登录窗；取消时保留当前账号。
         setShowAccountModal(false);
         setTimeout(() => setShowLoginModal(true), 300);
     };
 
     const handleRemoveFromHistory = async (uid) => {
-        if (isCustomAccount) {
-            const { removeCustomAccountFromHistory, getCustomAccountHistory } = await import('../lib/custom-auth');
-            removeCustomAccountFromHistory(uid);
-            setAccountHistory(getCustomAccountHistory());
-        } else {
-            const { removeAccountFromHistory, getAccountHistory } = await import('../lib/auth');
-            removeAccountFromHistory(uid);
-            setAccountHistory(getAccountHistory());
-        }
+        const { removeCustomAccountFromHistory, getCustomAccountHistory } = await import('../lib/custom-auth');
+        removeCustomAccountFromHistory(uid);
+        setAccountHistory(getCustomAccountHistory());
     };
 
     const handleManualSync = async () => {
@@ -245,7 +138,7 @@ export default function AccountModal() {
     const lastSignIn = authUser.metadata?.lastSignInTime
         ? new Date(authUser.metadata.lastSignInTime).toLocaleDateString()
         : null;
-    const providerName = authUser.providerData?.[0]?.providerId === 'google.com' ? 'Google' : text('邮箱密码', 'Email/password', 'Email/пароль');
+    const providerName = 'Author Cloud';
 
     // 其他历史账号（排除当前）
     const otherAccounts = accountHistory.filter(a => a.uid !== authUser.uid);
@@ -332,51 +225,17 @@ export default function AccountModal() {
                     <>
                         {/* 用户头部 */}
                         <div className="account-modal-profile">
-                            <div className="account-modal-avatar-wrap" onClick={canEdit ? () => avatarInputRef.current?.click() : undefined} style={{ cursor: canEdit ? 'pointer' : 'default' }} title={canEdit ? text('点击更换头像', 'Click to change avatar', 'Нажмите, чтобы сменить аватар') : undefined}>
+                            <div className="account-modal-avatar-wrap">
                                 {authUser.photoURL ? (
                                     <img src={authUser.photoURL} alt="" className="account-modal-avatar" />
                                 ) : (
                                     <div className="account-modal-avatar-letter">{initial}</div>
                                 )}
-                                {canEdit && (
-                                    <div className="account-modal-avatar-overlay">
-                                        <Camera size={18} />
-                                    </div>
-                                )}
                                 <span className="account-modal-status-dot" style={{ background: syncInfo.color }} />
                             </div>
-                            {canEdit && <input ref={avatarInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleAvatarChange} />}
-
-                            {/* 昵称 — 可编辑 */}
-                            {editing ? (
-                                <div className="account-modal-edit-name">
-                                    <input
-                                        type="text"
-                                        value={editName}
-                                        onChange={e => setEditName(e.target.value)}
-                                        placeholder={text('输入昵称', 'Enter nickname', 'Введите имя')}
-                                        className="account-modal-name-input"
-                                        autoFocus
-                                        onKeyDown={e => { if (e.key === 'Enter') handleSaveProfile(); if (e.key === 'Escape') setEditing(false); }}
-                                    />
-                                    <button
-                                        className="account-modal-save-btn"
-                                        onClick={handleSaveProfile}
-                                        disabled={saving || !editName.trim()}
-                                    >
-                                        <Save size={14} />
-                                    </button>
-                                </div>
-                            ) : (
-                                <div className="account-modal-name-row">
-                                    <h2 className="account-modal-name">{authUser.displayName || text('用户', 'User', 'Пользователь')}</h2>
-                                    {canEdit && (
-                                        <button className="account-modal-edit-btn" onClick={() => setEditing(true)} title={text('编辑昵称', 'Edit nickname', 'Редактировать имя')}>
-                                            <Edit3 size={13} />
-                                        </button>
-                                    )}
-                                </div>
-                            )}
+                            <div className="account-modal-name-row">
+                                <h2 className="account-modal-name">{authUser.displayName || text('用户', 'User', 'Пользователь')}</h2>
+                            </div>
                             {saveMsg && <p className="account-modal-save-msg">{saveMsg}</p>}
                             <p className="account-modal-email">{authUser.email}</p>
                         </div>

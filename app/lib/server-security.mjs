@@ -1,5 +1,6 @@
 import { lookup as dnsLookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
+import { timingSafeEqual } from 'node:crypto';
 
 const OFFICIAL_WEB = process.env.NEXT_PUBLIC_DEPLOYMENT_TARGET === 'official-web';
 const BLOCKED_HOST_SUFFIXES = ['.localhost', '.local', '.internal', '.home.arpa'];
@@ -12,8 +13,89 @@ export class OutboundRequestBlockedError extends Error {
     }
 }
 
+export class ServerCredentialBlockedError extends Error {
+    constructor(message = '服务端托管密钥不能用于此请求；请在客户端配置自己的 API Key') {
+        super(message);
+        this.name = 'ServerCredentialBlockedError';
+        this.code = 'SERVER_CREDENTIAL_BLOCKED';
+    }
+}
+
 export function isOfficialWebServer() {
     return OFFICIAL_WEB;
+}
+
+function constantTimeEqual(left, right) {
+    const a = Buffer.from(String(left || ''), 'utf8');
+    const b = Buffer.from(String(right || ''), 'utf8');
+    return a.length === b.length && a.length > 0 && timingSafeEqual(a, b);
+}
+
+function requestCookie(request, name) {
+    const cookieHeader = request?.headers?.get?.('cookie') || '';
+    for (const part of cookieHeader.split(';')) {
+        const separator = part.indexOf('=');
+        if (separator < 0) continue;
+        if (part.slice(0, separator).trim() !== name) continue;
+        try { return decodeURIComponent(part.slice(separator + 1).trim()); } catch { return ''; }
+    }
+    return '';
+}
+
+export function isAuthorizedDesktopRequest(request) {
+    const expected = String(process.env.AUTHOR_DESKTOP_CAPABILITY || '');
+    const actual = requestCookie(request, 'author-desktop-capability');
+    return constantTimeEqual(actual, expected);
+}
+
+export function authorizeSourceUpdate(request) {
+    const expected = String(process.env.AUTHOR_UPDATE_TOKEN || '');
+    if (!expected) {
+        return { ok: false, status: 403, code: 'SOURCE_UPDATE_DISABLED' };
+    }
+
+    const authorization = String(request?.headers?.get?.('authorization') || '');
+    const bearer = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+    const provided = bearer || String(request?.headers?.get?.('x-author-update-token') || '').trim();
+    if (!provided) {
+        return { ok: false, status: 401, code: 'SOURCE_UPDATE_AUTH_REQUIRED' };
+    }
+    if (!constantTimeEqual(provided, expected)) {
+        return { ok: false, status: 403, code: 'SOURCE_UPDATE_AUTH_INVALID' };
+    }
+    return { ok: true };
+}
+
+function normalizedEndpoint(value) {
+    return String(value || '').trim().replace(/\/+$/, '');
+}
+
+export function resolveAiCredential({ request, clientApiKey, clientBaseUrl, envApiKey, envBaseUrl }) {
+    const suppliedKey = String(clientApiKey || '').trim();
+    const suppliedBaseUrl = normalizedEndpoint(clientBaseUrl);
+    const configuredKey = String(envApiKey || '').trim();
+    const configuredBaseUrl = normalizedEndpoint(envBaseUrl);
+
+    if (suppliedKey) {
+        return { apiKey: suppliedKey, baseUrl: suppliedBaseUrl || configuredBaseUrl };
+    }
+    if (!configuredKey) {
+        return { apiKey: '', baseUrl: suppliedBaseUrl || configuredBaseUrl };
+    }
+    if (!isAuthorizedDesktopRequest(request)) {
+        throw new ServerCredentialBlockedError();
+    }
+    if (!configuredBaseUrl) {
+        throw new ServerCredentialBlockedError('服务端密钥缺少固定的服务端 API 地址，已拒绝使用');
+    }
+    if (suppliedBaseUrl && suppliedBaseUrl !== configuredBaseUrl) {
+        throw new ServerCredentialBlockedError('服务端密钥只能发送到服务端预设的 API 地址');
+    }
+    return { apiKey: configuredKey, baseUrl: configuredBaseUrl };
+}
+
+export function isServerCredentialBlocked(error) {
+    return error?.code === 'SERVER_CREDENTIAL_BLOCKED';
 }
 
 function normalizedIp(value) {
@@ -67,7 +149,7 @@ export function isPublicIpAddress(value) {
     return false;
 }
 
-function parsePublicHttpUrl(rawUrl) {
+function parseHttpUrl(rawUrl) {
     let parsed;
     try {
         parsed = new URL(String(rawUrl || '').trim());
@@ -75,18 +157,13 @@ function parsePublicHttpUrl(rawUrl) {
         throw new OutboundRequestBlockedError('API 地址格式无效');
     }
     if (!['http:', 'https:'].includes(parsed.protocol)) {
-        throw new OutboundRequestBlockedError('官网服务端只允许连接 HTTP(S) API 地址');
+        throw new OutboundRequestBlockedError('服务端只允许连接 HTTP(S) API 地址');
     }
     if (parsed.username || parsed.password) {
         throw new OutboundRequestBlockedError('API 地址中不能包含账号或密码');
     }
     const hostname = normalizedIp(parsed.hostname);
-    if (!hostname || hostname === 'localhost' || BLOCKED_HOST_SUFFIXES.some(suffix => hostname.endsWith(suffix))) {
-        throw new OutboundRequestBlockedError();
-    }
-    if (isIP(hostname) && !isPublicIpAddress(hostname)) {
-        throw new OutboundRequestBlockedError();
-    }
+    if (!hostname) throw new OutboundRequestBlockedError('API 地址缺少主机名');
     return parsed;
 }
 
@@ -107,10 +184,18 @@ async function lookupPublicAddresses(hostname, family = 0) {
     return filtered;
 }
 
-export async function assertSafeOutboundUrl(rawUrl) {
-    if (!OFFICIAL_WEB) return;
-    const parsed = parsePublicHttpUrl(rawUrl);
+export async function assertSafeOutboundUrl(rawUrl, options = {}) {
+    const parsed = parseHttpUrl(rawUrl);
+    if (options.allowPrivateNetwork === true) return parsed;
+    const hostname = normalizedIp(parsed.hostname);
+    if (hostname === 'localhost' || BLOCKED_HOST_SUFFIXES.some(suffix => hostname.endsWith(suffix))) {
+        throw new OutboundRequestBlockedError('服务端默认禁止访问本机或内网地址');
+    }
+    if (isIP(hostname) && !isPublicIpAddress(hostname)) {
+        throw new OutboundRequestBlockedError('服务端默认禁止访问本机或内网地址');
+    }
     await lookupPublicAddresses(parsed.hostname);
+    return parsed;
 }
 
 // Passed to undici so the addresses used for the real connection are checked

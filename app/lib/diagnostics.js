@@ -135,11 +135,6 @@ function getConsoleMessage(args) {
     return args.map(formatConsoleArg).join(' ');
 }
 
-function isFirestoreOfflineConsoleError(message) {
-    return /@firebase\/firestore/i.test(message)
-        && /Could not reach Cloud Firestore backend|client will operate in offline mode|Backend didn't respond/i.test(message);
-}
-
 function describeElement(target) {
     if (!target || target.nodeType !== 1) return null;
     const el = target.closest?.('button,a,input,textarea,select,[role="button"],[data-node-id],[data-tree-list],[contenteditable="true"]') || target;
@@ -382,11 +377,6 @@ function installConsoleCapture() {
         originalConsole[method] = console[method]?.bind(console) || (() => { });
         console[method] = (...args) => {
             const message = getConsoleMessage(args);
-            if (method === 'error' && isFirestoreOfflineConsoleError(message)) {
-                originalConsole.warn?.(...args);
-                recordDiagnosticEvent('firebase.firestore.offline', message, {}, 'warn');
-                return;
-            }
             originalConsole[method](...args);
             recordDiagnosticEvent('console', message, {}, method === 'error' ? 'error' : method === 'warn' ? 'warn' : 'debug');
         };

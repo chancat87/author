@@ -1,14 +1,23 @@
 import { NextResponse } from 'next/server';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { existsSync } from 'fs';
 import { join } from 'path';
+import { authorizeSourceUpdate, redactSensitiveText } from '../../lib/server-security.mjs';
 
 /**
  * POST /api/update-source
  * 一键更新源码部署：git pull → npm install → npm run build
  * 仅在本地源码部署（存在 .git 目录）时可用
  */
-export async function POST() {
+export async function POST(request) {
+    const authorization = authorizeSourceUpdate(request);
+    if (!authorization.ok) {
+        return NextResponse.json(
+            { error: 'Source update is not authorized', code: authorization.code },
+            { status: authorization.status, headers: { 'Cache-Control': 'no-store' } },
+        );
+    }
+
     const cwd = process.cwd();
     const gitDir = join(cwd, '.git');
 
@@ -25,7 +34,7 @@ export async function POST() {
     try {
         // Step 1: git pull
         log('🔄 正在拉取最新代码...');
-        const pullResult = execSync('git pull', { cwd, encoding: 'utf-8', timeout: 60000 });
+        const pullResult = execFileSync('git', ['pull'], { cwd, encoding: 'utf-8', timeout: 60000 });
         log(pullResult.trim() || 'git pull 完成');
 
         // 检查是否已经是最新
@@ -36,25 +45,26 @@ export async function POST() {
 
         // Step 2: npm install
         log('📦 正在安装依赖...');
-        const installResult = execSync('npm install', { cwd, encoding: 'utf-8', timeout: 300000 });
+        const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+        const installResult = execFileSync(npmCommand, ['install'], { cwd, encoding: 'utf-8', timeout: 300000 });
         // 只保留最后几行，避免输出过长
         const installLines = installResult.trim().split('\n');
         log(installLines.slice(-3).join('\n') || 'npm install 完成');
 
         // Step 3: npm run build
         log('🔨 正在构建项目...');
-        const buildResult = execSync('npm run build', { cwd, encoding: 'utf-8', timeout: 300000 });
+        const buildResult = execFileSync(npmCommand, ['run', 'build'], { cwd, encoding: 'utf-8', timeout: 300000 });
         const buildLines = buildResult.trim().split('\n');
         log(buildLines.slice(-5).join('\n') || 'npm run build 完成');
 
         log('✅ 更新完成！请刷新页面或重启服务以应用更新。');
         return NextResponse.json({ success: true, alreadyUpToDate: false, logs });
     } catch (err) {
-        log(`❌ 更新失败: ${err.message}`);
-        if (err.stdout) log(`stdout: ${err.stdout.toString().slice(-500)}`);
-        if (err.stderr) log(`stderr: ${err.stderr.toString().slice(-500)}`);
+        log(`❌ 更新失败: ${redactSensitiveText(err?.message)}`);
+        if (err.stdout) log(`stdout: ${redactSensitiveText(err.stdout.toString(), 500)}`);
+        if (err.stderr) log(`stderr: ${redactSensitiveText(err.stderr.toString(), 500)}`);
         return NextResponse.json(
-            { success: false, error: err.message, logs },
+            { success: false, error: 'Source update failed', logs },
             { status: 500 }
         );
     }

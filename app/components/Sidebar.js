@@ -299,6 +299,11 @@ function MemoryWorkspaceHeader({
 }
 
 function StructuredMemorySections({ data, mode = 'memory', text = (zh) => zh }) {
+    const itemText = (item) => {
+        if (typeof item === 'string') return item;
+        if (!item || typeof item !== 'object') return '';
+        return item.text || item.name || item.description || item.summary || JSON.stringify(item);
+    };
     const sections = mode === 'synopsis'
         ? [
             { title: text('关键情节', 'Key Beats', 'Ключевые события'), items: data?.beats?.length ? data.beats : (data?.events || []) },
@@ -322,7 +327,7 @@ function StructuredMemorySections({ data, mode = 'memory', text = (zh) => zh }) 
                     {section.items.length > 0 ? (
                         <ul>
                             {section.items.slice(0, 4).map((item, index) => (
-                                <li key={`${section.title}-${index}`}>{item}</li>
+                                <li key={`${section.title}-${index}`}>{itemText(item)}</li>
                             ))}
                         </ul>
                     ) : (
@@ -1494,7 +1499,7 @@ function ChapterSynopsisOverviewModal({
                                     <div className="synopsis-inspector-block">
                                         <h4>{text('续写注意', 'Continuation Notes', 'Заметки для продолжения')}</h4>
                                         {selectedEntry.synopsis.continuityNotes.length ? (
-                                            <ul>{selectedEntry.synopsis.continuityNotes.slice(0, 5).map((item, index) => <li key={index}>{item}</li>)}</ul>
+                                            <ul>{selectedEntry.synopsis.continuityNotes.slice(0, 5).map((item, index) => <li key={index}>{typeof item === 'string' ? item : (item?.text || item?.name || item?.description || item?.summary || JSON.stringify(item))}</li>)}</ul>
                                         ) : (
                                             <p>{text('暂无续写注意。', 'No continuation notes yet.', 'Пока нет заметок для продолжения.')}</p>
                                         )}
@@ -1502,7 +1507,7 @@ function ChapterSynopsisOverviewModal({
                                     <div className="synopsis-inspector-block">
                                         <h4>{text('待回收信息', 'Open Threads', 'Открытые линии')}</h4>
                                         {selectedEntry.synopsis.openThreads.length ? (
-                                            <ul>{selectedEntry.synopsis.openThreads.slice(0, 5).map((item, index) => <li key={index}>{item}</li>)}</ul>
+                                            <ul>{selectedEntry.synopsis.openThreads.slice(0, 5).map((item, index) => <li key={index}>{typeof item === 'string' ? item : (item?.text || item?.name || item?.description || item?.summary || JSON.stringify(item))}</li>)}</ul>
                                         ) : (
                                             <p>{text('暂无待回收信息。', 'No open threads yet.', 'Пока нет открытых линий.')}</p>
                                         )}
@@ -1669,27 +1674,13 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
         reloadMemoryGroups();
     }, [reloadMemoryGroups]);
 
-    // ---- 云同步状态（侧栏图标指示） ----
-    // 互斥登录：同一时刻只有一个后端在线，谁登录就认谁（Firebase 或自建）。
-    const [firebaseCloudUser, setFirebaseCloudUser] = useState(null);
+    // ---- Author Cloud 同步状态（侧栏图标指示） ----
     const [customCloudUser, setCustomCloudUser] = useState(null);
-    const cloudAuthUser = firebaseCloudUser || customCloudUser;
+    const cloudAuthUser = customCloudUser;
     const [cloudSyncStatus, setCloudSyncStatus] = useState(null);
     useEffect(() => {
         let unmounted = false;
         (async () => {
-            // 旧版 Firebase（若配置）
-            try {
-                const { isFirebaseConfigured } = await import('../lib/firebase');
-                if (isFirebaseConfigured && !unmounted) {
-                    const { onAuthChange, initAuth } = await import('../lib/auth');
-                    const { onSyncStatusChange } = await import('../lib/firestore-sync');
-                    initAuth();
-                    onAuthChange(user => { if (!unmounted) setFirebaseCloudUser(user); });
-                    onSyncStatusChange(status => { if (!unmounted) setCloudSyncStatus(status); });
-                }
-            } catch { /* Firebase 未配置 */ }
-            // 自建服务器（独立于 Firebase；二者互斥，只会有一个在线）
             try {
                 const { onCustomAuthChange, getCustomUserProfile, initCustomAuth, isCustomServerConfigured } = await import('../lib/custom-auth');
                 if (isCustomServerConfigured() && !unmounted) {
@@ -3709,15 +3700,25 @@ function ExportModal({ chapters, onClose, onExport, t }) {
                 {t('sidebar.previewEmpty') || '此章节暂无内容'}
             </div>
         );
-        // 与导出一致：先 htmlToText → 按空行拆段，每段内 \n 转 <br>
+        // 与导出一致：先 htmlToText → 按空行拆段。这里必须保留为 React
+        // 文本节点，不能把作品内容重新解释为 HTML。
         const paragraphs = plainText ? plainText.split(/\n\n+/).filter(p => p.trim()) : [];
 
         // 渲染段落列表（DOCX/EPUB/PDF 共用）
         const renderParagraphs = (style = {}) => (
-            paragraphs.map((p, pi) => (
-                <p key={pi} style={{ margin: '0.5em 0', textIndent: '2em', ...style }}
-                    dangerouslySetInnerHTML={{ __html: p.trim().replace(/\n/g, '<br>') }} />
-            ))
+            paragraphs.map((p, pi) => {
+                const lines = p.trim().split('\n');
+                return (
+                    <p key={pi} style={{ margin: '0.5em 0', textIndent: '2em', ...style }}>
+                        {lines.map((line, lineIndex) => (
+                            <span key={lineIndex}>
+                                {line}
+                                {lineIndex < lines.length - 1 ? <br /> : null}
+                            </span>
+                        ))}
+                    </p>
+                );
+            })
         );
 
         switch (format) {

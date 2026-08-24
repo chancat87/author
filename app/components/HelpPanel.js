@@ -365,9 +365,9 @@ AI 生成的非标准字段会自动出现在 **✨ AI 生成的额外字段** �
 - API Key、Token、Authorization、公网 IP 等敏感字段会自动脱敏
 
 ### 重要提醒
-- 所有数据存储在 **浏览器本地**，不会上传到任何服务器
+- 创作数据默认存储在 **浏览器本地**；主动开启云同步、WebDAV 或局域网传输后，所选数据会发送到你配置的服务或设备
 - **清除浏览器数据** 会丢失所有未导出的内容（桌面客户端不受影响）
-- **API Key** 存储在本地 localStorage 中
+- 浏览器部署将 **API Key** 存储在 localStorage；桌面客户端使用操作系统安全存储加密保护
 - 建议定期使用 💾 存档功能备份作品，或开启 **☁️ 云同步** 同步章节与设定集
 
 ### ⚠️ AI 功能的隐私须知
@@ -547,7 +547,6 @@ Next.js + Tiptap 编辑器 + AI API（OpenAI 兼容 / Gemini）
 
 #### 🔌 MCP 工具
 - [Chrome DevTools MCP](https://developer.chrome.com/) — 浏览器测试、性能分析、DOM 检查
-- [Firebase MCP](https://firebase.google.com/) — 云数据库管理、安全规则验证
 - [GitHub MCP](https://github.com/) — 仓库管理、自动化发布
 
 #### 🌟 灵感与参考
@@ -585,7 +584,6 @@ ${LEGAL_LANGUAGES.map(l => [
 
 Author 支持 WebDAV 与局域网临时分享两种同步方式，让你在不同设备上无缝切换创作。同步范围采用隐私优先 allowlist。
 
-> ⚠️ **旧版云同步（Firebase / Google 登录）将于 2026 年 8 月 15 日停止服务**，届时存放在旧版云端的数据将无法取回，请尽快迁移。本地写作数据、WebDAV 与局域网同步均不受影响。
 
 ### 快速开始（WebDAV）
 1. 打开 **偏好设置 → 云同步**
@@ -1033,7 +1031,7 @@ If the app white-screens, freezes, or crashes:
 ### Important Notes
 - Creative content is stored **locally in your browser** unless cloud sync is enabled.
 - **Clearing browser data** deletes unexported content. Desktop client data is not affected in the same way.
-- **API keys** are stored in localStorage.
+- Browser deployments store **API keys** in localStorage; the desktop client protects them with operating-system secure storage.
 - Regularly archive your work, or enable **Cloud Sync** for chapters and lore.
 
 ### AI Privacy Notice
@@ -1213,7 +1211,6 @@ Next.js + Tiptap editor + AI APIs (OpenAI-compatible / Gemini)
 
 #### MCP Tools
 - [Chrome DevTools MCP](https://developer.chrome.com/): browser testing, performance analysis, DOM inspection.
-- [Firebase MCP](https://firebase.google.com/): cloud database management and security-rule validation.
 - [GitHub MCP](https://github.com/): repository management and automated releases.
 
 #### Inspiration
@@ -1251,7 +1248,6 @@ ${LEGAL_LANGUAGES.map(l => [
 
 Author supports WebDAV and temporary LAN sharing so you can switch between devices. Sync uses a privacy-first allowlist.
 
-> ⚠️ **The legacy cloud sync (Firebase / Google sign-in) shuts down on August 15, 2026.** Data stored in the legacy cloud will no longer be retrievable, so please migrate soon. Local writing data, WebDAV, and LAN sync are unaffected.
 
 ### Quick Start (WebDAV)
 1. Open **Preferences -> Cloud Sync**.
@@ -1705,7 +1701,7 @@ Default следует настройке body font. Панель шрифтов
 - Android и Windows-клиент.
 
 ### Безопасность
-Контент и API Key хранятся локально. Все данные можно экспортировать.
+Контент по умолчанию хранится локально; при включении синхронизации выбранные данные передаются настроенному сервису. В браузере API Key хранится локально, а десктопный клиент защищает его системным безопасным хранилищем. Все данные можно экспортировать.
 
 ### Приватность
 ИИ-запросы по возможности идут напрямую из браузера к провайдеру; в отдельных случаях — через сервер развертывания. Для серьезного использования лучше собственное развертывание.
@@ -1737,7 +1733,6 @@ ${LEGAL_LANGUAGES.map(l => [
 
 Author поддерживает WebDAV и временный LAN-share. Синхронизация использует privacy-first allowlist.
 
-> ⚠️ **Старая облачная синхронизация (Firebase / вход через Google) будет отключена 15 августа 2026 года.** После отключения данные из старого облака получить будет нельзя, поэтому перенесите их заранее. Локальные тексты, WebDAV и LAN-синхронизация не затронуты.
 
 ### Быстрый старт (WebDAV)
 1. Откройте **Preferences -> Cloud Sync**.
@@ -1895,11 +1890,24 @@ export default function HelpPanel({ open, onClose }) {
 
     // 源码部署：SSE 流式更新
     const handleSourceUpdate = async () => {
+        const updateToken = window.prompt(text(
+            '请输入此源码部署的更新访问令牌',
+            'Enter the update access token for this source deployment',
+            'Введите токен обновления для этой установки из исходного кода',
+        ));
+        if (!updateToken?.trim()) return;
         setUpdating(true);
         setUpdateDone(null);
         setSourceProgress(null);
         try {
-            const res = await fetch(apiPath('/api/update-source-stream'), { method: 'POST' });
+            const res = await fetch(apiPath('/api/update-source-stream'), {
+                method: 'POST',
+                headers: { 'x-author-update-token': updateToken.trim() },
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(localizeApiError(data, text) || `HTTP ${res.status}`);
+            }
             const reader = res.body.getReader();
             const decoder = new TextDecoder();
             let buffer = '';
@@ -2375,8 +2383,15 @@ function renderSimpleMarkdown(md) {
     // Blockquote
     html = html.replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>');
 
-    // Links [text](url)
-    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    // Links [text](url) — 仅允许外部 HTTP(S)/mailto 与站内绝对路径。
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => {
+        const href = String(url || '').trim();
+        const allowed = /^(https?:|mailto:)/i.test(href)
+            || /^\/(?!\/)/.test(href)
+            || href.startsWith('#');
+        if (!allowed) return escapeHtml(label);
+        return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`;
+    });
 
     // List items  
     html = html.replace(/^- (.+)$/gm, '<li>$1</li>');

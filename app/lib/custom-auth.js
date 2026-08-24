@@ -1,12 +1,16 @@
 'use client';
 
-// ==================== 自建服务器（Author Cloud）Auth 封装 ====================
-// 与 auth.js(Firebase) 平级、接口对齐，供 LoginModal / persistence 层无感调用。
+// ==================== Author Cloud Auth 封装 ====================
 // 仅调用后端 HTTP API，不含任何服务端实现，不硬编码任何密钥。
 // 服务器地址可配置：默认读环境变量 NEXT_PUBLIC_AUTHOR_CLOUD_URL，允许用户覆盖
 // （自托管），支持公开开源分发。
 
 import { localizedError } from './runtime-i18n';
+import {
+    isOfficialAuthorCloudUrl,
+    normalizeCloudServerUrl,
+    resolveCloudServerUrl,
+} from './cloud-server-policy.mjs';
 
 const PRODUCT = 'author_free';
 const SESSION_KEY = 'author-cloud-session';         // 本地令牌 + 用户，绝不上云
@@ -17,26 +21,37 @@ const CUSTOM_HISTORY_KEY = 'author-cloud-account-history';
 
 const DEFAULT_SERVER_URL = String(process.env.NEXT_PUBLIC_AUTHOR_CLOUD_URL || '').replace(/\/+$/, '');
 
+function isElectronRuntime() {
+    return typeof window !== 'undefined' && window.electronAPI?.isElectron === true;
+}
+
 export function getCloudServerUrl() {
+    let configuredUrl = '';
     if (typeof window !== 'undefined') {
         try {
             const cfg = JSON.parse(localStorage.getItem(SERVER_CONFIG_KEY) || 'null');
-            if (cfg?.serverUrl) return String(cfg.serverUrl).replace(/\/+$/, '');
+            configuredUrl = cfg?.serverUrl || '';
         } catch {}
-        // 桌面端（Electron）忽略构建期注入的默认服务器地址：即便官方桌面包不慎把
-        // NEXT_PUBLIC_AUTHOR_CLOUD_URL 编入，也不会自动"介入作者服务器"。桌面端如需云同步，
-        // 须由用户在上方显式填写自建地址（localStorage 覆盖）。仅官方网页版 /app（非 Electron）用内置默认。
-        if (window.electronAPI) return '';
     }
-    return DEFAULT_SERVER_URL;
+    // Electron 只允许用户自己的同步服务器。即使官方地址被构建期注入、手动填写
+    // 或残留在旧配置中，也不能从桌面端连接 Author 官方云服务。
+    return resolveCloudServerUrl({
+        configuredUrl,
+        defaultUrl: DEFAULT_SERVER_URL,
+        isElectron: isElectronRuntime(),
+    });
 }
 
 export function setCloudServerUrl(url) {
-    if (typeof window === 'undefined') return;
-    const clean = String(url || '').trim().replace(/\/+$/, '');
+    if (typeof window === 'undefined') return false;
+    const clean = normalizeCloudServerUrl(url);
+    if (!clean || (isElectronRuntime() && isOfficialAuthorCloudUrl(clean))) return false;
     try {
         localStorage.setItem(SERVER_CONFIG_KEY, JSON.stringify({ serverUrl: clean }));
-    } catch {}
+        return true;
+    } catch {
+        return false;
+    }
 }
 
 export function isCustomServerConfigured() {
@@ -55,21 +70,90 @@ function notify() {
     });
 }
 
+function hasElectronTokenStore() {
+    return typeof window !== 'undefined'
+        && typeof window.electronAPI?.getCloudSessionTokens === 'function'
+        && typeof window.electronAPI?.setCloudSessionTokens === 'function';
+}
+
+function readElectronTokens() {
+    if (!hasElectronTokenStore()) return null;
+    try {
+        const result = window.electronAPI.getCloudSessionTokens();
+        if (!result?.success || !result.value) return null;
+        const tokens = JSON.parse(result.value);
+        return tokens && typeof tokens === 'object' && !Array.isArray(tokens) ? tokens : null;
+    } catch {
+        return null;
+    }
+}
+
+function writeElectronTokens(tokens) {
+    try {
+        return window.electronAPI.setCloudSessionTokens(JSON.stringify(tokens || {}))?.success === true;
+    } catch {
+        return false;
+    }
+}
+
 function loadSession() {
     if (typeof window === 'undefined') return null;
-    try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch { return null; }
+    try {
+        const saved = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+        if (!hasElectronTokenStore()) return saved;
+
+        if (saved?.tokens) {
+            // One-time migration: remove plaintext tokens only after the
+            // operating-system encrypted write has succeeded.
+            if (writeElectronTokens(saved.tokens)) {
+                localStorage.setItem(SESSION_KEY, JSON.stringify({ user: saved.user }));
+            } else {
+                return saved;
+            }
+        }
+        const tokens = readElectronTokens();
+        return saved?.user && tokens ? { user: saved.user, tokens } : null;
+    } catch {
+        return null;
+    }
 }
 
 function saveSession(data) {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined') return false;
     try {
-        if (data) localStorage.setItem(SESSION_KEY, JSON.stringify(data));
-        else localStorage.removeItem(SESSION_KEY);
-    } catch {}
+        if (!hasElectronTokenStore()) {
+            if (data) localStorage.setItem(SESSION_KEY, JSON.stringify(data));
+            else localStorage.removeItem(SESSION_KEY);
+            return true;
+        }
+
+        if (data) {
+            if (!writeElectronTokens(data.tokens)) return false;
+            localStorage.setItem(SESSION_KEY, JSON.stringify({ user: data.user }));
+        } else {
+            const result = window.electronAPI.deleteCloudSessionTokens?.();
+            if (result && result.success === false) return false;
+            localStorage.removeItem(SESSION_KEY);
+        }
+        return true;
+    } catch {
+        if (data && hasElectronTokenStore()) {
+            try { window.electronAPI.deleteCloudSessionTokens?.(); } catch {}
+        }
+        return false;
+    }
 }
 
 // 从本地恢复会话（应用启动时调用一次）。令牌若过期，首次授权请求会自动刷新。
 export function initCustomAuth() {
+    // 不删除旧会话；在桌面端没有合规自建地址时只是不加载，避免历史官方
+    // Author Cloud 会话绕过当前产品边界重新显示为已登录。
+    if (!getCloudServerUrl()) {
+        _currentCustomUser = null;
+        _session = null;
+        notify();
+        return;
+    }
     const saved = loadSession();
     if (saved?.user && saved?.tokens?.accessToken) {
         _currentCustomUser = saved.user;
@@ -88,7 +172,7 @@ export function onCustomAuthChange(callback) {
     return () => _listeners.delete(callback);
 }
 
-// 与 Firebase 的 getUserProfile 结构对齐（uid/email/displayName/photoURL），上层无感
+// 返回界面统一使用的用户资料字段。
 export function getCustomUserProfile() {
     if (!_currentCustomUser) return null;
     const u = _currentCustomUser;
@@ -114,13 +198,17 @@ async function postJson(path, body, { token } = {}) {
 }
 
 function applyLoginResult(data) {
+    if (!saveSession({ user: data.user, tokens: data.tokens })) {
+        throw localizedError(
+            '无法安全保存登录会话，请检查本机存储后重试',
+            'The sign-in session could not be stored securely. Check local storage and try again.',
+            'Не удалось безопасно сохранить сеанс. Проверьте локальное хранилище и повторите попытку.',
+        );
+    }
     _currentCustomUser = data.user;
     _session = data.tokens;
-    saveSession({ user: data.user, tokens: data.tokens });
     saveCustomAccountToHistory(data.user);
     notify();
-    // 互斥登录（一山不容二虎）：登了自建账号就把旧版 Firebase 挤下线
-    import('./auth').then(m => m.signOut?.()).catch(() => {});
     return _currentCustomUser;
 }
 
@@ -179,7 +267,9 @@ export async function signOutCustom() {
 async function forceLocalSignOut() {
     _currentCustomUser = null;
     _session = null;
-    saveSession(null);
+    if (!saveSession(null)) {
+        console.warn('[custom-auth] failed to clear persisted session');
+    }
     notify();
 }
 
@@ -199,8 +289,8 @@ function refreshSession() {
         try {
             const { res, data } = await postJson('/api/auth/refresh', { refreshToken, product: PRODUCT });
             if (!res.ok || !data?.ok || !data.tokens) return false;
+            if (!saveSession({ user: _currentCustomUser, tokens: data.tokens })) return false;
             _session = data.tokens;
-            saveSession({ user: _currentCustomUser, tokens: _session });
             return true;
         } catch {
             return false;
@@ -241,7 +331,7 @@ export async function authorizedFetch(path, { method = 'GET', body, query } = {}
     return res;
 }
 
-// ==================== 账号历史（自建，与 Firebase 分开存） ====================
+// ==================== Author Cloud 账号历史 ====================
 
 function saveCustomAccountToHistory(user) {
     if (typeof window === 'undefined' || !user) return;

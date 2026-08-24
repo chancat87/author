@@ -42,4 +42,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     secureSet: (key, value) => ipcRenderer.invoke('secure-store-set', key, value),
     secureGet: (key) => ipcRenderer.invoke('secure-store-get', key),
     secureDelete: (key) => ipcRenderer.invoke('secure-store-delete', key),
+    // AI 配置启动时需要同步水合；通道固定为单一业务对象，不接受任意存储键。
+    getAiCredentialBundle: () => ipcRenderer.sendSync('ai-credential-bundle-get'),
+    setAiCredentialBundle: (value) => ipcRenderer.sendSync('ai-credential-bundle-set', value),
+    getCloudSessionTokens: () => ipcRenderer.sendSync('cloud-session-tokens-get'),
+    setCloudSessionTokens: (value) => ipcRenderer.sendSync('cloud-session-tokens-set', value),
+    deleteCloudSessionTokens: () => ipcRenderer.sendSync('cloud-session-tokens-delete'),
 });

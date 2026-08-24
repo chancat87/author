@@ -58,15 +58,15 @@
 - 设定内容自动注入 AI 上下文
 
 ### 💾 数据管理
-- **本地优先** — 所有数据存储在浏览器 IndexedDB，不上传服务器
+- **本地优先** — 创作数据默认保存在浏览器 IndexedDB；仅在你主动开启云同步、WebDAV 或局域网传输时发送所选数据
 - **快照系统** — 手动/自动版本存档，支持一键回滚
 - **项目导入导出** — 完整项目 JSON 备份
 - **多格式导出** — 导航栏一键导出本章或批量导出（TXT / Markdown / DOCX / EPUB / PDF），可选择正文版或批注版
 
 ### 📱 移动端
-- **Android 应用** — 基于 Flutter 的原生应用，支持 Google 登录云同步和更丰富的阅读模式设置
+- **Android 应用** — 基于 Flutter 的原生应用，支持本地优先写作和更丰富的阅读模式设置
 - 随时随地在手机上阅读和编辑你的小说
-- 与桌面客户端共享同一云端账号；桌面端也提供 WebDAV 和局域网迁移选项
+- Author Cloud 账号登录仅在官方网页版提供；移动端不提供账号登录
 
 ### 🌐 国际化
 - 🇨🇳 简体中文 / 🇺🇸 English / 🇷🇺 Русский
@@ -104,7 +104,7 @@
 
 ## 🚀 快速开始
 
-> 💡 **强烈建议**：对于只需满足日常写作和多设备同步需求的大多数用户，请[直接下载安装客户端](https://github.com/YuanShiJiLoong/author/releases/latest)使用。源码部署或 Vercel 部署仅建议需要进行**二次开发**，或愿意自行配置 Firebase/WebDAV 存储的高级用户使用。
+> 💡 **强烈建议**：对于只需满足日常写作需求的大多数用户，请[直接下载安装客户端](https://github.com/YuanShiJiLoong/author/releases/latest)使用。源码或 Vercel 部署适合需要进行**二次开发**，或希望配置 WebDAV、自己的 Author 同步服务器的高级用户。
 
 ### 环境要求
 - **Node.js** 18+
@@ -158,54 +158,16 @@ NEXT_PUBLIC_BASE_PATH=/app
 
 ### 部署到 Vercel
 
-> 💡 **⚠️ 注意：** 通过 Vercel 部署的版本默认**没有**配置 Firebase 云同步。你可以自行配置 Firebase，也可以在应用内使用 WebDAV/局域网同步。如果只想低成本使用多设备同步，请**直接下载客户端**。
+> 💡 **⚠️ 注意：** Vercel 部署不包含 Author 官方账号云服务，可使用本地存储、WebDAV/局域网或自己的 Author 同步服务器。
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/YuanShiJiLoong/author)
 
-### ☁️ 同步配置（自部署用户）
+### ☁️ 同步方式
 
-> 💡 **提示：** 桌面客户端（Windows/macOS）支持可选的 WebDAV 同步和临时局域网迁移，在 **偏好设置 → 云同步** 中配置即可。旧版内置云同步（Firebase / Google 登录）将于 2026 年 8 月 15 日停止服务，请在此之前完成迁移；账号云同步现由官方网页版提供：https://free.author2.com/app 。
-
-如果你坚持通过源码或 Vercel 自部署，并希望开启 Firebase 多端同步，需按照以下步骤配置你自己的 Firebase 数据库。WebDAV 和局域网同步可在应用内单独配置。
-
-#### 1. 创建 Firebase 项目
-
-1. 前往 [Firebase 控制台](https://console.firebase.google.com/) → **创建项目**
-2. 启用 **Authentication** → 登录方式 → **Google**
-3. 创建 **Firestore Database**（生产模式）
-4. 设置 Firestore 安全规则，限制每个用户只能访问自己的数据：
-
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-  }
-}
-```
-
-#### 2. 配置环境变量
-
-将 `.env.example` 复制为 `.env.local`，填入 Firebase 配置：
-
-```bash
-NEXT_PUBLIC_FIREBASE_API_KEY=你的_api_key
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=你的项目.firebaseapp.com
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=你的项目ID
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=你的项目.appspot.com
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=你的sender_id
-NEXT_PUBLIC_FIREBASE_APP_ID=你的app_id
-```
-
-> 这些值可在 Firebase 控制台 → 项目设置 → 常规 → 你的应用 → SDK 配置 中找到。
-
-#### 3. Vercel 部署
-
-在 **Vercel 控制面板 → 项目设置 → Environment Variables** 中添加相同的变量，然后重新部署。
-
-> 💡 Firebase API Key 设计上就是公开的（客户端标识符）。数据安全由 Firebase Auth + Firestore 安全规则保障，而非隐藏 API Key。
+- 基于账号的 Author Cloud 云同步仅在[官方网页版](https://free.author2.com/app)提供。
+- 桌面端不连接 Author 官方云服务，可在 **偏好设置 → 云同步** 中使用 WebDAV、临时局域网传输或用户自己的 Author 同步服务器。
+- 移动端不提供 Author Cloud 账号登录，可通过本地备份和导出转移数据。
+- 源码和 Vercel 部署不包含官方账号服务，可使用 WebDAV/局域网或连接自己的 Author 同步服务器。
 
 ---
 
@@ -537,26 +499,18 @@ Author 支持从多种格式导入设定集：**JSON / Markdown / TXT / DOCX / P
 ## 🔒 隐私与数据安全
 
 ### 本地存储（安全）
-- 章节内容、设定集、快照等创作数据 **100% 存储在浏览器本地（IndexedDB）**，不会上传到任何服务器
-- API Key 存储在浏览器 localStorage 中
+- 章节内容、设定集、快照等创作数据默认保存在浏览器 IndexedDB。主动开启 Author Cloud、WebDAV 或局域网传输后，所选同步数据会发送到你配置的服务或设备。
+- 浏览器部署将 AI API Key 保存在 localStorage；桌面客户端使用操作系统安全存储加密保护。
 
 ### ⚠️ AI 功能的数据流向
 
-使用 AI 功能时（续写、改写、对话等），以下数据会经过**部署者的服务器**转发给 AI 供应商：
-- 你的 **API Key**
-- 你发送给 AI 的**文字内容**
+当 AI 供应商支持浏览器访问，且未配置代理或联网搜索时，官方网页版会把你的 **API Key** 和**发送给 AI 的文字内容**从浏览器直接发送给供应商。
 
-```
-你的浏览器 → 部署者的服务器 → AI 供应商（智谱/Gemini/DeepSeek等）
-```
+供应商不支持浏览器直连、配置了代理地址、启用联网搜索，或部署者关闭直连时，请求会先经过该部署的 API 接口再发送给供应商。桌面客户端会经过同一台电脑上的本地回环服务。
 
-**如果你正在使用他人部署的公开实例**，虽然部署者承诺不会窥视日志，但技术上存在被截获的可能。因此：
-
-1. ✅ 可以先用公开实例**简单体验**功能
-2. ⚠️ 体验完毕后，**务必到 API 提供商网站及时销毁你的 Key**
-3. 🔐 **正式使用请自行 Fork 并部署私有实例**，这样数据只经过你自己的服务器
-
-> 💡 部署自己的实例非常简单：Fork 本项目 → 在 Vercel 一键部署 → 完成。全程不到 5 分钟。
+- 只在你信任的部署中填写 API Key。
+- 如果供应商支持，优先使用权限受限、可随时撤销的 Key。
+- 如需完全控制转发环境，可自行部署应用。
 
 ---
 
@@ -611,12 +565,10 @@ Author 支持从多种格式导入设定集：**JSON / Markdown / TXT / DOCX / P
 
 ### 🔌 MCP 工具
 - [Chrome DevTools MCP](https://developer.chrome.com/) — 浏览器测试、性能分析、DOM 检查
-- [Firebase MCP](https://firebase.google.com/) — 云数据库管理、安全规则验证、项目配置
 - [GitHub MCP](https://github.com/) — 仓库管理、自动化发版、代码搜索
 
-### ☁️ 后端与数据库
-- [Firebase Firestore](https://firebase.google.com/docs/firestore) — 多端云同步、NoSQL 数据存储
-- [Firebase Hosting / Vercel](https://vercel.com/) — 全栈服务端托管
+### ☁️ 部署
+- [Vercel](https://vercel.com/) — 自部署版本可选的全栈托管平台
 
 ### 📦 前端与开源组件
 - [Next.js](https://nextjs.org/) — React 全栈框架

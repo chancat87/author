@@ -1,29 +1,25 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { X, Mail, Lock, XCircle, ArrowLeft, ShieldCheck, Globe, Server } from 'lucide-react';
+import { X, Mail, Lock, XCircle, ShieldCheck, Globe, Server } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { useI18n } from '../lib/useI18n';
 import { useAuthAction } from '../lib/useAuthAction';
 import { apiPath, OFFICIAL_APP_URL } from '../lib/api-base';
 import { isCustomServerConfigured, setCloudServerUrl } from '../lib/custom-auth';
 import { legalDocPath, setAgreedPolicyVersion } from '../lib/constants';
-import { getFirebaseShutdownInfo } from '../lib/firebase-shutdown';
 import BeianNotice from './BeianNotice';
-import GoogleIcon from './icons/GoogleIcon';
 import WechatIcon from './icons/WechatIcon';
 import QQIcon from './icons/QQIcon';
 import PhoneIcon from './icons/PhoneIcon';
 
 /**
- * 登录弹窗 — 两层结构：
- *   主区（mode='login' / 'register'）：自建服务器账号（邮箱 + 密码），登录/注册二合一，默认。
- *   次入口（mode='firebase'）：旧版 Firebase 登录（邮箱 + 密码 + Google），供老用户迁移，可返回。
- * 登录后由 useAuthAction → syncFromCloud() 自动按当前登录的后端同步（persistence 分流）。
+ * Author Cloud 登录弹窗：邮箱登录与验证码注册。
+ * 登录后由 useAuthAction → syncFromCloud() 自动同步。
  */
 export default function LoginModal() {
-    const { showLoginModal, setShowLoginModal, setShowRegisterModal, setShowMigrationWizard } = useAppStore();
-    const [mode, setMode] = useState('login'); // 'login' | 'register' | 'firebase'
+    const { showLoginModal, setShowLoginModal } = useAppStore();
+    const [mode, setMode] = useState('login'); // 'login' | 'register'
     const [authEmail, setAuthEmail] = useState('');
     const [authPassword, setAuthPassword] = useState('');
     const [authCode, setAuthCode] = useState('');
@@ -38,6 +34,7 @@ export default function LoginModal() {
     });
     const [selfHostOpen, setSelfHostOpen] = useState(false);
     const [selfHostUrl, setSelfHostUrl] = useState('');
+    const [selfHostError, setSelfHostError] = useState('');
     const [agreeChecked, setAgreeChecked] = useState(false); // 勾选同意条款后才允许登录/注册
     const { t, language } = useI18n();
 
@@ -52,6 +49,7 @@ export default function LoginModal() {
             setSendingCode(false);
             setCodeCountdown(0);
             setCodeNotice(null);
+            setSelfHostError('');
             setMode('login');
             setAgreeChecked(false);
             resetError?.();
@@ -84,7 +82,11 @@ export default function LoginModal() {
     const handleConnectSelfHost = () => {
         const url = selfHostUrl.trim();
         if (!url) return;
-        setCloudServerUrl(url);
+        if (!setCloudServerUrl(url)) {
+            setSelfHostError(t('loginModal.selfHostOfficialBlocked'));
+            return;
+        }
+        setSelfHostError('');
         setSelfHostOpen(false);
         setServerConfigured(true);
     };
@@ -106,23 +108,6 @@ export default function LoginModal() {
             setSendingCode(false);
         }
     };
-    // Firebase（次入口）：邮箱登录 / Google
-    const handleFirebaseLogin = () => run(async () => {
-        const auth = await import('../lib/auth');
-        await auth.signInWithEmail(authEmail, authPassword);
-        setAgreedPolicyVersion();
-    });
-    const handleGoogleLogin = () => run(async () => {
-        const auth = await import('../lib/auth');
-        await auth.signInWithGoogle();
-        setAgreedPolicyVersion();
-    });
-    const switchToFirebaseRegister = () => {
-        setShowLoginModal(false);
-        setTimeout(() => setShowRegisterModal(true), 150);
-    };
-
-    const isFirebase = mode === 'firebase';
     const isRegister = mode === 'register';
     const canSubmit = authEmail && authPassword && (!isRegister || authCode.length === 6) && !loading && agreeChecked;
     const canSendCode = Boolean(authEmail) && !sendingCode && codeCountdown <= 0 && !loading;
@@ -164,7 +149,7 @@ export default function LoginModal() {
             <a href={apiPath(legalDocPath('PRIVACY', language))} target="_blank" rel="noopener noreferrer">{t('registerModal.privacyPolicy')}</a>
         </p>
     );
-    // 同意勾选行 —— 登录 / 注册 / Firebase 入口的提交都以勾选为前提
+    // 同意勾选行 —— 登录 / 注册提交都以勾选为前提
     const agreeRow = (
         <label className="login-modal-agree-row">
             <input type="checkbox" checked={agreeChecked} onChange={e => setAgreeChecked(e.target.checked)} />
@@ -184,53 +169,7 @@ export default function LoginModal() {
                     <X size={18} />
                 </button>
 
-                {isFirebase ? (
-                    // ==================== Firebase 次入口 ====================
-                    <>
-                        <button className="login-modal-back" onClick={() => switchMode('login')}>
-                            <ArrowLeft size={15} /> {t('loginModal.back')}
-                        </button>
-
-                        <div className="login-modal-header">
-                            <h2 className="login-modal-title">{t('loginModal.firebaseTitle')}</h2>
-                            <p className="login-modal-desc">{t('loginModal.firebaseDesc')}</p>
-                        </div>
-
-                        {/* 这个入口 2026-08-15 起就是死路，登录前先说清楚 */}
-                        <div className="migration-deadline">
-                            {getFirebaseShutdownInfo().stage === 'ended' ? t('migration.deadlineEnded') : t('migration.deadline')}
-                        </div>
-
-                        <button className="login-modal-submit-btn" onClick={() => { setShowLoginModal(false); setShowMigrationWizard(true); }}>
-                            {t('migration.startBtn')} →
-                        </button>
-
-                        <div className="login-modal-divider"><span>{t('loginModal.or')}</span></div>
-
-                        {emailPasswordFields(handleFirebaseLogin)}
-
-                        {error && <div className="login-modal-error"><XCircle size={13} /> {error}</div>}
-
-                        <button className="login-modal-submit-btn" onClick={handleFirebaseLogin} disabled={!canSubmit}>
-                            {loading ? t('loginModal.loggingIn') : t('loginModal.loginBtn')}
-                        </button>
-
-                        <div className="login-modal-divider"><span>{t('loginModal.or')}</span></div>
-
-                        <button className="login-modal-google-btn" onClick={handleGoogleLogin} disabled={loading || !agreeChecked}>
-                            <GoogleIcon />
-                            {t('loginModal.googleLogin')}
-                        </button>
-
-                        <div className="login-modal-switch">
-                            {t('loginModal.noAccount')}<button onClick={switchToFirebaseRegister}>{t('loginModal.registerNow')}</button>
-                        </div>
-
-                        {agreeRow}
-                    </>
-                ) : (
-                    // ==================== 主区：自建服务器账号 / 官方引导 ====================
-                    <>
+                <>
                         {serverConfigured ? (
                             // 已配置服务器（官方 /app，或自部署已填地址）：邮箱 + 密码登录 / 注册
                             <>
@@ -344,7 +283,7 @@ export default function LoginModal() {
                                             <input
                                                 type="url"
                                                 value={selfHostUrl}
-                                                onChange={e => setSelfHostUrl(e.target.value)}
+                                                onChange={e => { setSelfHostUrl(e.target.value); setSelfHostError(''); }}
                                                 placeholder={t('loginModal.selfHostPlaceholder')}
                                                 onKeyDown={e => { if (e.key === 'Enter' && selfHostUrl.trim()) handleConnectSelfHost(); }}
                                                 className="login-modal-input"
@@ -357,6 +296,9 @@ export default function LoginModal() {
                                         >
                                             {t('loginModal.selfHostConnect')}
                                         </button>
+                                        {selfHostError && (
+                                            <div className="login-modal-error"><XCircle size={13} /> {selfHostError}</div>
+                                        )}
                                         <p className="login-modal-hint">{t('loginModal.selfHostHint')}</p>
                                     </div>
                                 )}
@@ -364,12 +306,8 @@ export default function LoginModal() {
                         )}
 
                         {!serverConfigured && legalLinks}
-                        <button className="login-modal-alt-entry" onClick={() => switchMode('firebase')}>
-                            {t('loginModal.useFirebaseEntry')}
-                        </button>
                         <BeianNotice className="login-modal-beian" />
-                    </>
-                )}
+                </>
             </div>
         </div>
     );

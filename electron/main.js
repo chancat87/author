@@ -1,6 +1,6 @@
-const { app, BrowserWindow, shell, dialog, ipcMain, safeStorage, Menu } = require('electron');
+const { app, BrowserWindow, shell, dialog, ipcMain, safeStorage, Menu, session } = require('electron');
 const path = require('path');
-const { execSync } = require('child_process');
+const { createHmac, randomBytes, timingSafeEqual } = require('crypto');
 const http = require('http');
 const net = require('net');
 const fs = require('fs');
@@ -102,7 +102,11 @@ function writeSecureStore(store) {
 
 function normalizeSecureStoreKey(key) {
     const safeKey = String(key || '').trim();
-    if (!/^[a-zA-Z0-9_.-]{1,80}$/.test(safeKey)) {
+    const allowed = safeKey === 'ai-credentials'
+        || safeKey === 'cloud-session-tokens'
+        || safeKey === 'webdav-password'
+        || /^tts\.(?:openai-compatible|gemini|anthropic-custom|custom)\.apiKey$/.test(safeKey);
+    if (!allowed) {
         throw new Error('Invalid secure store key');
     }
     return safeKey;
@@ -110,25 +114,22 @@ function normalizeSecureStoreKey(key) {
 
 function encryptSecret(value) {
     const text = String(value || '');
-    if (safeStorage.isEncryptionAvailable()) {
-        return {
-            encrypted: true,
-            value: safeStorage.encryptString(text).toString('base64'),
-        };
+    if (!safeStorage.isEncryptionAvailable()) {
+        throw new Error('Operating system secure storage is unavailable');
     }
     return {
-        encrypted: false,
-        value: Buffer.from(text, 'utf8').toString('base64'),
+        encrypted: true,
+        value: safeStorage.encryptString(text).toString('base64'),
     };
 }
 
 function decryptSecret(entry) {
     if (!entry?.value) return '';
-    const buffer = Buffer.from(entry.value, 'base64');
-    if (entry.encrypted) {
-        return safeStorage.decryptString(buffer);
+    if (!entry.encrypted || !safeStorage.isEncryptionAvailable()) {
+        throw new Error('Secret is not protected by operating system secure storage');
     }
-    return buffer.toString('utf8');
+    const buffer = Buffer.from(entry.value, 'base64');
+    return safeStorage.decryptString(buffer);
 }
 
 function readLogTail(filePath, maxBytes = 2 * 1024 * 1024) {
@@ -170,6 +171,9 @@ let serverProcess;
 
 const isDev = process.argv.includes('--dev');
 const BASE_PORT = parseInt(process.env.PORT, 10) || 3000;
+const desktopCapability = isDev
+    ? String(process.env.AUTHOR_DESKTOP_CAPABILITY || '')
+    : randomBytes(32).toString('base64url');
 let actualPort = BASE_PORT;
 let loadRetries = 0;
 const MAX_LOAD_RETRIES = 10;
@@ -177,10 +181,33 @@ let serverReady = false; // 追踪服务器是否真正就绪
 let serverCrashed = false; // 追踪子进程是否已崩溃
 let latestCrashReportPath = null;
 let rendererBreadcrumbs = [];
+let serverIdentityVerified = false;
 const APP_WINDOW_TITLE = 'Author';
+const DESKTOP_CAPABILITY_COOKIE = 'author-desktop-capability';
 
-function getServerUrl(host = 'localhost') {
+function getServerUrl(host = '127.0.0.1') {
     return `http://${host}:${actualPort}`;
+}
+
+function isTrustedAppUrl(rawUrl) {
+    try {
+        return new URL(rawUrl).origin === getServerUrl();
+    } catch {
+        return false;
+    }
+}
+
+function assertTrustedIpcSender(event) {
+    const senderUrl = event?.senderFrame?.url || event?.sender?.getURL?.() || '';
+    const trusted = serverIdentityVerified
+        && mainWindow
+        && !mainWindow.isDestroyed()
+        && event?.sender === mainWindow.webContents
+        && isTrustedAppUrl(senderUrl);
+    if (!trusted) {
+        log(`[Security] Rejected IPC from ${sanitizeLogText(senderUrl, 300) || 'unknown sender'}`);
+        throw new Error('Untrusted renderer');
+    }
 }
 
 function rememberRendererDiagnostic(entry, senderUrl) {
@@ -281,6 +308,7 @@ app.on('child-process-gone', (event, details) => {
 });
 
 ipcMain.handle('write-diagnostic-log', async (event, entry) => {
+    assertTrustedIpcSender(event);
     const safeEntry = rememberRendererDiagnostic(entry, event.senderFrame?.url);
     if (shouldLogRendererDiagnostic(safeEntry)) {
         let metadata = '';
@@ -292,13 +320,18 @@ ipcMain.handle('write-diagnostic-log', async (event, entry) => {
     return { success: true };
 });
 
-ipcMain.handle('get-diagnostic-bundle', async () => {
+ipcMain.handle('get-diagnostic-bundle', async (event) => {
+    assertTrustedIpcSender(event);
     return buildMainDiagnosticBundle();
 });
 
-ipcMain.handle('get-app-version', async () => app.getVersion());
+ipcMain.handle('get-app-version', async (event) => {
+    assertTrustedIpcSender(event);
+    return app.getVersion();
+});
 
-ipcMain.handle('open-diagnostic-log-file', async () => {
+ipcMain.handle('open-diagnostic-log-file', async (event) => {
+    assertTrustedIpcSender(event);
     try {
         showLogFileInFolder(latestCrashReportPath || logFile);
         return { success: true, logFile };
@@ -308,6 +341,7 @@ ipcMain.handle('open-diagnostic-log-file', async () => {
 });
 
 ipcMain.handle('secure-store-set', async (event, key, value) => {
+    assertTrustedIpcSender(event);
     const safeKey = normalizeSecureStoreKey(key);
     const store = readSecureStore();
     store[safeKey] = encryptSecret(value);
@@ -316,6 +350,7 @@ ipcMain.handle('secure-store-set', async (event, key, value) => {
 });
 
 ipcMain.handle('secure-store-get', async (event, key) => {
+    assertTrustedIpcSender(event);
     const safeKey = normalizeSecureStoreKey(key);
     const store = readSecureStore();
     if (!store[safeKey]) return '';
@@ -323,6 +358,7 @@ ipcMain.handle('secure-store-get', async (event, key) => {
 });
 
 ipcMain.handle('secure-store-delete', async (event, key) => {
+    assertTrustedIpcSender(event);
     const safeKey = normalizeSecureStoreKey(key);
     const store = readSecureStore();
     delete store[safeKey];
@@ -330,19 +366,86 @@ ipcMain.handle('secure-store-delete', async (event, key) => {
     return { success: true };
 });
 
+ipcMain.on('ai-credential-bundle-get', (event) => {
+    try {
+        assertTrustedIpcSender(event);
+        const store = readSecureStore();
+        event.returnValue = {
+            success: true,
+            value: store['ai-credentials'] ? decryptSecret(store['ai-credentials']) : '',
+        };
+    } catch (error) {
+        event.returnValue = { success: false, error: error?.message || 'Secure storage unavailable' };
+    }
+});
+
+ipcMain.on('ai-credential-bundle-set', (event, value) => {
+    try {
+        assertTrustedIpcSender(event);
+        const serialized = String(value || '');
+        if (Buffer.byteLength(serialized, 'utf8') > 1024 * 1024) {
+            throw new Error('Credential bundle is too large');
+        }
+        const parsed = JSON.parse(serialized || '{}');
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            throw new Error('Invalid credential bundle');
+        }
+        const store = readSecureStore();
+        store['ai-credentials'] = encryptSecret(serialized);
+        writeSecureStore(store);
+        event.returnValue = { success: true, encrypted: true };
+    } catch (error) {
+        event.returnValue = { success: false, error: error?.message || 'Secure storage unavailable' };
+    }
+});
+
+ipcMain.on('cloud-session-tokens-get', (event) => {
+    try {
+        assertTrustedIpcSender(event);
+        const store = readSecureStore();
+        event.returnValue = {
+            success: true,
+            value: store['cloud-session-tokens'] ? decryptSecret(store['cloud-session-tokens']) : '',
+        };
+    } catch (error) {
+        event.returnValue = { success: false, error: error?.message || 'Secure storage unavailable' };
+    }
+});
+
+ipcMain.on('cloud-session-tokens-set', (event, value) => {
+    try {
+        assertTrustedIpcSender(event);
+        const serialized = String(value || '');
+        if (Buffer.byteLength(serialized, 'utf8') > 128 * 1024) {
+            throw new Error('Cloud session token bundle is too large');
+        }
+        const parsed = JSON.parse(serialized || '{}');
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            throw new Error('Invalid cloud session token bundle');
+        }
+        const store = readSecureStore();
+        store['cloud-session-tokens'] = encryptSecret(serialized);
+        writeSecureStore(store);
+        event.returnValue = { success: true, encrypted: true };
+    } catch (error) {
+        event.returnValue = { success: false, error: error?.message || 'Secure storage unavailable' };
+    }
+});
+
+ipcMain.on('cloud-session-tokens-delete', (event) => {
+    try {
+        assertTrustedIpcSender(event);
+        const store = readSecureStore();
+        delete store['cloud-session-tokens'];
+        writeSecureStore(store);
+        event.returnValue = { success: true };
+    } catch (error) {
+        event.returnValue = { success: false, error: error?.message || 'Secure storage unavailable' };
+    }
+});
+
 function createWindow() {
     Menu.setApplicationMenu(null);
-
-    const isTrustedAppUrl = (rawUrl) => {
-        try {
-            const parsed = new URL(rawUrl);
-            return parsed.protocol === 'http:'
-                && ['localhost', '127.0.0.1'].includes(parsed.hostname)
-                && Number(parsed.port || 80) === actualPort;
-        } catch {
-            return false;
-        }
-    };
 
     const openExternalHttpUrl = (rawUrl) => {
         try {
@@ -384,9 +487,9 @@ function createWindow() {
 
     mainWindow.once('ready-to-show', () => {
         mainWindow.show();
-        // F12 打开开发者工具
+        // 开发模式下允许 F12 打开开发者工具。
         mainWindow.webContents.on('before-input-event', (event, input) => {
-            if (input.key === 'F12') {
+            if (isDev && input.key === 'F12') {
                 mainWindow.webContents.toggleDevTools();
             }
         });
@@ -412,10 +515,10 @@ function createWindow() {
         }
     });
 
-    // 只有真正加载了 localhost 页面才重置重试计数器
+    // 只有真正加载了已经验证的内置服务页面才重置重试计数器。
     mainWindow.webContents.on('did-finish-load', () => {
         const url = mainWindow.webContents.getURL();
-        if (url.includes('localhost') || url.includes('127.0.0.1')) {
+        if (isTrustedAppUrl(url)) {
             log('Page loaded successfully: ' + url);
             loadRetries = 0;
             if (!mainWindow.isDestroyed() && mainWindow.getTitle() !== APP_WINDOW_TITLE) {
@@ -533,7 +636,8 @@ function createWindow() {
         }
     });
 
-    ipcMain.on('allow-close', () => {
+    ipcMain.on('allow-close', (event) => {
+        try { assertTrustedIpcSender(event); } catch { return; }
         isForceClosing = true;
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.close();
@@ -541,7 +645,8 @@ function createWindow() {
     });
 
     // 用户在退出弹窗点击"取消"时，重置状态，允许下次再弹窗
-    ipcMain.on('cancel-close', () => {
+    ipcMain.on('cancel-close', (event) => {
+        try { assertTrustedIpcSender(event); } catch { return; }
         isForceClosing = false;
     });
 
@@ -572,26 +677,6 @@ async function findAvailablePort(startPort, maxTries = 10) {
         log(`Port ${port} is in use, trying next...`);
     }
     return null;
-}
-
-// 尝试杀掉占用端口的进程 (Windows)
-function tryKillPortProcess(port) {
-    try {
-        if (process.platform === 'win32') {
-            const result = execSync(`netstat -ano | findstr :${port} | findstr LISTENING`, { encoding: 'utf8', timeout: 5000 });
-            const lines = result.trim().split('\n');
-            for (const line of lines) {
-                const parts = line.trim().split(/\s+/);
-                const pid = parts[parts.length - 1];
-                if (pid && pid !== '0') {
-                    log(`Killing process ${pid} on port ${port}`);
-                    try { execSync(`taskkill /F /PID ${pid}`, { timeout: 5000 }); } catch (e) { }
-                }
-            }
-        }
-    } catch (e) {
-        // 没有进程占用或命令失败，忽略
-    }
 }
 
 function checkTcpReady(host, port, timeout = 1000) {
@@ -676,6 +761,72 @@ function waitForServer(port, maxRetries = 30) {
     });
 }
 
+function requestDesktopHandshake(challenge, timeout = 3000) {
+    return new Promise((resolve, reject) => {
+        const req = http.get({
+            hostname: '127.0.0.1',
+            port: actualPort,
+            path: `/api/desktop-handshake?challenge=${encodeURIComponent(challenge)}`,
+            headers: { Accept: 'application/json' },
+        }, (res) => {
+            let body = '';
+            res.setEncoding('utf8');
+            res.on('data', chunk => {
+                if (body.length < 4096) body += chunk;
+            });
+            res.on('end', () => {
+                if (res.statusCode !== 200) {
+                    reject(new Error(`Desktop handshake returned ${res.statusCode}`));
+                    return;
+                }
+                try { resolve(JSON.parse(body)); } catch { reject(new Error('Invalid desktop handshake response')); }
+            });
+        });
+        req.on('error', reject);
+        req.setTimeout(timeout, () => req.destroy(new Error('Desktop handshake timed out')));
+    });
+}
+
+async function establishDesktopServerTrust() {
+    // Existing external dev servers cannot inherit a freshly generated secret.
+    // Production builds always require the authenticated handshake.
+    if (!desktopCapability) {
+        if (isDev) {
+            log('[Security] Development server identity handshake is disabled');
+            serverIdentityVerified = true;
+            return true;
+        }
+        return false;
+    }
+
+    try {
+        const challenge = randomBytes(32).toString('base64url');
+        const response = await requestDesktopHandshake(challenge);
+        const expected = createHmac('sha256', desktopCapability).update(challenge).digest();
+        const actual = Buffer.from(String(response?.proof || ''), 'hex');
+        if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
+            throw new Error('Desktop server identity proof did not match');
+        }
+
+        await session.defaultSession.cookies.set({
+            url: getServerUrl(),
+            name: DESKTOP_CAPABILITY_COOKIE,
+            value: desktopCapability,
+            path: '/',
+            httpOnly: true,
+            secure: false,
+            sameSite: 'strict',
+        });
+        serverIdentityVerified = true;
+        log('[Security] Desktop server identity verified');
+        return true;
+    } catch (error) {
+        serverIdentityVerified = false;
+        log(`[Security] Desktop server identity verification failed: ${error?.message || error}`);
+        return false;
+    }
+}
+
 function startNextServer() {
     return new Promise(async (resolve) => {
         if (isDev) {
@@ -714,12 +865,6 @@ function startNextServer() {
             resolve(false);
             return;
         }
-
-        // 尝试释放被占用的端口
-        tryKillPortProcess(BASE_PORT);
-
-        // 等待一下让端口释放
-        await new Promise(r => setTimeout(r, 500));
 
         // 查找可用端口
         actualPort = await findAvailablePort(BASE_PORT);
@@ -834,8 +979,9 @@ function tryChildProcessMode(standaloneDir, serverPath) {
                     ...process.env,
                     NODE_ENV: 'production',
                     PORT: String(actualPort),
-                    HOSTNAME: '0.0.0.0',
+                    HOSTNAME: '127.0.0.1',
                     BODY_SIZE_LIMIT: '52428800',
+                    AUTHOR_DESKTOP_CAPABILITY: desktopCapability,
                     ELECTRON_RUN_AS_NODE: '1',
                 },
                 stdio: ['ignore', 'pipe', 'pipe'],
@@ -859,15 +1005,18 @@ function tryChildProcessMode(standaloneDir, serverPath) {
             serverProcess.on('error', (err) => {
                 log('[Server process error] ' + err.message);
                 serverCrashed = true;
+                serverIdentityVerified = false;
             });
             serverProcess.on('exit', (code, signal) => {
                 log(`[Server process exit] code: ${code}, signal: ${signal}`);
                 serverReady = false;
                 serverCrashed = true;
+                serverIdentityVerified = false;
             });
             serverProcess.on('close', (code, signal) => {
                 log(`[Server process closed] code: ${code}, signal: ${signal}`);
                 serverReady = false;
+                serverIdentityVerified = false;
             });
 
             // 等 3 秒检查是否还活着
@@ -903,8 +1052,9 @@ function tryInProcessMode(standaloneDir, serverPath) {
             // 设置环境变量（server.js 会读取这些）
             process.env.NODE_ENV = 'production';
             process.env.PORT = String(actualPort);
-            process.env.HOSTNAME = '0.0.0.0';
+            process.env.HOSTNAME = '127.0.0.1';
             process.env.BODY_SIZE_LIMIT = '52428800';
+            process.env.AUTHOR_DESKTOP_CAPABILITY = desktopCapability;
 
             // 切换工作目录到 standalone（server.js 需要相对路径找 .next 文件）
             process.chdir(standaloneDir);
@@ -1082,6 +1232,18 @@ app.whenReady().then(async () => {
         return;
     }
 
+    const trustedServer = await establishDesktopServerTrust();
+    if (!trustedServer) {
+        closeSplashWindow();
+        log('Desktop server identity verification failed.');
+        dialog.showErrorBox(
+            'Author 安全校验失败',
+            '内置服务未能通过身份校验。为防止连接到伪造的本地服务，应用已停止启动。\n\n请检查日志: ' + logFile
+        );
+        app.quit();
+        return;
+    }
+
     updateSplashText('加载界面中...');
     createWindow();
 
@@ -1163,7 +1325,8 @@ function setupAutoUpdater() {
     });
 
     // ---- IPC 处理 ----
-    ipcMain.handle('check-for-update', async () => {
+    ipcMain.handle('check-for-update', async (event) => {
+        assertTrustedIpcSender(event);
         try {
             const result = await autoUpdater.checkForUpdates();
             return { success: true, version: result?.updateInfo?.version };
@@ -1173,7 +1336,8 @@ function setupAutoUpdater() {
         }
     });
 
-    ipcMain.handle('download-update', async () => {
+    ipcMain.handle('download-update', async (event) => {
+        assertTrustedIpcSender(event);
         try {
             await autoUpdater.downloadUpdate();
             return { success: true };
@@ -1183,7 +1347,8 @@ function setupAutoUpdater() {
         }
     });
 
-    ipcMain.handle('download-and-install-update', async () => {
+    ipcMain.handle('download-and-install-update', async (event) => {
+        assertTrustedIpcSender(event);
         try {
             log('download-and-install-update: starting download...');
             // 注册一次性监听器，下载完成后自动安装
@@ -1203,7 +1368,8 @@ function setupAutoUpdater() {
         }
     });
 
-    ipcMain.handle('quit-and-install', () => {
+    ipcMain.handle('quit-and-install', (event) => {
+        assertTrustedIpcSender(event);
         log('User requested quit-and-install');
         if (serverProcess) {
             serverProcess.kill();
