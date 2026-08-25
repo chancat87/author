@@ -1,9 +1,16 @@
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 
+const reactHooksPlugin = nextVitals
+  .find((config) => config.plugins?.["react-hooks"])
+  ?.plugins["react-hooks"];
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   {
+    plugins: {
+      "react-hooks": reactHooksPlugin,
+    },
     rules: {
       // The app is not yet written for the stricter React Compiler advisory
       // rules shipped with the latest Next.js lint preset. Keep real hook-order

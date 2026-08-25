@@ -4,6 +4,12 @@ const { createHmac, randomBytes, timingSafeEqual } = require('crypto');
 const http = require('http');
 const net = require('net');
 const fs = require('fs');
+const {
+    STABLE_DESKTOP_HOST,
+    getDesktopServerUrl,
+    isTrustedDesktopUrl,
+    selectStableDesktopPort,
+} = require('./origin-policy.cjs');
 
 // 加载 .env.local（轻量实现，无需 dotenv 依赖）
 (function loadEnvFile() {
@@ -185,16 +191,12 @@ let serverIdentityVerified = false;
 const APP_WINDOW_TITLE = 'Author';
 const DESKTOP_CAPABILITY_COOKIE = 'author-desktop-capability';
 
-function getServerUrl(host = '127.0.0.1') {
-    return `http://${host}:${actualPort}`;
+function getServerUrl(host = STABLE_DESKTOP_HOST) {
+    return getDesktopServerUrl(actualPort, host);
 }
 
 function isTrustedAppUrl(rawUrl) {
-    try {
-        return new URL(rawUrl).origin === getServerUrl();
-    } catch {
-        return false;
-    }
+    return isTrustedDesktopUrl(rawUrl, actualPort);
 }
 
 function assertTrustedIpcSender(event) {
@@ -667,18 +669,6 @@ function isPortAvailable(port) {
     });
 }
 
-// 查找可用端口
-async function findAvailablePort(startPort, maxTries = 10) {
-    for (let i = 0; i < maxTries; i++) {
-        const port = startPort + i;
-        if (await isPortAvailable(port)) {
-            return port;
-        }
-        log(`Port ${port} is in use, trying next...`);
-    }
-    return null;
-}
-
 function checkTcpReady(host, port, timeout = 1000) {
     return new Promise((resolve) => {
         const socket = net.createConnection({ host, port });
@@ -866,10 +856,11 @@ function startNextServer() {
             return;
         }
 
-        // 查找可用端口
-        actualPort = await findAvailablePort(BASE_PORT);
+        // 浏览器存储按 Origin（含端口）隔离。为避免升级或端口竞争让作品
+        // 看起来“消失”，桌面端只使用既有的稳定端口，不静默切换端口。
+        actualPort = await selectStableDesktopPort(BASE_PORT, isPortAvailable);
         if (!actualPort) {
-            const msg = `端口 ${BASE_PORT}-${BASE_PORT + 9} 全部被占用，无法启动服务器。`;
+            const msg = `端口 ${BASE_PORT} 已被占用。为保护本地作品数据，Author 不会自动切换到其他端口。\n\n请关闭占用该端口的程序后重试。`;
             log('ERROR: ' + msg);
             dialog.showErrorBox('Author 启动失败', msg);
             resolve(false);
