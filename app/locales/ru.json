@@ -199,6 +199,7 @@
         "actionsApply": "Применить",
         "actionsApplied": "Применено",
         "actionsDelete": "Удалить",
+        "actionsUndo": "Отменить",
         "inputPlaceholder": "Введите сообщение... (Enter для отправки, Shift+Enter для новой строки)",
         "inputPlaceholderCtrlEnter": "Введите сообщение... (Enter для новой строки, Ctrl/⌘+Enter для отправки)",
         "expandInput": "Развернуть ввод",
@@ -240,6 +241,7 @@
         },
         "actions": {
             "add": "Добавить",
+            "append": "Дополнить",
             "update": "Обновить",
             "delete": "Удалить"
         },

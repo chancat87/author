@@ -19,6 +19,14 @@ import { copyTextToClipboard } from '../lib/clipboard';
 import { resolveAiEndpoint } from '../lib/ai-provider-compat';
 import { aiFetch } from '../lib/ai-direct';
 import { localizeApiError } from '../lib/api-error-i18n';
+import {
+    applySettingsUndoPatch,
+    canUndoCreatedSettingsNode,
+    createSettingsContentPlan,
+    createSettingsUndoPatch,
+    dismissSettingsActionCard,
+    normalizeSettingsActionMode,
+} from '../lib/settings-action-merge';
 
 const INLINE_THINK_OPEN = '<think>';
 const INLINE_THINK_CLOSE = '</think>';
@@ -248,6 +256,105 @@ function ContextViewerModal({ viewingContext, onClose }) {
     );
 }
 
+function formatSettingsActionValue(value) {
+    if (value === undefined || value === null || value === '') return '—';
+    if (typeof value === 'string') return value;
+    try {
+        return JSON.stringify(value, null, 2);
+    } catch {
+        return String(value);
+    }
+}
+
+function SettingsActionReviewModal({ review, onApplySafe, onApplyReplace, onClose, tx }) {
+    if (!review) return null;
+    const aiSuggestedReplace = review.requestedMode === 'replace';
+
+    return (
+        <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={tx('确认设定变更', 'Review settings changes', 'Проверка изменений настроек')}
+            style={{
+                position: 'fixed', inset: 0, zIndex: 10020,
+                background: 'rgba(0,0,0,0.52)', display: 'flex',
+                alignItems: 'center', justifyContent: 'center', padding: 20,
+            }}
+            onClick={onClose}
+        >
+            <div
+                style={{
+                    width: 'min(640px, 100%)', maxHeight: '82vh', overflow: 'auto',
+                    background: 'var(--bg-primary)', color: 'var(--text-primary)',
+                    border: '1px solid var(--border-light)', borderRadius: 'var(--radius-lg)',
+                    boxShadow: 'var(--shadow-xl)', padding: 20,
+                }}
+                onClick={event => event.stopPropagation()}
+            >
+                <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>
+                    {tx('确认设定变更', 'Review settings changes', 'Проверка изменений настроек')}
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 14 }}>
+                    {aiSuggestedReplace
+                        ? tx(
+                            `AI 建议替换「${review.targetName}」的已有内容。替换前请核对新旧内容。`,
+                            `AI suggests replacing existing content in "${review.targetName}". Compare both versions first.`,
+                            `ИИ предлагает заменить содержимое «${review.targetName}». Сначала сравните версии.`,
+                        )
+                        : tx(
+                            `「${review.targetName}」已有内容。为避免误覆盖，默认保留旧内容并补充。`,
+                            `"${review.targetName}" already has content. Existing text is preserved by default.`,
+                            `В «${review.targetName}» уже есть данные. По умолчанию старый текст сохраняется.`,
+                        )}
+                </div>
+                <div style={{ display: 'grid', gap: 10 }}>
+                    {review.fields.map(field => (
+                        <div key={field.key} style={{ border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+                            <div style={{ padding: '7px 10px', background: 'var(--bg-secondary)', fontSize: 12, fontWeight: 700 }}>
+                                {field.key}
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
+                                <div style={{ padding: 10, borderRight: '1px solid var(--border-light)' }}>
+                                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 5 }}>
+                                        {tx('原内容', 'Existing', 'Текущее')}
+                                    </div>
+                                    <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12.5, lineHeight: 1.55 }}>
+                                        {formatSettingsActionValue(field.previous)}
+                                    </div>
+                                </div>
+                                <div style={{ padding: 10 }}>
+                                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 5 }}>
+                                        {tx('AI 提议', 'AI proposal', 'Предложение ИИ')}
+                                    </div>
+                                    <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12.5, lineHeight: 1.55 }}>
+                                        {formatSettingsActionValue(field.incoming)}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+                <div style={{ marginTop: 12, fontSize: 11.5, lineHeight: 1.55, color: 'var(--text-muted)' }}>
+                    {tx(
+                        '安全合并会追加文字、合并并去重列表；年龄、状态等单一值发生冲突时保留旧值。',
+                        'Safe merge appends prose and deduplicates lists. Conflicting single values such as age or status keep the old value.',
+                        'Безопасное объединение дополняет текст и убирает дубли в списках. При конфликте одиночных значений сохраняется старое.',
+                    )}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 8, marginTop: 18 }}>
+                    <button className="btn" onClick={onClose}>{tx('取消', 'Cancel', 'Отмена')}</button>
+                    <button className="btn" onClick={onApplyReplace} style={{ color: 'var(--danger, #dc2626)' }}>
+                        {tx('使用新内容替换', 'Replace with new content', 'Заменить новым содержимым')}
+                    </button>
+                    <button className="btn primary" onClick={onApplySafe}>
+                        {tx('安全合并（推荐）', 'Safe merge (recommended)', 'Безопасно объединить')}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 // 解析消息中的 [SETTINGS_ACTION] 块
 // 彻底版：多模式匹配 + 流式不完整块隐藏 + 渐进式 JSON 修复
 function parseSettingsActions(content) {
@@ -326,7 +433,7 @@ function parseSettingsActions(content) {
     // === 阶段 4：兜底 —— 扫描裸 JSON 对象（AI 完全没用标签的罕见情况）===
     // 只在内容中有 "action" 关键字时尝试
     if (content.includes('"action"') && content.includes('"category"')) {
-        const jsonRegex = /\{[^{}]*"action"\s*:\s*"(?:add|update|delete)"[^{}]*"category"\s*:\s*"[^"]*"[^{}]*(?:\{[^{}]*\}[^{}]*)?\}/g;
+        const jsonRegex = /\{[^{}]*"action"\s*:\s*"(?:add|append|update|delete)"[^{}]*"category"\s*:\s*"[^"]*"[^{}]*(?:\{[^{}]*\}[^{}]*)?\}/g;
         let match;
         let lastIndex = 0;
         while ((match = jsonRegex.exec(content)) !== null) {
@@ -846,6 +953,8 @@ export default function AiSidebar({ onInsertText }) {
     const [showSessionList, setShowSessionList] = useState(false);
     // 设定操作卡片展开状态
     const [expandedActions, setExpandedActions] = useState(new Set());
+    const [settingsActionReview, setSettingsActionReview] = useState(null);
+    const [settingsActionUndos, setSettingsActionUndos] = useState({});
     // 显式的设定卡片生成模式
     const [settingsGenerationMode, setSettingsGenerationMode] = useState(false);
     const [settingsGenerationTargets, setSettingsGenerationTargets] = useState([]);
@@ -1359,11 +1468,143 @@ export default function AiSidebar({ onInsertText }) {
         }
     }, [activeSession, sessionStore, chatHistory, chatStreaming, activeChapterId, contextSelection, inputTokenBudget, streamResponse, setSessionStore, setChatStreaming, t, tx]);
 
-    const onApplySettingsAction = useCallback(async (action, actionKey) => {
+    const setSettingsActionCardState = useCallback((actionKey, { applied, undoRecord = null }) => {
+        const msgIdFromKey = actionKey.split('-action-')[0].replace(/-v\d+$/, '');
+        setSettingsActionUndos(previous => {
+            const next = { ...previous };
+            if (undoRecord) next[actionKey] = undoRecord;
+            else delete next[actionKey];
+            return next;
+        });
+        setSessionStore(prev => {
+            const newStore = {
+                ...prev,
+                sessions: prev.sessions.map(session => {
+                    if (!session.messages?.some(message => message.id === msgIdFromKey)) return session;
+                    return {
+                        ...session,
+                        messages: session.messages.map(message => {
+                            if (message.id !== msgIdFromKey) return message;
+                            const previous = message._appliedActions || [];
+                            const next = applied
+                                ? [...new Set([...previous, actionKey])]
+                                : previous.filter(key => key !== actionKey);
+                            const undoRecords = { ...(message._settingsActionUndos || {}) };
+                            if (undoRecord) undoRecords[actionKey] = undoRecord;
+                            else delete undoRecords[actionKey];
+                            const nextMessage = { ...message, _appliedActions: next };
+                            if (Object.keys(undoRecords).length > 0) {
+                                nextMessage._settingsActionUndos = undoRecords;
+                            } else {
+                                delete nextMessage._settingsActionUndos;
+                            }
+                            return nextMessage;
+                        }),
+                        updatedAt: Date.now(),
+                    };
+                }),
+            };
+            saveSessionStore(newStore);
+            return newStore;
+        });
+    }, [setSessionStore]);
+
+    const onDismissSettingsAction = useCallback((actionKey) => {
+        const msgIdFromKey = actionKey.split('-action-')[0].replace(/-v\d+$/, '');
+        setExpandedActions(previous => {
+            const next = new Set(previous);
+            next.delete(actionKey);
+            return next;
+        });
+        setSessionStore(previous => {
+            const newStore = {
+                ...previous,
+                sessions: previous.sessions.map(session => {
+                    if (!session.messages?.some(message => message.id === msgIdFromKey)) return session;
+                    return {
+                        ...session,
+                        messages: session.messages.map(message => (
+                            message.id === msgIdFromKey
+                                ? dismissSettingsActionCard(message, actionKey)
+                                : message
+                        )),
+                        updatedAt: Date.now(),
+                    };
+                }),
+            };
+            saveSessionStore(newStore);
+            return newStore;
+        });
+    }, [setSessionStore]);
+
+    const onUndoSettingsAction = useCallback(async (actionKey, persistedUndo = null) => {
+        const undo = settingsActionUndos[actionKey] || persistedUndo;
+        if (!undo) return;
         try {
+            let preservedCount = 0;
+            const nodes = await getSettingsNodes(undo.workId);
+            if (undo.kind === 'create') {
+                const created = nodes.find(node => node.id === undo.nodeId);
+                if (created) {
+                    if (!canUndoCreatedSettingsNode(created, undo.createdSnapshot)) {
+                        throw new Error(tx(
+                            '该条目在应用后又被修改过，为避免丢失内容，已保留该条目',
+                            'This item was edited after it was applied, so it was kept to prevent data loss',
+                            'Элемент был изменён после применения, поэтому он сохранён во избежание потери данных',
+                        ));
+                    }
+                    await deleteSettingsNode(created.id, undo.workId);
+                }
+            } else {
+                const target = nodes.find(node => node.id === undo.nodeId);
+                if (!target) throw new Error(tx('原设定条目不存在', 'The original settings item no longer exists', 'Исходная запись больше не существует'));
+                const contentUndo = applySettingsUndoPatch(target.content || {}, undo.contentPatch);
+                const nameUndo = applySettingsUndoPatch(
+                    { name: target.name },
+                    undo.namePatch,
+                );
+                await updateSettingsNode(target.id, {
+                    name: nameUndo.content.name ?? target.name,
+                    content: contentUndo.content,
+                }, nodes, undo.workId);
+                preservedCount = new Set([
+                    ...contentUndo.preservedFields,
+                    ...nameUndo.preservedFields,
+                ]).size;
+            }
+            setSettingsActionCardState(actionKey, { applied: false, undoRecord: null });
+            incrementSettingsVersion();
+            showToast(
+                preservedCount > 0
+                    ? tx(
+                        `已撤销本次修改；${preservedCount} 个后来又被修改的字段保持不变`,
+                        `Change undone; ${preservedCount} field(s) modified later were preserved`,
+                        `Изменение отменено; более поздние правки сохранены в ${preservedCount} полях`,
+                    )
+                    : tx('已撤销本次设定修改', 'Settings change undone', 'Изменение настроек отменено'),
+                preservedCount > 0 ? 'warning' : 'success',
+            );
+        } catch (error) {
+            console.error('Failed to undo settings action:', error);
+            showToast(tx('撤销失败：', 'Undo failed: ', 'Не удалось отменить: ') + error.message, 'error');
+        }
+    }, [settingsActionUndos, setSettingsActionCardState, incrementSettingsVersion, showToast, tx]);
+
+    const onApplySettingsAction = useCallback(async (action, actionKey, mergeModeOverride = null) => {
+        try {
+            const validActions = new Set(['add', 'append', 'update', 'delete']);
+            if (!validActions.has(action.action)) {
+                throw new Error(tx('不支持的设定操作', 'Unsupported settings action', 'Неподдерживаемое действие'));
+            }
+            if (action.action !== 'delete' && action.content !== undefined && (
+                action.content === null || Array.isArray(action.content) || typeof action.content !== 'object'
+            )) {
+                throw new Error(tx('设定内容格式无效', 'Invalid settings content format', 'Неверный формат содержимого'));
+            }
+
             const msgIdFromKey = actionKey.split('-action-')[0].replace(/-v\d+$/, '');
-            const targetSession = sessionStore.sessions.find(s =>
-                s.messages?.some(m => m.id === msgIdFromKey)
+            const targetSession = sessionStore.sessions.find(session =>
+                session.messages?.some(message => message.id === msgIdFromKey)
             ) || activeSession;
             const workId = targetSession?.workId || action.workId || getActiveWorkId() || 'work-default';
             let nodes = await getSettingsNodes(workId);
@@ -1371,59 +1612,88 @@ export default function AiSidebar({ onInsertText }) {
             const normalizedCat = categoryInfo.category;
             const rawCategory = categoryInfo.raw;
 
-            const markApplied = () => {
-                setSessionStore(prev => {
-                    const newStore = {
-                        ...prev, sessions: prev.sessions.map(s => {
-                            if (s.id !== targetSession?.id && !s.messages?.some(m => m.id === msgIdFromKey)) return s;
-                            return { ...s, messages: s.messages.map(m => m.id === msgIdFromKey ? { ...m, _appliedActions: [...(m._appliedActions || []), actionKey] } : m), updatedAt: Date.now() };
-                        }),
-                    };
-                    saveSessionStore(newStore);
-                    return newStore;
+            const requestReviewIfNeeded = (target, plan, requestedMode, extraFields = []) => {
+                const nameChanged = extraFields.length > 0;
+                if (mergeModeOverride || (!plan.requiresReview && !nameChanged)) return false;
+                setSettingsActionReview({
+                    action,
+                    actionKey,
+                    targetName: target.name || action.name || tx('未命名条目', 'Unnamed item', 'Безымянная запись'),
+                    requestedMode,
+                    fields: [...plan.fields, ...extraFields],
                 });
+                return true;
             };
 
+            const createUpdateUndoRecord = (target, nextContent, nextName = target.name) => {
+                const contentPatch = createSettingsUndoPatch(target.content || {}, nextContent || {});
+                const namePatch = createSettingsUndoPatch(
+                    { name: target.name },
+                    { name: nextName },
+                );
+                if (contentPatch.fields.length === 0 && namePatch.fields.length === 0) return null;
+                return {
+                    kind: 'update',
+                    nodeId: target.id,
+                    workId,
+                    contentPatch,
+                    namePatch,
+                };
+            };
+
+            const confirmDelete = targetName => window.confirm(tx(
+                `确定删除「${targetName}」吗？删除后无法通过此卡片撤销。`,
+                `Delete "${targetName}"? This card cannot undo the deletion.`,
+                `Удалить «${targetName}»? Это действие нельзя отменить через карточку.`,
+            ));
+
             if (normalizedCat === 'bookInfo') {
-                let bookInfoNode = nodes.find(n => n.parentId === workId && n.category === 'bookInfo' && n.type === 'special');
+                let bookInfoNode = nodes.find(node => node.parentId === workId && node.category === 'bookInfo' && node.type === 'special');
+                if (!bookInfoNode && action.action === 'delete') {
+                    showToast(tx('没有可清空的作品信息', 'There is no book info to clear', 'Нет информации о произведении для очистки'), 'error');
+                    return;
+                }
                 if (!bookInfoNode) {
                     bookInfoNode = await addSettingsNode({
                         name: tx('作品信息', 'Book Info', 'Информация о произведении'),
-                        type: 'special',
-                        category: 'bookInfo',
-                        parentId: workId,
-                        icon: 'Info',
-                        content: {},
-                        workId,
+                        type: 'special', category: 'bookInfo', parentId: workId,
+                        icon: 'Info', content: {}, workId,
                     });
                     nodes = await getSettingsNodes(workId);
                 }
                 if (action.action === 'delete') {
+                    if (!confirmDelete(bookInfoNode.name)) return;
+                    const undoRecord = createUpdateUndoRecord(bookInfoNode, {});
                     await updateSettingsNode(bookInfoNode.id, { content: {} }, nodes, workId);
                     showToast(tx('已清空作品信息', 'Book info cleared', 'Информация о произведении очищена'), 'success');
+                    setSettingsActionCardState(actionKey, { applied: true, undoRecord });
                 } else {
-                    const nextContent = { ...(bookInfoNode.content || {}), ...(action.content || {}) };
-                    if (action.name && !nextContent.title) nextContent.title = action.name;
-                    await updateSettingsNode(bookInfoNode.id, { content: nextContent }, nodes, workId);
+                    const incoming = { ...(action.content || {}) };
+                    if (action.name && !bookInfoNode.content?.title && !incoming.title) incoming.title = action.name;
+                    const requestedMode = mergeModeOverride || normalizeSettingsActionMode(action);
+                    const plan = createSettingsContentPlan(bookInfoNode.content || {}, incoming, requestedMode);
+                    if (requestReviewIfNeeded(bookInfoNode, plan, requestedMode)) return;
+                    const undoRecord = createUpdateUndoRecord(bookInfoNode, plan.content);
+                    await updateSettingsNode(bookInfoNode.id, { content: plan.content }, nodes, workId);
                     showToast(tx('已更新作品信息', 'Book info updated', 'Информация о произведении обновлена'), 'success');
+                    setSettingsActionCardState(actionKey, { applied: true, undoRecord });
                 }
                 incrementSettingsVersion();
-                markApplied();
                 return;
             }
 
             let parentNode = resolveActionParent(nodes, action, workId, normalizedCat, rawCategory);
+            if (!parentNode && action.action === 'delete') {
+                showToast(tx(`未找到要删除的条目「${action.name || action.nodeId || ''}」`, `Could not find item to delete: "${action.name || action.nodeId || ''}"`, `Не найдена запись: «${action.name || action.nodeId || ''}»`), 'error');
+                return;
+            }
             if (!parentNode) {
                 parentNode = await addSettingsNode({
                     name: categoryInfo.matchedAlias
                         ? getSettingsCategoryLabel(normalizedCat, tx)
                         : (rawCategory || tx('自定义设定', 'Custom Settings', 'Пользовательские настройки')),
-                    type: 'folder',
-                    category: normalizedCat,
-                    parentId: workId,
-                    icon: 'FolderOpen',
-                    content: {},
-                    workId,
+                    type: 'folder', category: normalizedCat, parentId: workId,
+                    icon: 'FolderOpen', content: {}, workId,
                 });
                 nodes = await getSettingsNodes(workId);
             }
@@ -1432,56 +1702,78 @@ export default function AiSidebar({ onInsertText }) {
 
             const resolveNode = () => {
                 if (action.nodeId) {
-                    const byId = nodes.find(n => n.id === action.nodeId && n.type === 'item' && isNodeInWork(nodes, n, workId));
+                    const byId = nodes.find(node => node.id === action.nodeId && node.type === 'item' && isNodeInWork(nodes, node, workId));
                     if (byId) return byId;
                 }
                 const name = action.name?.trim();
                 if (!name) return null;
-                const sameParent = nodes.find(n => n.name === name && n.type === 'item' && n.parentId === parentId);
+                const sameParent = nodes.find(node => node.name === name && node.type === 'item' && node.parentId === parentId);
                 if (sameParent) return sameParent;
-                const sameCategory = nodes.find(n => n.name === name && n.type === 'item' && n.category === itemCategory && isNodeInWork(nodes, n, workId));
+                const sameCategory = nodes.find(node => node.name === name && node.type === 'item' && node.category === itemCategory && isNodeInWork(nodes, node, workId));
                 if (sameCategory) return sameCategory;
-                return nodes.find(n => n.name === name && n.type === 'item' && isNodeInWork(nodes, n, workId));
+                return nodes.find(node => node.name === name && node.type === 'item' && isNodeInWork(nodes, node, workId));
             };
 
-            if (action.action === 'add') {
-                const existing = resolveNode();
-                if (existing) {
-                    const mergedContent = { ...(existing.content || {}), ...(action.content || {}) };
-                    await updateSettingsNode(existing.id, { name: action.name || existing.name, content: mergedContent }, nodes, workId);
-                } else {
-                    await addSettingsNode({ name: action.name || tx('新条目', 'New Item', 'Новый элемент'), type: 'item', category: itemCategory, parentId, content: action.content || {}, workId });
-                }
-            } else if (action.action === 'update') {
-                const target = resolveNode();
-                if (target) {
-                    const updates = {};
-                    if (action.name) updates.name = action.name;
-                    if (action.content) updates.content = { ...(target.content || {}), ...action.content };
-                    await updateSettingsNode(target.id, updates, nodes, workId);
-                } else {
-                    await addSettingsNode({ name: action.name || tx('新条目', 'New Item', 'Новый элемент'), type: 'item', category: itemCategory, parentId, content: action.content || {}, workId });
-                }
-            } else if (action.action === 'delete') {
-                const target = resolveNode();
-                if (target) {
-                    const deletedName = target.name || action.name || tx('未命名条目', 'Unnamed Item', 'Безымянный элемент');
-                    await deleteSettingsNode(target.id, workId);
-                    showToast(tx(`已删除「${deletedName}」`, `Deleted "${deletedName}"`, `Удалено: «${deletedName}»`), 'success');
-                } else {
-                    showToast(tx(`未找到要删除的条目「${action.name || action.nodeId || ''}」`, `Could not find item to delete: "${action.name || action.nodeId || ''}"`, `Не найден элемент для удаления: «${action.name || action.nodeId || ''}»`), 'error');
+            const target = resolveNode();
+            if (action.action === 'delete') {
+                if (!target) {
+                    showToast(tx(`未找到要删除的条目「${action.name || action.nodeId || ''}」`, `Could not find item to delete: "${action.name || action.nodeId || ''}"`, `Не найдена запись: «${action.name || action.nodeId || ''}»`), 'error');
                     return;
                 }
+                const deletedName = target.name || action.name || tx('未命名条目', 'Unnamed Item', 'Безымянный элемент');
+                if (!confirmDelete(deletedName)) return;
+                await deleteSettingsNode(target.id, workId);
+                showToast(tx(`已删除「${deletedName}」`, `Deleted "${deletedName}"`, `Удалено: «${deletedName}»`), 'success');
+                incrementSettingsVersion();
+                setSettingsActionCardState(actionKey, { applied: true, undoRecord: null });
+                return;
+            }
+
+            let undoRecord = null;
+            if (!target) {
+                const created = await addSettingsNode({
+                    name: action.name || tx('新条目', 'New Item', 'Новый элемент'),
+                    type: 'item', category: itemCategory, parentId,
+                    content: action.content || {}, workId,
+                });
+                undoRecord = {
+                    kind: 'create',
+                    nodeId: created.id,
+                    workId,
+                    createdSnapshot: {
+                        name: created.name,
+                        content: created.content || {},
+                    },
+                };
+            } else {
+                const requestedMode = mergeModeOverride || (
+                    action.action === 'add' ? 'ask' : normalizeSettingsActionMode(action)
+                );
+                const plan = createSettingsContentPlan(target.content || {}, action.content || {}, requestedMode);
+                const nameChanged = action.nodeId && action.name && action.name !== target.name
+                    ? [{
+                        key: 'name', previous: target.name, incoming: action.name,
+                        result: mergeModeOverride === 'replace' ? action.name : target.name,
+                        kind: 'conflict', conflict: true, overlaps: true,
+                    }]
+                    : [];
+                if (requestReviewIfNeeded(target, plan, requestedMode, nameChanged)) return;
+                const nextName = mergeModeOverride === 'replace' && action.name ? action.name : target.name;
+                undoRecord = createUpdateUndoRecord(target, plan.content, nextName);
+                await updateSettingsNode(target.id, {
+                    name: nextName,
+                    content: plan.content,
+                }, nodes, workId);
             }
 
             incrementSettingsVersion();
-            markApplied();
-            if (action.action !== 'delete') showToast(tx('应用设定成功', 'Settings applied', 'Настройки применены'), 'success');
+            setSettingsActionCardState(actionKey, { applied: true, undoRecord });
+            showToast(tx('应用设定成功', 'Settings applied', 'Настройки применены'), 'success');
         } catch (err) {
             console.error('Settings action failed:', err);
             showToast(tx('应用操作失败：', 'Apply failed: ', 'Не удалось применить: ') + err.message, 'error');
         }
-    }, [activeSession, sessionStore, setSessionStore, showToast, tx, incrementSettingsVersion]);
+    }, [activeSession, sessionStore, showToast, tx, incrementSettingsVersion, setSettingsActionCardState]);
 
     // 发送消息
     const handleSend = useCallback(() => {
@@ -2132,6 +2424,12 @@ export default function AiSidebar({ onInsertText }) {
                                                         if (typeof part === 'object' && part._action) {
                                                             const action = actions[part.index];
                                                             const actionKey = `${msg.id}-v${msg.activeVariant || 0}-action-${part.index}`;
+                                                            if (msg._dismissedActions?.includes(actionKey)) return null;
+                                                            const actionApplied = msg._appliedActions?.includes(actionKey);
+                                                            const undoRecord = settingsActionUndos[actionKey]
+                                                                || msg._settingsActionUndos?.[actionKey]
+                                                                || null;
+                                                            const canUndoAction = actionApplied && Boolean(undoRecord);
                                                             return (
                                                                 <div key={pi} className="settings-action-card">
                                                                     <div
@@ -2162,14 +2460,19 @@ export default function AiSidebar({ onInsertText }) {
                                                                         <button
                                                                             className="btn-mini primary settings-action-apply"
                                                                             onClick={() => onApplySettingsAction?.(action, actionKey)}
-                                                                            disabled={msg._appliedActions?.includes(actionKey)}
+                                                                            disabled={actionApplied}
                                                                         >
-                                                                            {msg._appliedActions?.includes(actionKey) ? t('aiSidebar.actionsApplied') : t('aiSidebar.actionsApply')}
+                                                                            {actionApplied ? t('aiSidebar.actionsApplied') : t('aiSidebar.actionsApply')}
                                                                         </button>
+                                                                        {canUndoAction && (
+                                                                            <button className="btn-mini" onClick={() => onUndoSettingsAction(actionKey, undoRecord)}>
+                                                                                {t('aiSidebar.actionsUndo') || tx('撤销', 'Undo', 'Отменить')}
+                                                                            </button>
+                                                                        )}
                                                                         <button
                                                                             className="btn-mini settings-action-delete"
-                                                                            onClick={() => onApplySettingsAction?.({ action: 'delete', category: action.category, name: action.name, nodeId: action.nodeId }, actionKey + '-del')}
-                                                                            title={tx('删除此设定条目', 'Delete this settings item', 'Удалить этот элемент настроек')}
+                                                                            onClick={() => onDismissSettingsAction(actionKey)}
+                                                                            title={tx('仅移除这张建议卡片，不会删除角色或设定', 'Remove only this suggestion card; the character or setting will not be deleted', 'Удалить только эту карточку-предложение; персонаж или настройка не будут удалены')}
                                                                             style={{
                                                                                 background: 'transparent',
                                                                                 border: '1px solid var(--border-color, rgba(200,200,200,0.3))',
@@ -2178,7 +2481,7 @@ export default function AiSidebar({ onInsertText }) {
                                                                                 cursor: 'pointer', borderRadius: '4px', padding: '3px 8px', fontSize: 'var(--ui-font-size-xs)',
                                                                             }}
                                                                         >
-                                                                            <Trash2 size={11} /> {t('aiSidebar.actionsDelete') || '删除'}
+                                                                            <Trash2 size={11} /> {tx('移除卡片', 'Remove card', 'Убрать карточку')}
                                                                         </button>
                                                                     </div>
                                                                 </div>
@@ -2872,6 +3175,21 @@ export default function AiSidebar({ onInsertText }) {
                     />
                 )
             }
+            <SettingsActionReviewModal
+                review={settingsActionReview}
+                tx={tx}
+                onClose={() => setSettingsActionReview(null)}
+                onApplySafe={() => {
+                    const review = settingsActionReview;
+                    setSettingsActionReview(null);
+                    if (review) onApplySettingsAction(review.action, review.actionKey, 'append');
+                }}
+                onApplyReplace={() => {
+                    const review = settingsActionReview;
+                    setSettingsActionReview(null);
+                    if (review) onApplySettingsAction(review.action, review.actionKey, 'replace');
+                }}
+            />
         </>
     );
 }

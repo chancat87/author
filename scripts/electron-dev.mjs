@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { createRequire } from 'node:module';
 import net from 'node:net';
 import http from 'node:http';
@@ -15,6 +16,8 @@ const electronExecutable = require('electron');
 let ownedNextProcess = null;
 let electronProcess = null;
 let shuttingDown = false;
+let desktopCapability = String(process.env.AUTHOR_DESKTOP_CAPABILITY || '').trim();
+let launchEnv = process.env;
 
 function isPortOpen() {
     return new Promise((resolve) => {
@@ -29,9 +32,12 @@ function isPortOpen() {
     });
 }
 
-function isAuthorServer() {
+function isAuthorServer(capability = '') {
     return new Promise((resolve) => {
-        const request = http.get({ host, port, path: '/', timeout: 1500 }, (response) => {
+        const headers = capability
+            ? { Cookie: `author-desktop-capability=${encodeURIComponent(capability)}` }
+            : undefined;
+        const request = http.get({ host, port, path: '/', headers, timeout: 1500 }, (response) => {
             let body = '';
             response.setEncoding('utf8');
             response.on('data', (chunk) => {
@@ -49,10 +55,10 @@ function isAuthorServer() {
     });
 }
 
-async function waitForAuthorServer(timeoutMs = 120_000) {
+async function waitForAuthorServer(timeoutMs = 120_000, capability = '') {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
-        if (await isAuthorServer()) return true;
+        if (await isAuthorServer(capability)) return true;
         if (ownedNextProcess?.exitCode !== null) return false;
         await new Promise((resolve) => setTimeout(resolve, 300));
     }
@@ -81,7 +87,7 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
     });
 }
 
-const existingAuthorServer = await isAuthorServer();
+const existingAuthorServer = await isAuthorServer(desktopCapability);
 if (existingAuthorServer) {
     console.log(`[electron:dev] 使用现有 Author 开发服务器: http://${host}:${port}`);
 } else {
@@ -90,16 +96,23 @@ if (existingAuthorServer) {
     }
 
     console.log(`[electron:dev] 正在启动 Author 开发服务器: http://${host}:${port}`);
+    if (!desktopCapability) {
+        desktopCapability = randomBytes(32).toString('base64url');
+    }
+    launchEnv = {
+        ...process.env,
+        AUTHOR_DESKTOP_CAPABILITY: desktopCapability,
+    };
     ownedNextProcess = spawn(process.execPath, [nextCli, 'dev', '--hostname', host, '--port', String(port)], {
         cwd: projectRoot,
-        env: process.env,
+        env: launchEnv,
         stdio: 'inherit',
     });
     ownedNextProcess.once('error', (error) => {
         console.error(`[electron:dev] Next.js 启动失败: ${error.message}`);
     });
 
-    if (!await waitForAuthorServer()) {
+    if (!await waitForAuthorServer(120_000, desktopCapability)) {
         stopOwnedServer();
         throw new Error('Author 开发服务器未能在 120 秒内就绪。');
     }
@@ -108,7 +121,7 @@ if (existingAuthorServer) {
 console.log('[electron:dev] 正在打开 Electron 桌面窗口...');
 electronProcess = spawn(electronExecutable, ['.', '--dev'], {
     cwd: projectRoot,
-    env: process.env,
+    env: launchEnv,
     stdio: 'inherit',
 });
 

@@ -1094,7 +1094,7 @@ When the user asks you to create, update, or delete lore entries, embed action b
 {"action":"add","category":"character","name":"Character Name","content":{"role":"protagonist","personality":"...","background":"..."}}
 [/SETTINGS_ACTION]
 
-Available actions: "add", "update", "delete". Use name+category or nodeId for update/delete. Prefer name+category because users usually refer to entries by name.
+Available actions: "add", "append", "update", "delete". Use name+category or nodeId for append/update/delete. Prefer name+category because users usually refer to entries by name.
 
 Available categories: "character", "world", "location", "object", "plot", "rules", "custom", "bookInfo".
 If the user wants a subcategory, include "parentName", "parentId", or "path".
@@ -1103,6 +1103,9 @@ Rules:
 - Each action block contains exactly one JSON object
 - Use multiple [SETTINGS_ACTION] blocks for multiple operations
 - content must be a JSON object, not a string or array
+- Use "append" when the user asks to add, supplement, extract, or record new facts. It preserves existing prose and deduplicates lists
+- Use "update" with "mode":"replace" only when the user explicitly asks to replace, correct, rewrite, or make new information authoritative
+- If replacement intent is unclear, use "append". Never silently replace an existing non-empty field
 - Equipment, weapons, props, artifacts, and tools should use category "object"
 - Put normal explanatory text before and after action blocks
 - Do not wrap action blocks in code fences
@@ -1164,7 +1167,7 @@ Rules:
 {"action":"add","category":"character","name":"Имя персонажа","content":{"role":"главный герой","personality":"...","background":"..."}}
 [/SETTINGS_ACTION]
 
-Доступные действия: "add", "update", "delete". Для обновления/удаления используй name+category или nodeId. Предпочитай name+category.
+Доступные действия: "add", "append", "update", "delete". Для дополнения/обновления/удаления используй name+category или nodeId. Предпочитай name+category.
 
 Доступные категории: "character", "world", "location", "object", "plot", "rules", "custom", "bookInfo".
 Если нужна подкатегория, добавь "parentName", "parentId" или "path".
@@ -1173,6 +1176,9 @@ Rules:
 - В каждом блоке действий ровно один JSON-объект
 - Для нескольких операций используй несколько [SETTINGS_ACTION] блоков
 - content должен быть JSON-объектом
+- Используй "append", когда пользователь просит дополнить, добавить, извлечь или записать новые факты. Существующий текст сохраняется, списки объединяются без дублей
+- Используй "update" с "mode":"replace" только при явной просьбе заменить, исправить или полностью переписать существующее значение
+- Если намерение заменить неясно, используй "append". Не заменяй непустое поле без явного запроса
 - Снаряжение, оружие, реквизит, артефакты и инструменты относятся к category "object"
 - До и после блоков действий должен быть обычный текст
 - Не оборачивай блоки действий в кодовые ограждения
@@ -1238,8 +1244,8 @@ Rules:
 {"action":"add","category":"character","name":"角色姓名","content":{"role":"主角","personality":"...","background":"..."}}
 [/SETTINGS_ACTION]
 
-可用的 action: "add"（新增）、"update"（更新）、"delete"（删除）
-更新和删除可以通过 name+category 定位，也可以通过 nodeId 定位。优先使用 name+category，因为用户通常用名称来交流。
+可用的 action: "add"（新增）、"append"（补充）、"update"（替换更新）、"delete"（删除）
+补充、更新和删除可以通过 name+category 定位，也可以通过 nodeId 定位。优先使用 name+category，因为用户通常用名称来交流。
 
 可用的 category 和对应 content 字段：
 - "character"：角色。content 可含：role, age, gender, appearance, personality, background, motivation, skills, speechStyle, relationships, arc, notes
@@ -1257,10 +1263,14 @@ Rules:
 - 每个操作块只包含一个 JSON 对象
 - 如果需要多个操作，使用多个 [SETTINGS_ACTION] 块
 - content 必须是 JSON 对象，不能是字符串或数组；单段说明也要写成 {"description":"..."} 或对应字段名
+- 用户说“补充、追加、增加、提取、记录”新信息时，使用 append；它会保留已有文字并对列表去重
+- 只有用户明确说“替换、改成、纠正、重写、以新内容为准”时，才使用 update 并添加 "mode":"replace"
+- 无法确定用户是否要覆盖时，一律使用 append；不得静默替换已有的非空字段
 - 装备、武器、道具、法宝、器物等条目统一使用 category "object"，不要写成 "custom" 或 "装备物品"
 - 操作块前后必须有正常的文字说明
 - 不要用代码围栏（\`\`\`）包裹操作块，直接使用 [SETTINGS_ACTION] 标签
-- update 示例：{"action":"update","category":"character","name":"角色姓名","content":{"personality":"新性格描述"}}
+- append 示例：{"action":"append","category":"character","name":"角色姓名","content":{"personality":"新增的性格表现"}}
+- update 示例：{"action":"update","mode":"replace","category":"character","name":"角色姓名","content":{"personality":"用于替换的性格描述"}}
 - delete 示例：{"action":"delete","category":"character","name":"要删除的角色名"}
 - 当用户说"删除XX"时，必须输出 delete 操作，即使你认为不该删除，也要先执行用户的要求
 - 在正文中已有角色/设定出现时，如果用户要求，可以从正文分析内容并自动创建设定`;

@@ -890,7 +890,8 @@ export default function BookInfoPanel() {
                                             <button
                                                 onClick={async e => {
                                                     e.stopPropagation();
-                                                    if (!confirm(text(`确定要删除作品「${w.name}」吗？\n此操作不可撤销！`, `Delete work "${w.name}"?\nThis cannot be undone!`, `Удалить произведение «${w.name}»?\nЭто действие нельзя отменить!`))) return;
+                                                    const displayName = getBuiltInWorkName(w.name, text);
+                                                    if (!confirm(text(`确定要删除作品「${displayName}」吗？\n此操作不可撤销！`, `Delete work "${displayName}"?\nThis cannot be undone!`, `Удалить произведение «${displayName}»?\nЭто действие нельзя отменить!`))) return;
                                                     await removeWork(w.id);
                                                     const allWorks = await getAllWorks();
                                                     setWorks(allWorks);
