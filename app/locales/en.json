@@ -199,6 +199,7 @@
     "actionsApply": "Apply",
     "actionsApplied": "Applied",
     "actionsDelete": "Delete",
+    "actionsUndo": "Undo",
     "inputPlaceholder": "Type message... (Enter to send, Shift+Enter for newline)",
     "inputPlaceholderCtrlEnter": "Type message... (Enter for newline, Ctrl/⌘+Enter to send)",
     "expandInput": "Expand input",
@@ -240,6 +241,7 @@
     },
     "actions": {
       "add": "Add",
+      "append": "Append",
       "update": "Update",
       "delete": "Delete"
     },

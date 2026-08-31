@@ -352,7 +352,7 @@ export default function SettingsPanel() {
         } else {
             return new Promise((resolve) => {
                 setDeleteConfirm({
-                    message: t('settings.deleteWorkPrompt').replace('{name}', work.name),
+                    message: t('settings.deleteWorkPrompt').replace('{name}', getBuiltInWorkName(work.name, text)),
                     onConfirm: async () => { setDeleteConfirm(null); await doDeleteWork(workId); resolve(); },
                     onCancel: () => { setDeleteConfirm(null); resolve(); },
                 });
@@ -376,7 +376,7 @@ export default function SettingsPanel() {
     const handleClearAllItems = async () => {
         if (!activeWorkId) return;
         const workEntry = works.find(w => w.id === activeWorkId);
-        const workName = workEntry?.name || '';
+        const workName = getBuiltInWorkName(workEntry?.name || '', text);
         const itemCount = nodes.filter(n => n.type === 'item').length;
         if (itemCount === 0) return;
 

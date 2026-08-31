@@ -116,9 +116,11 @@ AI 会自动参考：
 #### AI 管理设定集
 对话中 AI 可以生成 **设定操作卡片**，你可以一键应用：
 - **添加**：AI 建议新角色/设定，点击「✅ 应用」直接写入设定集
-- **更新**：AI 修改已有设定（按名称自动匹配）
+- **补充/更新**：按名称匹配已有设定；遇到可能覆盖的内容时会先展示新旧内容，默认保留原内容并安全合并
+- **替换**：只有确认对比结果后才会用新内容替换原字段
 - **删除**：直接告诉 AI「删除XXX」，AI 会按名称查找并生成删除操作
 - **查找**：问 AI「有哪些角色/设定」，AI 知道全部条目（包括已禁用的）
+- 应用后可在卡片上 **撤销**；「移除卡片」只隐藏这条建议，不会删除角色或设定
 - 点击卡片标题栏 **▼ 展开** 可以查看完整内容
 
 #### 消息变体
@@ -778,9 +780,11 @@ Switch to the **Reference** tab and check the context you want to inject:
 #### AI-managed Lore
 AI can generate **setting action cards** in chat. You can apply them with one click:
 - **Add**: AI suggests a new character or setting, then writes it into the lore database.
-- **Update**: AI modifies an existing entry, matched by name.
+- **Append/Update**: matches an existing entry by name. If content might be overwritten, Author shows both versions first and preserves existing content by default.
+- **Replace**: replaces an existing field only after you review and confirm the comparison.
 - **Delete**: tell AI to delete an item; it finds the matching entry and proposes an action.
 - **Search**: ask what characters/settings exist; AI can see all entries, including disabled ones.
+- Applied cards can be **undone**. **Remove card** hides only that suggestion and does not delete the character or setting.
 - Click **▼** on the card header to view the full content.
 
 #### Message Variants
@@ -1438,9 +1442,11 @@ Author — **платформа письма с ИИ** для авторов п�
 #### Управление лором через ИИ
 ИИ может создавать **карточки действий**:
 - **Добавить**: новый персонаж/элемент.
-- **Обновить**: изменить существующий элемент по имени.
+- **Дополнить/обновить**: найти существующий элемент по имени. Если данные могут быть перезаписаны, Author сначала показывает обе версии и по умолчанию сохраняет прежнее содержимое.
+- **Заменить**: заменить существующее поле только после просмотра и подтверждения сравнения.
 - **Удалить**: найти и предложить удаление.
 - **Поиск**: ИИ знает все элементы, включая отключенные.
+- Примененное действие можно **отменить**. **Убрать карточку** скрывает только предложение и не удаляет персонажа или элемент лора.
 - Нажмите **▼**, чтобы открыть полное содержимое карточки.
 
 #### Варианты сообщений

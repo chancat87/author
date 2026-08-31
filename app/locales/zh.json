@@ -199,6 +199,7 @@
         "actionsApply": "应用",
         "actionsApplied": "已应用",
         "actionsDelete": "删除",
+        "actionsUndo": "撤销",
         "inputPlaceholder": "输入消息…（Enter 发送，Shift+Enter 换行）",
         "inputPlaceholderCtrlEnter": "输入消息…（Enter 换行，Ctrl/⌘+Enter 发送）",
         "expandInput": "全屏输入",
@@ -240,6 +241,7 @@
         },
         "actions": {
             "add": "新增",
+            "append": "补充",
             "update": "更新",
             "delete": "删除"
         },

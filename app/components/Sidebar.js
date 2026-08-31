@@ -6,7 +6,7 @@ import { useAppStore } from '../store/useAppStore';
 import { useI18n } from '../lib/useI18n';
 import { createChapter, deleteChapter, updateChapter, saveChapters, getChapters, createVolume, insertChapterAfter, insertChapterInVolume, reorderItems } from '../lib/storage';
 import { exportProject, importProject, importWork, exportWorkAsTxt, exportWorkAsMarkdown, exportWorkAsDocx, exportWorkAsEpub, exportWorkAsPdf } from '../lib/project-io';
-import { WRITING_MODES, getAllWorks, getProjectSettings, getSettingsNodes, addWork, saveSettingsNodes, setActiveWorkId as setActiveWorkIdSetting, getActiveWorkId, isBuiltInFolderLabel } from '../lib/settings';
+import { WRITING_MODES, getAllWorks, getProjectSettings, getSettingsNodes, addWork, saveSettingsNodes, setActiveWorkId as setActiveWorkIdSetting, getActiveWorkId, isBuiltInFolderLabel, getBuiltInWorkName } from '../lib/settings';
 import { detectConflicts, mergeChapters } from '../lib/chapter-number';
 import { estimateTokens } from '../lib/context-engine';
 import { Settings, Moon, Sun, History, Save, FolderOpen, FileDown, BookOpen, HelpCircle, Github, PanelLeftClose, ListOrdered, Library, Plus, FileText, FileType, BookMarked, FileOutput, Printer, Book, X, MoreHorizontal, ChevronUp, KeyRound, SlidersHorizontal, Eye, Smartphone, Clapperboard, Cloud, CloudOff, RefreshCw, CloudUpload, CloudDownload, Sparkles, Brain, Search, CheckCircle2, GitMerge, Layers3 } from 'lucide-react';
@@ -3325,7 +3325,7 @@ function ImportWorkModal({ chapters, totalWords, onClose, onImport, t }) {
                             style={{ justifyContent: 'flex-start', padding: '10px 14px', fontSize: 13 }}
                             onClick={() => onImport(w.id)}
                         >
-                            <BookOpen size={14} style={{ marginRight: 6, verticalAlign: 'text-bottom' }} />{w.name}
+                            <BookOpen size={14} style={{ marginRight: 6, verticalAlign: 'text-bottom' }} />{getBuiltInWorkName(w.name, text)}
                         </button>
                     ))}
 
