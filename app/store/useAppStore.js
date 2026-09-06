@@ -41,9 +41,24 @@ function applyWritingFontFamily(fontFamily) {
 const store = create((set, get) => ({
     // --- Chapter State ---
     chapters: [],
+    editorContentReceipt: null,
     activeChapterId: null,
     activeWorkId: typeof window !== 'undefined' ? localStorage.getItem('author-active-work') || null : null,
-    setChapters: (chapters) => set({ chapters: Array.isArray(chapters) ? chapters.filter(ch => ch && typeof ch === 'object' && ch.id) : [] }),
+    setChapters: (chapters) => set({ chapters: Array.isArray(chapters) ? chapters.filter(ch => ch && typeof ch === 'object' && ch.id) : [], editorContentReceipt: null }),
+    applyEditorSave: (workId, result, receipt, previousContent) => set((state) => {
+        if ((state.activeWorkId || 'work-default') !== workId) return state;
+        const current = state.chapters.find(ch => ch.id === result.chapter.id);
+        // A newer store update may have arrived while persistence was pending.
+        const apply = current && (current.content === previousContent || current.content === result.chapter.content);
+        const chapter = apply ? { ...current, content: result.chapter.content, wordCount: result.chapter.wordCount } : current;
+        return {
+            chapters: [
+                ...state.chapters.map(ch => ch === current ? chapter : ch),
+                ...result.backups.filter(backup => !state.chapters.some(ch => ch.id === backup.id)),
+            ],
+            editorContentReceipt: apply ? { chapter, receipt } : state.editorContentReceipt,
+        };
+    }),
     setActiveChapterId: (id) => set({ activeChapterId: id }),
     setActiveWorkId: (id) => set({ activeWorkId: id }),
     addChapter: (chapter) => set((state) => ({ chapters: [...state.chapters, chapter] })),
@@ -179,6 +194,9 @@ const store = create((set, get) => ({
         }
         return { visualTheme: vTheme };
     }),
+
+    showWelcomeModal: typeof window === 'undefined' || !localStorage.getItem('author-lang') || !localStorage.getItem('author-visual'),
+    setShowWelcomeModal: (show) => set({ showWelcomeModal: !!show }),
 
     startTour: false,
     setStartTour: (val) => set({ startTour: val }),

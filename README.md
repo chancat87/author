@@ -173,7 +173,7 @@ Keep real domains, registration values, service endpoints, credentials, and oper
 
 ### Desktop Client Users
 
-Download the latest installer from the [Releases](https://github.com/YuanShiJiLoong/author/releases/latest) page and install it over your current version. Your data is stored in the browser/Electron profile and will not be lost.
+Download the latest installer from the [Releases](https://github.com/YuanShiJiLoong/author/releases/latest) page and install it over your current version. Your data is stored in the browser/Electron profile. Export a backup before upgrading, and keep your existing access address and user-data directory.
 
 ### Self-Deployed Users (Source)
 

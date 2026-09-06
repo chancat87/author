@@ -1,4 +1,7 @@
-// Gemini 原生 API — SSE 流式转发（Edge Runtime 确保流式不被缓冲）
+import { withApiResources } from '../../../lib/api-resource-guard.js';
+import { createGenerationLifecycle, generationAbortResponse } from '../../../lib/ai-request-lifecycle.js';
+import { streamAiResponse, createGeminiMapper } from '../../../lib/ai-stream.js';
+// Gemini 原生 API — 按下游读取速度转发 SSE，并传递取消信号
 // 使用 streamGenerateContent 端点
 
 export const runtime = 'nodejs';
@@ -7,10 +10,13 @@ export const maxDuration = 120;
 import { applyContentSafety } from '../../../lib/content-safety';
 import { proxyFetch } from '../../../lib/proxy-fetch';
 import { rotateKey } from '../../../lib/keyRotator';
-import { isOutboundRequestBlocked, isServerCredentialBlocked, redactSensitiveText, resolveAiCredential, safeUpstreamDetail } from '../../../lib/server-security.mjs';
+import { isOutboundRequestBlocked, isServerCredentialBlocked, resolveAiCredential, safeUpstreamDetail } from '../../../lib/server-security.mjs';
 
-export async function POST(request) {
+async function handlePOST(request) {
+    const lifecycle = createGenerationLifecycle(request.signal);
+    const { signal } = lifecycle;
     try {
+        signal.throwIfAborted();
         const { systemPrompt, userPrompt, apiConfig, maxTokens, temperature, topP, reasoningEffort, tools: toolsConfig } = await request.json();
         const proxyUrl = apiConfig?.proxyUrl || '';
 
@@ -72,7 +78,7 @@ export async function POST(request) {
         if (geminiTools.length > 0) requestBody.tools = geminiTools;
 
         const response = await proxyFetch(url, {
-            method: 'POST',
+            method: 'POST', signal,
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestBody),
         }, proxyUrl);
@@ -104,109 +110,11 @@ export async function POST(request) {
             );
         }
 
-        // 将 Gemini SSE 流转换为统一格式转发给前端
-        const encoder = new TextEncoder();
-        const decoder = new TextDecoder();
-
-        const stream = new ReadableStream({
-            async start(controller) {
-                const reader = response.body.getReader();
-                let buffer = '';
-
-                try {
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) break;
-
-                        buffer += decoder.decode(value, { stream: true });
-                        const lines = buffer.split('\n');
-                        buffer = lines.pop() || '';
-
-                        for (const line of lines) {
-                            const trimmed = line.trim();
-                            if (!trimmed || trimmed.startsWith(':')) continue;
-
-                            if (trimmed.startsWith('data: ')) {
-                                try {
-                                    const json = JSON.parse(trimmed.slice(6));
-                                    const candidate = json.candidates?.[0];
-                                    const parts = candidate?.content?.parts || [];
-
-                                    for (const part of parts) {
-                                        if (part.thought === true && part.text) {
-                                            // Gemini 思维链
-                                            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ thinking: part.text })}\n\n`));
-                                        } else if (part.executableCode) {
-                                            // Code Execution — 模型生成的代码
-                                            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ codeExec: { code: part.executableCode.code, language: part.executableCode.language || 'python' } })}\n\n`));
-                                        } else if (part.codeExecutionResult) {
-                                            // Code Execution — 执行结果
-                                            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ codeResult: { output: part.codeExecutionResult.output, outcome: part.codeExecutionResult.outcome } })}\n\n`));
-                                        } else if (part.text) {
-                                            // 正文内容
-                                            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: part.text })}\n\n`));
-                                        }
-                                    }
-
-                                    // Google Search grounding 元数据（在 candidate 级别）
-                                    const grounding = candidate?.groundingMetadata;
-                                    if (grounding) {
-                                        controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-                                            grounding: {
-                                                searchQueries: grounding.webSearchQueries || [],
-                                                sources: (grounding.groundingChunks || []).map(c => ({
-                                                    title: c.web?.title || '',
-                                                    uri: c.web?.uri || '',
-                                                })),
-                                                supports: (grounding.groundingSupports || []).map(s => ({
-                                                    text: s.segment?.text || '',
-                                                    indices: s.groundingChunkIndices || [],
-                                                })),
-                                            }
-                                        })}\n\n`));
-                                    }
-
-                                    // 提取 usage（通常在最后一个 chunk）
-                                    const usageMeta = json.usageMetadata;
-                                    if (usageMeta?.totalTokenCount) {
-                                        const cachedTokens = usageMeta.cachedContentTokenCount || 0;
-                                        const thoughtsTokens = usageMeta.thoughtsTokenCount || 0;
-                                        const completionTokens = (usageMeta.candidatesTokenCount || 0) + thoughtsTokens;
-                                        controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-                                            usage: {
-                                                promptTokens: usageMeta.promptTokenCount || 0,
-                                                completionTokens,
-                                                totalTokens: usageMeta.totalTokenCount || 0,
-                                                cachedTokens,
-                                            }
-                                        })}\n\n`));
-                                    }
-                                } catch {
-                                    // 解析失败跳过
-                                }
-                            }
-                        }
-                    }
-                    // 发送结束信号
-                    controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-                } catch (err) {
-                    console.error('Gemini Stream 读取错误:', redactSensitiveText(err?.message || err, 200));
-                } finally {
-                    controller.close();
-                    reader.releaseLock();
-                }
-            }
-        });
-
-        return new Response(stream, {
-            headers: {
-                'Content-Type': 'text/event-stream',
-                'Cache-Control': 'no-cache',
-                'Connection': 'keep-alive',
-            },
-        });
+        return streamAiResponse(response, lifecycle, createGeminiMapper());
 
     } catch (error) {
+        const aborted = generationAbortResponse(lifecycle);
+        if (aborted) return aborted;
         console.error('Gemini 接口错误:', error?.code || error?.name || 'UNKNOWN');
         if (isServerCredentialBlocked(error)) {
             return new Response(
@@ -224,5 +132,9 @@ export async function POST(request) {
             JSON.stringify({ error: '网络连接失败，请检查 API 地址是否正确', code: 'NETWORK_ERROR_CHECK' }),
             { status: 500, headers: { 'Content-Type': 'application/json' } }
         );
+    } finally {
+        if (!lifecycle.streaming) lifecycle.dispose();
     }
 }
+
+export const POST = withApiResources('/api/ai/gemini', handlePOST);

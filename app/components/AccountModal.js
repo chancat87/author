@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { useI18n } from '../lib/useI18n';
+import { getCustomAuthContext } from '../lib/custom-auth';
 
 /**
  * 账户管理弹窗
@@ -72,13 +73,15 @@ export default function AccountModal() {
     if (!showAccountModal || !authUser) return null;
 
     const handleSignOut = async () => {
+        const authContext = getCustomAuthContext();
+        if (!authContext) return;
         setSigningOut(true);
         try {
             await useAppStore.getState().flushPendingLocalSave();
             const { stopCloudSync } = await import('../lib/persistence');
-            await stopCloudSync();
+            await stopCloudSync({ authContext });
             const { signOutCustom } = await import('../lib/custom-auth');
-            await signOutCustom();
+            await signOutCustom({ authContext });
             setShowAccountModal(false);
         } catch (err) {
             console.error('Sign out error:', err);
@@ -89,13 +92,15 @@ export default function AccountModal() {
     };
 
     const handleSwitchToAccount = async (account) => {
+        const authContext = getCustomAuthContext();
+        if (!authContext) return;
         // 先退出当前账号
         try {
             await useAppStore.getState().flushPendingLocalSave();
             const { stopCloudSync } = await import('../lib/persistence');
-            await stopCloudSync();
+            await stopCloudSync({ authContext });
             const { signOutCustom } = await import('../lib/custom-auth');
-            await signOutCustom();
+            await signOutCustom({ authContext });
         } catch (err) {
             console.error('Switch account sync error:', err);
             setSaveMsg(text('切换账号前同步失败，请稍后重试', 'Sync failed before switching accounts. Please try again later.', 'Синхронизация перед сменой аккаунта не удалась. Попробуйте позже.'));

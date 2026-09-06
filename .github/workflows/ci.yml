@@ -5,6 +5,7 @@ env:
 
 on:
   pull_request:
+  merge_group:
   push:
     branches:
       - main
@@ -14,10 +15,16 @@ permissions:
 
 jobs:
   verify:
+    name: author-verify
+    env:
+      LINT_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
@@ -30,3 +37,68 @@ jobs:
 
       - name: Verify source, tests, build, and open-core boundary
         run: npm run check
+
+      - name: Verify Electron package scanner
+        run: npm run test:electron-secret-scanner
+
+  secrets:
+    name: author-secret-scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+
+      - name: Verify scanner with synthetic secrets
+        run: npm run test:secret-scanner
+
+      - name: Scan current public source
+        run: npm run check:secrets
+
+      - name: Scan all fetched history
+        run: npm run check:secrets:history
+
+  docker-smoke:
+    name: author-docker-smoke
+    runs-on: ubuntu-latest
+    needs: [verify, secrets]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+
+      - name: Build the production image
+        run: docker build --tag author:ci .
+
+      - name: Test the packaged runtime
+        run: node scripts/docker-smoke.mjs author:ci
+
+      - name: Scan the built application and image configuration
+        run: npm run check:secrets:docker -- author:ci
+
+  required:
+    name: author-required
+    if: always()
+    needs: [verify, secrets, docker-smoke]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every verification job to succeed
+        env:
+          VERIFY: ${{ needs.verify.result }}
+          SECRETS: ${{ needs.secrets.result }}
+          DOCKER: ${{ needs.docker-smoke.result }}
+        run: test "$VERIFY" = success && test "$SECRETS" = success && test "$DOCKER" = success

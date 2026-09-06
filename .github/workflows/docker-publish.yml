@@ -9,6 +9,9 @@
 
 name: Docker Publish
 
+permissions:
+  contents: read
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
@@ -25,6 +28,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
@@ -38,6 +44,9 @@ jobs:
       - name: Verify source, tests, build, and open-core boundary
         run: npm run check
 
+      - name: Verify scanner and scan source and history
+        run: npm run test:secret-scanner && npm run check:secrets && npm run check:secrets:history
+
   docker:
     # 🔒 仅在原始仓库运行，防止 fork 利用 Secrets
     if: github.repository == 'YuanShiJiLoong/author'
@@ -50,21 +59,21 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          node-version: 24
 
       - name: Extract version from package.json
         id: version
         run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
 
-      - name: Build and push
+      - name: Build the image for verification
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
-          push: true
+          load: true
+          push: false
           tags: |
             yuanshijiloong/author:latest
             yuanshijiloong/author:${{ steps.version.outputs.VERSION }}
@@ -77,3 +86,26 @@ jobs:
             NEXT_PUBLIC_FIREBASE_APP_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Test the packaged runtime
+        env:
+          IMAGE_VERSION: ${{ steps.version.outputs.VERSION }}
+        run: node scripts/docker-smoke.mjs "yuanshijiloong/author:${IMAGE_VERSION}"
+
+      - name: Scan the image before publication
+        env:
+          IMAGE_VERSION: ${{ steps.version.outputs.VERSION }}
+        run: npm run check:secrets:docker -- "yuanshijiloong/author:${IMAGE_VERSION}"
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Push the tested image
+        env:
+          IMAGE_VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          docker push "yuanshijiloong/author:${IMAGE_VERSION}"
+          docker push yuanshijiloong/author:latest

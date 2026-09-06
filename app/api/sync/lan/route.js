@@ -1,3 +1,4 @@
+import { withApiResources } from '../../../lib/api-resource-guard.js';
 import { NextResponse } from 'next/server';
 import os from 'os';
 import crypto from 'crypto';
@@ -76,12 +77,12 @@ function validateSnapshot(bundle) {
     return bundle;
 }
 
-export async function OPTIONS() {
+async function handleOPTIONS() {
     if (isOfficialWebServer()) return disabledOnOfficialWeb();
     return withCors(new NextResponse(null, { status: 204 }));
 }
 
-export async function POST(request) {
+async function handlePOST(request) {
     if (isOfficialWebServer()) return disabledOnOfficialWeb();
     try {
         pruneExpiredShares();
@@ -119,7 +120,7 @@ export async function POST(request) {
     }
 }
 
-export async function GET(request) {
+async function handleGET(request) {
     if (isOfficialWebServer()) return disabledOnOfficialWeb();
     try {
         pruneExpiredShares();
@@ -135,3 +136,7 @@ export async function GET(request) {
         return withCors(NextResponse.json({ error: '读取局域网分享失败' }, { status: 500 }));
     }
 }
+
+export const OPTIONS = withApiResources('/api/sync/lan', handleOPTIONS);
+export const POST = withApiResources('/api/sync/lan', handlePOST);
+export const GET = withApiResources('/api/sync/lan', handleGET);

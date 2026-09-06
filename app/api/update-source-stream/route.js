@@ -1,7 +1,9 @@
+import { withApiResources } from '../../lib/api-resource-guard.js';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { spawn } from 'child_process';
 import { authorizeSourceUpdate, redactSensitiveText } from '../../lib/server-security.mjs';
+import { resolveNpmCommand } from '../../lib/source-update-command.mjs';
 
 // 服务启动时记录的版本（Node require 缓存，不会变）
 const RUNNING_VERSION = (() => {
@@ -16,7 +18,7 @@ const RUNNING_VERSION = (() => {
  * SSE 流式更新源码：git pull → npm install → npm run build
  * 实时推送每个步骤的进度
  */
-export async function POST(request) {
+async function handlePOST(request) {
     const authorization = authorizeSourceUpdate(request);
     if (!authorization.ok) {
         return Response.json(
@@ -43,13 +45,13 @@ export async function POST(request) {
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
             };
 
-            const steps = [
-                { step: 1, total: 3, label: '🔄 拉取最新代码', cmd: 'git', args: ['pull'], timeout: 60000 },
-                { step: 2, total: 3, label: '📦 安装依赖', cmd: process.platform === 'win32' ? 'npm.cmd' : 'npm', args: ['install'], timeout: 300000 },
-                { step: 3, total: 3, label: '🔨 构建项目', cmd: process.platform === 'win32' ? 'npm.cmd' : 'npm', args: ['run', 'build'], timeout: 300000 },
-            ];
-
             try {
+                const npmCommand = resolveNpmCommand();
+                const steps = [
+                    { step: 1, total: 3, label: '🔄 拉取最新代码', cmd: 'git', args: ['pull'], timeout: 60000 },
+                    { step: 2, total: 3, label: '📦 安装依赖', cmd: npmCommand.cmd, args: [...npmCommand.args, 'install'], timeout: 300000 },
+                    { step: 3, total: 3, label: '🔨 构建项目', cmd: npmCommand.cmd, args: [...npmCommand.args, 'run', 'build'], timeout: 300000 },
+                ];
                 for (const stepInfo of steps) {
                     send({ step: stepInfo.step, total: stepInfo.total, label: stepInfo.label, status: 'running' });
 
@@ -120,6 +122,7 @@ function runCommand(cmd, args, cwd, timeout) {
         const proc = spawn(cmd, args, {
             cwd,
             shell: false,
+            windowsHide: true,
             env: { ...process.env },
             stdio: ['ignore', 'pipe', 'pipe'],
         });
@@ -148,3 +151,5 @@ function runCommand(cmd, args, cwd, timeout) {
         }, timeout);
     });
 }
+
+export const POST = withApiResources('/api/update-source-stream', handlePOST);

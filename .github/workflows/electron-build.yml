@@ -24,10 +24,12 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
+    permissions:
+      contents: write # Required by this job's final Create Release step.
     # 🔒 仅在原始仓库运行，防止 fork 利用 Secrets
     if: github.repository == 'YuanShiJiLoong/author'
     runs-on: windows-latest
@@ -35,6 +37,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
@@ -54,6 +59,18 @@ jobs:
       - name: Check open-core boundary
         run: npm run check:open-core-boundary
 
+      - name: Verify scanner with synthetic secrets
+        run: npm run test:secret-scanner
+
+      - name: Verify Electron package scanner
+        run: npm run test:electron-secret-scanner
+
+      - name: Scan current source
+        run: npm run check:secrets
+
+      - name: Scan full history
+        run: npm run check:secrets:history
+
       - name: Build Next.js (with Firebase config)
         env:
           NEXT_PUBLIC_FIREBASE_API_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}
@@ -67,6 +84,9 @@ jobs:
 
       - name: Build Electron installer
         run: npx electron-builder --win --publish never
+
+      - name: Scan packaged Electron application before release
+        run: npm run check:secrets:electron -- dist/win-unpacked
 
       - name: Generate release notes
         id: notes

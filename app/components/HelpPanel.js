@@ -310,7 +310,10 @@ AI 生成的非标准字段会自动出现在 **✨ AI 生成的额外字段** �
 ## 数据管理
 
 ### 自动保存
-编辑内容会 **实时自动保存** 到浏览器的 localStorage，无需手动保存。
+编辑内容会 **自动保存**，创作数据默认保存在当前设备的浏览器 IndexedDB 中。请留意保存状态；若提示保存失败，先保留当前页面并重试。
+
+### 快照恢复
+时光机只恢复所选快照所属的作品，其他作品保持不变。恢复前会保留备份；如果恢复中断，可在历史版本中选择恢复前备份或原快照重试。较新的对话继续保留，有变化的旧对话会恢复为副本。
 
 ### 左侧导航栏按钮
 
@@ -977,7 +980,10 @@ Click the **magic wand** button on the right side of the toolbar to tidy documen
 ## Data Management
 
 ### Auto Save
-Editor content is **auto-saved in real time** to browser localStorage. No manual save is required.
+Editor content is **saved automatically**. Creative data is stored in browser IndexedDB on the current device by default. Check the save status; if saving fails, keep the current page open and retry.
+
+### Snapshot Recovery
+Time Machine restores only the work that belongs to the selected snapshot. Other works stay unchanged, and a backup is kept before restoration. If restoration is interrupted, select the backup or original snapshot in revision history to recover or retry. Newer conversations are retained, and changed older conversations are restored as copies.
 
 ### Left Navigation Buttons
 | Icon | Function |
@@ -1579,7 +1585,10 @@ Author использует prompt caching там, где провайдер п�
 ## Управление данными
 
 ### Автосохранение
-Текст сохраняется автоматически в localStorage.
+Текст **сохраняется автоматически**. По умолчанию данные произведений хранятся в IndexedDB браузера на текущем устройстве. Следите за статусом сохранения; при ошибке оставьте текущую страницу открытой и повторите попытку.
+
+### Восстановление снимка
+Машина времени восстанавливает только произведение из выбранного снимка, не затрагивая другие произведения. Сначала создается резервная копия. Если восстановление прервано, выберите резервную копию или исходный снимок в истории версий, чтобы восстановить данные или повторить попытку. Более новые диалоги сохраняются, а измененные старые диалоги восстанавливаются как копии.
 
 ### Импорт и экспорт
 Импорт поддерживает TXT, Markdown, EPUB, DOCX, DOC и PDF. При импорте в существующее произведение Author распознает номера глав, объединяет без конфликтов и показывает окно выбора при конфликтах.

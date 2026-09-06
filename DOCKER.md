@@ -1,5 +1,35 @@
 # 🐳 Docker 部署指南
 
+## 运行时与镜像验证
+
+源码构建统一使用 Node 24 LTS，与 CI 的 Node 24 主版本保持一致。当前基础镜像为
+`node:24.20.0-alpine3.24`，在 Dockerfile 中固定多架构索引摘要
+`sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf`。
+维护者应同时审查标签与摘要的更新，并重新运行下面的成品验证；固定摘要不会自动接收安全更新。
+可用 `docker buildx imagetools inspect node:24-alpine` 查询官方新摘要，再核对精确版本标签。
+参见 [Node 维护周期](https://nodejs.org/en/about/previous-releases) 和
+[Docker 镜像固定建议](https://docs.docker.com/build/building/best-practices/#pin-base-image-versions)。
+
+Docker 安装依赖时通过 npm 的 `replace-registry-host` 将锁文件中的 npmmirror 地址映射到 npm 官方源，
+保留原有锁定版本和完整性校验，避免构建依赖地区镜像 CDN；不改动主机的 npm 配置。
+相关选项见 [npm 配置文档](https://docs.npmjs.com/using-npm/config/#replace-registry-host)。
+
+```bash
+docker build --tag author:smoke .
+node scripts/docker-smoke.mjs author:smoke
+```
+
+测试直接使用最终镜像的 Node 与 standalone 文件，检查启动、非 root 用户、数据目录写入、
+八种法律页面、PDF/DOC 解析、请求体上限、SSE 完成及取消后的上游断开。
+测试分为默认公网配置和带合成桌面访问凭据的本地集成配置；只有后者允许访问容器内部的模拟 AI 服务。
+两个测试容器都使用 `--network none`、只读根文件系统及独立数据卷，不挂载主机目录、不公开端口、不调用真实模型。
+脚本结束后保留已退出的测试容器和合成数据卷以便检查；脚本不执行删除或清理。
+CI 增加成品镜像测试；发布流程只有通过该测试后才推送同一个已构建镜像。
+
+镜像以 `node` 用户运行，`/app/data` 为可写持久化目录。文件存储默认关闭；
+仅在受信任的单用户部署中设置 `AUTHOR_ENABLE_FILE_STORAGE=true` 才启用服务端文件存储。
+多用户公网部署应使用浏览器存储或带认证的云同步。上传与入口配置见 [API_RESOURCE_LIMITS.md](API_RESOURCE_LIMITS.md)。
+
 ## 快速开始
 
 ### 方式一：Docker Hub 拉取（推荐）

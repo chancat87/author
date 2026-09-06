@@ -1,9 +1,10 @@
+import { withApiResources } from '../../lib/api-resource-guard.js';
 import { createHmac } from 'node:crypto';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export function GET(request) {
+function handleGET(request) {
     const capability = String(process.env.AUTHOR_DESKTOP_CAPABILITY || '');
     const challenge = new URL(request.url).searchParams.get('challenge') || '';
 
@@ -17,3 +18,5 @@ export function GET(request) {
     const proof = createHmac('sha256', capability).update(challenge).digest('hex');
     return Response.json({ proof }, { headers: { 'Cache-Control': 'no-store' } });
 }
+
+export const GET = withApiResources('/api/desktop-handshake', handleGET);

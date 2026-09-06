@@ -47,7 +47,7 @@ export function itemToKey(it) {
 // 拆分：一个 key 的当前 value → 待推条目（只含变化/新增/删除）
 // prevItemState: 上次同步该 key 的 { itemId: { hash } | { deleted:true } }
 // 返回 { items, nextItemState }（nextItemState 供"推成功后"保存）
-export function diffKeyToItems(key, value, now, prevItemState = {}) {
+export function diffKeyToItems(key, value, now, prevItemState = {}, pendingItemState = {}) {
     const meta = parseKey(key);
     if (!meta) return { items: [], nextItemState: {} };
     const { kind, workId } = meta;
@@ -58,7 +58,7 @@ export function diffKeyToItems(key, value, now, prevItemState = {}) {
     // works_index：整传一条，指纹判断变没变
     if (kind === 'works_index') {
         const hash = fingerprint(value);
-        if (!prev._index || prev._index.hash !== hash) {
+        if (pendingItemState._index || !prev._index || prev._index.hash !== hash) {
             items.push({ workId, kind, itemId: '_index', value, contentHash: hash, clientUpdatedAt: now });
         }
         next._index = { hash };
@@ -74,7 +74,7 @@ export function diffKeyToItems(key, value, now, prevItemState = {}) {
         seen.add(itemId);
         const hash = fingerprint(item);
         const prevOne = prev[itemId];
-        if (prevOne && !prevOne.deleted && prevOne.hash === hash) {
+        if (!pendingItemState[itemId] && prevOne && !prevOne.deleted && prevOne.hash === hash) {
             next[itemId] = { hash }; // 未变，不推
             continue;
         }
@@ -87,16 +87,67 @@ export function diffKeyToItems(key, value, now, prevItemState = {}) {
     }
 
     // 删除检测（tombstone）：上次同步过、这次没了 → 明确删除
-    for (const itemId of Object.keys(prev)) {
-        if (prev[itemId]?.deleted) {
+    for (const itemId of new Set([...Object.keys(prev), ...Object.keys(pendingItemState)])) {
+        if (seen.has(itemId)) continue;
+        if (prev[itemId]?.deleted && !pendingItemState[itemId]) {
             next[itemId] = { deleted: true }; // 保留已有 tombstone 记录
-        } else if (!seen.has(itemId)) {
+        } else {
+            // A missing acknowledgement may hide a successful create. A later
+            // local deletion must still send a tombstone for that attempt.
             items.push({ workId, kind, itemId, deleted: true, clientUpdatedAt: now });
             next[itemId] = { deleted: true };
         }
     }
 
     return { items, nextItemState: next };
+}
+
+// Match acknowledgements within this single-key batch. Legacy servers may use
+// a complete, ordered result array; a shortened array cannot be mapped by index.
+export function matchPushResults(batch, data) {
+    if (!data || data.ok === false || !Array.isArray(data.results)) return batch.map(() => null);
+    const results = data.results;
+    const hasIdentities = results.some(result => result?.itemId != null);
+    if (!hasIdentities) {
+        return batch.map((item, index) => {
+            const result = results.length === batch.length ? results[index] : null;
+            if (result?.kind != null && result.kind !== item.kind) return null;
+            if (result?.workId != null && String(result.workId) !== String(item.workId)) return null;
+            return result;
+        });
+    }
+    return batch.map(item => {
+        const matches = results.filter(result => result?.itemId != null && String(result.itemId) === String(item.itemId));
+        if (matches.length !== 1) return null;
+        const result = matches[0];
+        if (result.kind != null && result.kind !== item.kind) return null;
+        if (result.workId != null && String(result.workId) !== String(item.workId)) return null;
+        return result;
+    });
+}
+
+// Pull pages may repeat an item or arrive out of sequence. Use the same final
+// revision for both the stored value and its confirmed fingerprint.
+export function latestItemsById(items) {
+    const latest = new Map();
+    const sorted = [...items].sort((a, b) => (Number(a.serverSeq) || 0) - (Number(b.serverSeq) || 0));
+    for (const item of sorted) latest.set(String(item.itemId), item);
+    return [...latest.values()];
+}
+
+// Compare with the original local array, before applying any remote revision.
+// An absent item with a live baseline is a local deletion, including on restart.
+export function locallyChangedItemIds(localValue, prevItemState = {}) {
+    const local = new Map((Array.isArray(localValue) ? localValue : [])
+        .filter(item => item?.id != null).map(item => [String(item.id), item]));
+    const changed = new Set();
+    for (const [id, item] of local) {
+        if (!prevItemState[id]?.hash || prevItemState[id].hash !== fingerprint(item)) changed.add(id);
+    }
+    for (const [id, previous] of Object.entries(prevItemState)) {
+        if (!local.has(id) && previous?.hash && !previous.deleted) changed.add(id);
+    }
+    return changed;
 }
 
 // 合并：云端条目 → 本地值。返回 { changed, value }。
@@ -107,7 +158,7 @@ export function mergeItemsIntoLocal(kind, localValue, items, prevItemState = {})
     // works_index：完全覆盖——云端整份直接盖掉本地（“以最后上传的设备为准”，不合并、不保本地）。
     // 用户要的是把最后上传那台的完整作品列表镜像下来：删掉的就该消失、不复活。
     if (kind === 'works_index') {
-        const latest = items.reduce((a, b) => ((b.serverSeq || 0) >= (a ? (a.serverSeq || 0) : -1) ? b : a), null);
+        const latest = items.reduce((a, b) => ((Number(b.serverSeq) || 0) >= (a ? (Number(a.serverSeq) || 0) : -1) ? b : a), null);
         if (!latest || latest.deleted) return { changed: false, value: localValue };
         if (fingerprint(latest.value) === fingerprint(localValue)) return { changed: false, value: localValue };
         return { changed: true, value: latest.value };
@@ -118,29 +169,25 @@ export function mergeItemsIntoLocal(kind, localValue, items, prevItemState = {})
     const map = new Map();
     for (const it of local) { if (it && it.id != null) map.set(String(it.id), it); }
     let changed = false;
+    const localChanges = locallyChangedItemIds(local, prev);
 
-    const sorted = [...items].sort((a, b) => (a.serverSeq || 0) - (b.serverSeq || 0));
-    for (const cloud of sorted) {
+    for (const cloud of latestItemsById(items)) {
         const id = String(cloud.itemId);
+        if (localChanges.has(id)) continue;
         const localItem = map.get(id);
-        // 本地是否自上次同步改动过这条（prev 有指纹且和当前本地不一致 → 改过；prev 没记 → 视作改过，保本地）
-        const localChanged = localItem
-            ? (prev[id]?.hash ? prev[id].hash !== fingerprint(localItem) : true)
-            : false;
 
         if (cloud.deleted) {
-            // 明确 tombstone：本地没改过才删；本地改过则保本地（冲突时保数据）
-            if (localItem && !localChanged) { map.delete(id); changed = true; }
+            if (localItem) { map.delete(id); changed = true; }
             continue;
         }
         if (!localItem) { map.set(id, cloud.value); changed = true; continue; }
         // 本地改过 → 保本地（等 push）；本地没改且内容不同 → 用云端
-        if (!localChanged && fingerprint(localItem) !== fingerprint(cloud.value)) {
+        if (fingerprint(localItem) !== fingerprint(cloud.value)) {
             map.set(id, cloud.value);
             changed = true;
         }
     }
-    if (!changed) return { changed: false, value: localValue };
+    if (!changed) return { changed: false, value: localValue === undefined && items.length > 0 ? local : localValue };
 
     // 重建：保留本地原顺序，替换/删除；新增（本地原本没有的）追加末尾
     const result = [];

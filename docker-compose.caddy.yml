@@ -24,11 +24,14 @@ services:
     environment:
       - NODE_ENV=production
       - HOSTNAME=0.0.0.0
+      - AUTHOR_PROXY_TOKEN=${AUTHOR_PROXY_TOKEN:-}
     restart: unless-stopped
 
   caddy:
     image: caddy:2-alpine
     container_name: author-caddy
+    environment:
+      - AUTHOR_PROXY_TOKEN=${AUTHOR_PROXY_TOKEN:-}
     ports:
       - "80:80"
       - "443:443"

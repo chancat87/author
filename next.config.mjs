@@ -109,11 +109,25 @@ const nextConfig = {
     '*': [
       'node_modules/next/dist/**/*',
     ],
+    '/api/parse-file': [
+      './app/lib/file-parser-child.cjs',
+      './node_modules/pdf-parse/**/*',
+      './node_modules/node-ensure/**/*',
+      './node_modules/word-extractor/**/*',
+      './node_modules/saxes/**/*',
+      './node_modules/xmlchars/**/*',
+      './node_modules/yauzl/**/*',
+      './node_modules/fd-slicer/**/*',
+      './node_modules/pend/**/*',
+      './node_modules/buffer-crc32/**/*',
+    ],
   },
-  // 提高请求体大小限制，避免大 PDF/DOC 文件上传时返回 413
+  // API routes bypass Proxy body cloning and enforce their own streaming byte
+  // limits. Server Actions are a separate entry point, not the upload limit.
   experimental: {
+    proxyClientMaxBodySize: '1mb',
     serverActions: {
-      bodySizeLimit: '50mb',
+      bodySizeLimit: '1mb',
     },
   },
 };

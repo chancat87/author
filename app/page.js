@@ -12,6 +12,7 @@ import {
   getChapters,
   createChapter,
   updateChapter,
+  saveEditorChapter,
   deleteChapter,
   generateId,
   exportToMarkdown,
@@ -24,6 +25,7 @@ import { buildContext, compileSystemPrompt, compileUserPrompt, getContextItems, 
 import { addTokenRecord } from './lib/token-stats';
 import { getProjectSettings, WRITING_MODES, getWritingMode, addSettingsNode, updateSettingsNode, deleteSettingsNode, getSettingsNodes, getActiveWorkId } from './lib/settings';
 import { resolveAiEndpoint } from './lib/ai-provider-compat';
+import { readAiEvents } from './lib/ai-stream.js';
 import { aiFetch } from './lib/ai-direct';
 import { localizeApiError } from './lib/api-error-i18n';
 import { tt } from './lib/runtime-i18n';
@@ -148,7 +150,7 @@ function makeUniqueChapterTitle(chapters, title) {
 
 export default function Home() {
   const {
-    chapters, setChapters, addChapter, updateChapter: updateChapterStore,
+    chapters, setChapters, addChapter, updateChapter: updateChapterStore, editorContentReceipt,
     activeChapterId, setActiveChapterId,
     activeWorkId, setActiveWorkId: setActiveWorkIdStore,
     sidebarOpen, setSidebarOpen, toggleSidebar,
@@ -645,22 +647,27 @@ export default function Home() {
     );
   }, [activeChapter, activeWorkId, showToast, updateChapterStore]);
 
-  const handleEditorUpdate = useCallback(async ({ chapterId: targetChapterId, workId: targetWorkId, html, wordCount }) => {
+  const handleEditorUpdate = useCallback(async ({ chapterId: targetChapterId, workId: targetWorkId, html, wordCount, baseContent, externalVersions, receipt }) => {
     // Destructive writes must name the document that actually produced the HTML.
     // Falling back to the currently selected chapter can write A's delayed update into B.
     if (!targetChapterId || !targetWorkId) {
       console.error('Rejected editor save without an explicit document identity');
-      return;
+      throw new Error('Editor save requires an explicit document identity');
     }
     const workIdToSave = getWorkScopedId(targetWorkId);
-    const updated = await updateChapter(targetChapterId, {
+    const previousContent = useAppStore.getState().chapters.find(ch => ch.id === targetChapterId)?.content;
+    const result = await saveEditorChapter(targetChapterId, {
       content: html,
       wordCount,
+      baseContent,
+      externalVersions,
+      backupSuffix: tt('外部版本备份', 'External version backup', 'Копия внешней версии'),
     }, workIdToSave);
-    if (updated && workIdToSave === getWorkScopedId(activeWorkId)) {
-      updateChapterStore(targetChapterId, { content: html, wordCount });
+    useAppStore.getState().applyEditorSave(workIdToSave, result, receipt, previousContent);
+    if (result.backups.length) {
+      useAppStore.getState().showToast(tt('检测到同时修改，已保留当前稿，并在章节列表新增外部版本备份。', 'Concurrent changes found. Your draft was kept; external versions were added to the chapter list as backups.', 'Обнаружены одновременные изменения. Ваш текст сохранён, внешние версии добавлены в список глав как копии.'), 'info');
     }
-  }, [activeWorkId, updateChapterStore]);
+  }, []);
 
   const handleSplitActiveChapter = useCallback(async (draft) => {
     if (!activeChapter || !isWritableChapter(activeChapter)) return null;
@@ -776,37 +783,12 @@ export default function Home() {
       const contentType = res.headers.get('content-type') || '';
       if (contentType.includes('application/json')) {
         const data = await res.json();
-        showToast(localizeApiError(data, tt) || t('page.toastRequestFailed'), 'error');
-        return;
+        throw new Error(localizeApiError(data, tt) || t('page.toastRequestFailed'));
       }
 
-      // 读取 SSE 流
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const events = buffer.split('\n\n');
-        buffer = events.pop() || '';
-
-        for (const event of events) {
-          const trimmed = event.trim();
-          if (!trimmed || trimmed === 'data: [DONE]') continue;
-
-          if (trimmed.startsWith('data: ')) {
-            try {
-              const json = JSON.parse(trimmed.slice(6));
-              if (json.text) { fullText += json.text; onChunk(json.text); }
-              if (json.usage) { usageData = json.usage; }
-            } catch {
-              // 解析失败跳过
-            }
-          }
-        }
+      for await (const json of readAiEvents(res, signal, tt)) {
+        if (json.text) { fullText += json.text; onChunk(json.text); }
+        if (json.usage) usageData = json.usage;
       }
 
       // 记录 token 统计
@@ -840,12 +822,13 @@ export default function Home() {
     } catch (err) {
       if (err.name === 'AbortError') {
         showToast(t('page.toastStopped'), 'info');
+        throw err;
       } else {
-        showToast(t('page.toastNetworkError'), 'error');
+        showToast(err.message || t('page.toastNetworkError'), 'error');
         throw err;
       }
     }
-  }, [activeWorkId, activeChapterId, contextSelection, showToast]);
+  }, [activeWorkId, activeChapterId, contextSelection, showToast, t]);
 
   // AI 生成存档 — Editor 的 ghost text 操作会调用此函数
   const handleArchiveGeneration = useCallback((entry) => {
@@ -917,6 +900,7 @@ export default function Home() {
               chapterId={activeChapterId}
               workId={activeWorkId || getActiveWorkId() || 'work-default'}
               content={activeChapter.content}
+              contentReceipt={editorContentReceipt?.chapter === activeChapter ? editorContentReceipt.receipt : null}
               onUpdate={handleEditorUpdate}
               onAiRequest={handleInlineAiRequest}
               onArchiveGeneration={handleArchiveGeneration}

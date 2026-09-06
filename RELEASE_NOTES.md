@@ -1,21 +1,30 @@
-## v1.2.55 — 改进 AI 设定与移动端联网搜索、历史和备份
+## v1.2.56 — 改进写作保存、快照恢复与更新稳定性
 
 ### 中文
 
 #### 桌面端与网页版
 
-- AI 设定操作现在会优先补充已有内容，避免在意图不明确时覆盖原设定。
-- 替换已有字段前会展示新旧内容供确认；应用后的修改可以单独撤销。
-- “移除卡片”现在只隐藏该条建议，不会删除角色或设定；删除设定时会再次确认。
-- 补全默认作品名称在导入、清理和删除界面中的多语言显示。
+- 改进章节切换、中文输入及异步保存时的正文保护，避免迟到的保存结果覆盖正在编辑的内容；遇到同时修改时保留外部版本备份。
+- 修复快照恢复可能影响其他作品的问题。现在只恢复目标作品，先保留恢复前备份，并为中断恢复提供重试入口；较新的对话继续保留。
+- 加强账号与服务器切换时的同步隔离，避免旧请求写入新会话；改善本地保存失败、同步冲突和重试时的状态反馈。
+- 改进 AI 流式回复、停止生成及网络中断处理，保留已经收到的内容，并明确显示未完成或失败状态。
+- 修复作品导入时的界面异常，完善 PDF / DOC 文件校验、超时及资源限制处理。
+- 修复新手引导与欢迎、登录界面重叠的问题，“跳过”可以正常结束引导。
+- 改进桌面退出和安装更新前的保存确认，取消退出后可继续使用应用。
+- 修复 Windows 源码部署“一键更新”启动 npm 时可能出现的错误。
+- 更新桌面运行时与相关依赖，完善构建检查及自部署入口配置。
+- 更新多语言保存、快照恢复和升级说明。
 
 #### Android 端
 
-- 新增模型原生搜索、Tavily 和 Exa 联网搜索配置，可在每个 AI 会话中自由切换。
-- API 配置改为分类目录，并提供更清晰的提供商选择与搜索界面。
-- 修复历史版本页面可能一直加载的问题，读取失败时可以重试，异常旧记录不会阻塞其他版本。
-- ZIP 备份不再包含 API Key、登录信息或 WebDAV 密码；导入旧备份时也会跳过这些内容。
-- 自定义搜索服务仅接受 HTTPS 地址，并在界面中明确提示 Key 与查询内容的发送对象。
+- 调整 AI 聊天提示的显示时长与排队处理，减少重复提示和旧提示持续堆积。
+- 改进键盘开合时输入框与发送按钮的布局，并统一复制等操作的提示反馈。
+
+#### 使用提示
+
+- 来源不明的旧登录记录可能需要重新登录一次，本地作品不会因此被删除。
+- 自部署使用 Caddy 时，请按 [部署说明](https://github.com/YuanShiJiLoong/author/blob/main/DOCKER.md) 配置可信入口；未配置时请求会共用限流配额。
+- 建议升级前导出一份作品备份，并保持原有访问域名和数据目录。
 
 ---
 
@@ -23,15 +32,24 @@
 
 #### Desktop and Web
 
-- AI lore actions now append to existing content by default, avoiding unintended overwrites when the request is ambiguous.
-- Existing and proposed values are shown before replacement, and applied changes can be undone individually.
-- **Remove card** now hides only the suggestion without deleting the character or lore entry; deleting lore requires confirmation.
-- Improved localized display of the default work name in import, cleanup, and deletion screens.
+- Improved draft protection during chapter switches, IME composition, and asynchronous saves. Late save responses no longer replace newer edits, and conflicting external versions are retained as backups.
+- Fixed snapshot restoration affecting other works. Restoration now targets only the selected work, keeps a backup first, and provides recovery after interruption while preserving newer conversations.
+- Strengthened sync isolation when switching accounts or servers, and improved feedback for local save failures, sync conflicts, and retries.
+- Improved streamed AI responses, cancellation, and connection failures. Received content is retained, with explicit incomplete or failed states.
+- Fixed the work import dialog and improved PDF / DOC validation, timeouts, and resource limits.
+- Fixed onboarding overlapping the welcome and sign-in dialogs, and made Skip end the tour correctly.
+- Improved save confirmation before desktop exit and update installation. Canceling exit keeps the application usable.
+- Fixed npm startup errors in the Windows source-deployment update flow.
+- Updated the desktop runtime and dependencies, with improved build checks and self-hosted ingress configuration.
+- Updated multilingual guidance for saving, snapshot recovery, and upgrades.
 
 #### Android
 
-- Added provider-native, Tavily, and Exa web search, with per-chat switching.
-- Reorganized API configuration into categories with a cleaner provider picker and search interface.
-- Fixed revision history getting stuck while loading, added retry feedback, and kept malformed legacy entries from blocking valid snapshots.
-- ZIP backups no longer include API keys, sign-in details, or WebDAV passwords; those fields are also skipped when importing older backups.
-- Custom search services now require HTTPS, with clear notice of where search keys and queries are sent.
+- Adjusted AI chat notification timing and queue handling to reduce repeated and lingering messages.
+- Improved input and send-button layout when the keyboard opens or closes, with consistent feedback for actions such as copying messages.
+
+#### Usage Notes
+
+- Older sign-in records without a known server origin may require signing in again. This does not delete local works.
+- When self-hosting behind Caddy, configure the trusted ingress as described in the [deployment guide](https://github.com/YuanShiJiLoong/author/blob/main/DOCKER_EN.md). Requests share a rate-limit quota when it is not configured.
+- Export a backup before upgrading and keep your existing access domain and data directory.

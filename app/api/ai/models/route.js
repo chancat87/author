@@ -1,10 +1,11 @@
+import { withApiResources } from '../../../lib/api-resource-guard.js';
 import { NextResponse } from 'next/server';
 import { proxyFetch } from '../../../lib/proxy-fetch';
 import { rotateKey } from '../../../lib/keyRotator';
 import { isOutboundRequestBlocked, safeUpstreamDetail } from '../../../lib/server-security.mjs';
 
 // 通用模型列表拉取 — OpenAI 兼容 / Claude 兼容 / Gemini 原生
-export async function POST(request) {
+async function handlePOST(request) {
     try {
         let { apiKey, baseUrl, provider, embedOnly, proxyUrl, allowKeyless } = await request.json();
         apiKey = rotateKey(apiKey);
@@ -338,3 +339,5 @@ async function fetchGeminiModels(apiKey, baseUrl, embedOnly, proxyUrl) {
 
     return NextResponse.json({ models });
 }
+
+export const POST = withApiResources('/api/ai/models', handlePOST);

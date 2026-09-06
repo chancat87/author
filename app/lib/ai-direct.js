@@ -12,6 +12,8 @@
 // 真相源):上游 OpenAI 流 → 应用简化协议 {thinking}/{text}/{usage}/{grounding}/[DONE]。
 // 直连遇到非 2xx 不在客户端翻译错误,直接回落代发,由服务端产出带 code 的本地化错误。
 
+import { createGenerationLifecycle, generationAbortResponse } from './ai-request-lifecycle.js';
+import { streamAiResponse, createOpenAiMapper } from './ai-stream.js';
 import { apiPath } from './api-base';
 import { IS_OFFICIAL_WEB } from './deployment-target';
 import { rotateKey } from './keyRotator';
@@ -34,20 +36,6 @@ function isDeepSeekRequest(apiConfig, baseUrl, model) {
 
 function isDeepSeekV4Model(model) {
     return DEEPSEEK_V4_MODELS.has(normalizeModel(model));
-}
-
-function getCachedPromptTokens(usage) {
-    if (!usage) return 0;
-    return usage.prompt_cache_hit_tokens
-        || usage.prompt_tokens_details?.cached_tokens
-        || 0;
-}
-
-function getCacheMissPromptTokens(usage, cachedTokens = getCachedPromptTokens(usage)) {
-    if (!usage) return 0;
-    if (usage.prompt_cache_miss_tokens != null) return usage.prompt_cache_miss_tokens;
-    const promptTokens = usage.prompt_tokens || 0;
-    return Math.max(0, promptTokens - cachedTokens);
 }
 
 function buildBaseParams({ model, maxTokens, temperature, topP, reasoningEffort }) {
@@ -90,99 +78,6 @@ function isDirectEligible(payload) {
 
 // ===== 上游 OpenAI SSE → 应用简化协议(镜像 route.js streamWithGrounding) =====
 
-function sseHeaders() {
-    return {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-    };
-}
-
-function transformOpenAiStream(upstreamRes) {
-    const encoder = new TextEncoder();
-    const decoder = new TextDecoder();
-
-    const stream = new ReadableStream({
-        async start(controller) {
-            const reader = upstreamRes.body.getReader();
-            let buffer = '';
-
-            try {
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-
-                    buffer += decoder.decode(value, { stream: true });
-                    const lines = buffer.split('\n');
-                    buffer = lines.pop() || '';
-
-                    for (const line of lines) {
-                        const trimmed = line.trim();
-                        if (!trimmed || trimmed.startsWith(':')) continue;
-
-                        if (trimmed === 'data: [DONE]') {
-                            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-                            continue;
-                        }
-
-                        if (trimmed.startsWith('data: ')) {
-                            try {
-                                const json = JSON.parse(trimmed.slice(6));
-                                const delta = json.choices?.[0]?.delta;
-
-                                const reasoning = delta?.reasoning_content;
-                                if (reasoning) {
-                                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({ thinking: reasoning })}\n\n`));
-                                }
-
-                                const content = delta?.content;
-                                if (content) {
-                                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: content })}\n\n`));
-                                }
-
-                                if (json.usage) {
-                                    const cachedTokens = getCachedPromptTokens(json.usage);
-                                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-                                        usage: {
-                                            promptTokens: json.usage.prompt_tokens || 0,
-                                            completionTokens: json.usage.completion_tokens || 0,
-                                            totalTokens: json.usage.total_tokens || 0,
-                                            cachedTokens,
-                                            cacheMissTokens: getCacheMissPromptTokens(json.usage, cachedTokens),
-                                        }
-                                    })}\n\n`));
-                                }
-
-                                const annotations = delta?.annotations;
-                                if (annotations && annotations.length > 0) {
-                                    const urlCitations = annotations
-                                        .filter(a => a.type === 'url_citation' && a.url_citation)
-                                        .map(a => ({ title: a.url_citation.title || '', uri: a.url_citation.url || '' }));
-                                    if (urlCitations.length > 0) {
-                                        controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-                                            grounding: { searchQueries: [], sources: urlCitations, supports: [] }
-                                        })}\n\n`));
-                                    }
-                                }
-                            } catch {
-                                // 解析失败的行直接跳过
-                            }
-                        }
-                    }
-                }
-                controller.close();
-            } catch (err) {
-                // 中断(用户停止)或网络错误:向下游传播,保持与代发路径一致的中止语义
-                try { controller.error(err); } catch { /* 已关闭 */ }
-            } finally {
-                try { reader.releaseLock(); } catch { /* ignore */ }
-            }
-        }
-    });
-
-    return new Response(stream, { headers: sseHeaders() });
-}
-
 // ===== 直连请求(镜像 route.js 普通模式的请求拼装) =====
 
 async function directOpenAiFetch(payload, signal) {
@@ -201,24 +96,36 @@ async function directOpenAiFetch(payload, signal) {
         { role: 'user', content: userPrompt },
     ];
 
-    const upstream = await fetch(url, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-            model, messages, ...baseParams,
-            ...(toolsConfig?.webSearch ? { web_search_options: { search_context_size: 'medium' } } : {}),
-            stream: true,
-            ...(shouldIncludeStreamUsage ? { stream_options: { include_usage: true } } : {}),
-        }),
-        signal,
-    });
+    const lifecycle = createGenerationLifecycle(signal);
+    try {
+        const upstream = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+                model, messages, ...baseParams,
+                ...(toolsConfig?.webSearch ? { web_search_options: { search_context_size: 'medium' } } : {}),
+                stream: true,
+                ...(shouldIncludeStreamUsage ? { stream_options: { include_usage: true } } : {}),
+            }),
+            signal: lifecycle.signal,
+        });
 
-    // 非 2xx 不在客户端翻译错误:返回 null 触发代发兜底,由服务端复现并产出本地化错误
-    if (!upstream.ok || !upstream.body) return null;
-    return transformOpenAiStream(upstream);
+        // 非 2xx 不在客户端翻译错误:返回 null 触发代发兜底,由服务端复现并产出本地化错误
+        lifecycle.signal.throwIfAborted();
+        if (!upstream.ok || !upstream.body) {
+            await upstream.body?.cancel().catch(() => {});
+            return null;
+        }
+        return streamAiResponse(upstream, lifecycle, createOpenAiMapper());
+    } catch (error) {
+        if (lifecycle.signal.reason?.name === 'TimeoutError') return generationAbortResponse(lifecycle);
+        throw error;
+    } finally {
+        if (!lifecycle.streaming) lifecycle.dispose();
+    }
 }
 
 // ===== 对外入口:fetch 的直连替身 =====
@@ -240,7 +147,7 @@ export async function aiFetch(endpoint, init = {}) {
         const direct = await directOpenAiFetch(payload, init?.signal);
         if (direct) return direct;
     } catch (err) {
-        if (err?.name === 'AbortError') throw err; // 用户主动停止:保持原语义,不回落
+        if (init.signal?.aborted || err?.name === 'AbortError' || err?.name === 'TimeoutError') throw err; // 用户主动停止:保持原语义,不回落
         // 跨域 / 网络失败 → 回落服务端代发
     }
     return proxyRequest();

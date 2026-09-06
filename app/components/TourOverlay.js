@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Sparkles } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { useI18n } from '../lib/useI18n';
@@ -8,7 +8,7 @@ import { useI18n } from '../lib/useI18n';
 const ONBOARDING_KEY = 'author-onboarding-done';
 
 export default function TourOverlay({ onOpenHelp }) {
-    const { startTour, setStartTour, language, visualTheme } = useAppStore();
+    const { startTour, setStartTour, language, visualTheme, showWelcomeModal, showLoginModal } = useAppStore();
     const { t } = useI18n();
     const [status, setStatus] = useState('hidden'); // hidden, intro, tour
     const [currentStepIndex, setCurrentStepIndex] = useState(0);
@@ -65,13 +65,13 @@ export default function TourOverlay({ onOpenHelp }) {
         if (typeof window !== 'undefined') {
             const isDone = localStorage.getItem(ONBOARDING_KEY);
             if (!isDone) {
-                if (language && visualTheme) {
-                    setStatus('intro');
+                if (language && visualTheme && !showWelcomeModal && !showLoginModal) {
+                    setStatus(current => current === 'hidden' ? 'intro' : current);
                 }
             }
             setWindowSize({ w: window.innerWidth, h: window.innerHeight });
         }
-    }, [language, visualTheme]);
+    }, [language, visualTheme, showWelcomeModal, showLoginModal]);
 
     const updateRect = useCallback((index) => {
         const step = TOUR_STEPS[index];
@@ -136,7 +136,7 @@ export default function TourOverlay({ onOpenHelp }) {
                 }
             }, 300);
         }
-    }, [TOUR_STEPS]);
+    }, [TOUR_STEPS, currentStepIndex]);
 
     const finishTour = () => {
         // Close the More dropdown if it was opened for the GitHub step
@@ -149,13 +149,6 @@ export default function TourOverlay({ onOpenHelp }) {
         setStatus('hidden');
     };
 
-    const skipToHelp = () => {
-        setStatus('tour');
-        const skipTarget = TOUR_STEPS.length - 2;
-        setCurrentStepIndex(skipTarget);
-        updateRect(skipTarget);
-    };
-
     const beginTour = useCallback(() => {
         setStatus('tour');
         setCurrentStepIndex(0);
@@ -163,11 +156,11 @@ export default function TourOverlay({ onOpenHelp }) {
     }, [updateRect]);
 
     useEffect(() => {
-        if (startTour) {
+        if (startTour && !showWelcomeModal && !showLoginModal) {
             beginTour();
             setStartTour(false);
         }
-    }, [startTour, beginTour, setStartTour]);
+    }, [startTour, beginTour, setStartTour, showWelcomeModal, showLoginModal]);
 
     // 监听窗口缩放和滚动
     useEffect(() => {
@@ -203,7 +196,7 @@ export default function TourOverlay({ onOpenHelp }) {
         }
     };
 
-    if (status === 'hidden') return null;
+    if (status === 'hidden' || showWelcomeModal || showLoginModal) return null;
 
     // ================= Intro 弹窗 =================
     if (status === 'intro') {
@@ -215,7 +208,7 @@ export default function TourOverlay({ onOpenHelp }) {
                     <p>{t('tour.introSubtitle')}</p>
                     <p className="tour-intro-sub">{t('tour.introHint')}</p>
                     <div className="tour-intro-actions">
-                        <button className="tour-btn ghost" onClick={skipToHelp}>{t('tour.btnSkip')}</button>
+                        <button className="tour-btn ghost" onClick={finishTour}>{t('tour.btnSkip')}</button>
                         <button className="tour-btn primary" onClick={beginTour}>{t('tour.btnStart')}</button>
                     </div>
                 </div>
@@ -355,7 +348,7 @@ export default function TourOverlay({ onOpenHelp }) {
                         {currentStepIndex >= TOUR_STEPS.length - 2 ? (
                             <div />
                         ) : (
-                            <button className="tour-skip-text" onClick={skipToHelp}>{t('tour.btnEndTour')}</button>
+                            <button className="tour-skip-text" onClick={finishTour}>{t('tour.btnEndTour')}</button>
                         )}
                         <div className="tour-footer-right" style={{ display: 'flex', gap: '8px' }}>
                             {currentStepIndex > 0 && (

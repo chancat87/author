@@ -1,3 +1,4 @@
+import { withApiResources } from '../../../lib/api-resource-guard.js';
 // 统一搜索 API — 支持 Google Custom Search / Bing Search / Tavily
 // 供 Function Calling 搜索循环调用
 
@@ -6,9 +7,13 @@ export const runtime = 'nodejs';
 import { rotateKey } from '../../../lib/keyRotator';
 import { proxyFetch } from '../../../lib/proxy-fetch';
 import { isOutboundRequestBlocked } from '../../../lib/server-security.mjs';
+import { createGenerationLifecycle, generationAbortResponse } from '../../../lib/ai-request-lifecycle.js';
 
-export async function POST(request) {
+async function handlePOST(request) {
+    const lifecycle = createGenerationLifecycle(request.signal);
+    const { signal } = lifecycle;
     try {
+        signal.throwIfAborted();
         const { query, searchConfig } = await request.json();
 
         if (!query) {
@@ -27,7 +32,7 @@ export async function POST(request) {
             case 'tavily': {
                 const tavilyBase = (searchConfig.baseUrl || 'https://api.tavily.com').replace(/\/$/, '');
                 const res = await proxyFetch(`${tavilyBase}/search`, {
-                    method: 'POST',
+                    method: 'POST', signal,
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         api_key: searchConfig.apiKey,
@@ -53,7 +58,7 @@ export async function POST(request) {
             case 'exa': {
                 const exaBase = (searchConfig.baseUrl || 'https://api.exa.ai').replace(/\/$/, '');
                 const res = await proxyFetch(`${exaBase}/search`, {
-                    method: 'POST',
+                    method: 'POST', signal,
                     headers: {
                         'Content-Type': 'application/json',
                         'x-api-key': searchConfig.apiKey,
@@ -83,12 +88,19 @@ export async function POST(request) {
                 return Response.json({ error: `不支持的搜索引擎: ${searchConfig.provider}` }, { status: 400 });
         }
 
+        signal.throwIfAborted();
         return Response.json({ results });
     } catch (error) {
+        const aborted = generationAbortResponse(lifecycle);
+        if (aborted) return aborted;
         console.error('搜索接口错误:', error?.code || error?.name || 'UNKNOWN');
         if (isOutboundRequestBlocked(error)) {
             return Response.json({ error: error.message, code: error.code }, { status: 400 });
         }
         return Response.json({ error: '搜索请求失败' }, { status: 500 });
+    } finally {
+        lifecycle.dispose();
     }
 }
+
+export const POST = withApiResources('/api/tools/search', handlePOST);

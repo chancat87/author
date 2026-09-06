@@ -1,0 +1,5 @@
+[
+{{- range $index, $finding := . }}{{if $index}},{{end}}
+{"rule":{{printf "%q" $finding.RuleID}},"file":{{printf "%q" $finding.File}},"line":{{$finding.StartLine}},"endLine":{{$finding.EndLine}},"column":{{$finding.StartColumn}},"endColumn":{{$finding.EndColumn}},"commit":{{printf "%q" $finding.Commit}}}
+{{- end }}
+]

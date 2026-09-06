@@ -1,3 +1,4 @@
+import { withApiResources } from '../../../lib/api-resource-guard.js';
 import { NextResponse } from 'next/server';
 import { proxyFetch } from '../../../lib/proxy-fetch';
 import { rotateKey } from '../../../lib/keyRotator';
@@ -11,7 +12,7 @@ function isDeepSeekProvider(provider, baseUrl, model) {
         || DEEPSEEK_V4_MODELS.has((model || '').trim().toLowerCase());
 }
 
-export async function POST(request) {
+async function handlePOST(request) {
     try {
         const { apiConfig } = await request.json();
         let { apiKey, baseUrl, model, provider, providerType, apiFormat, proxyUrl } = apiConfig || {};
@@ -109,3 +110,5 @@ async function connectionError(response) {
     if (upstream) return NextResponse.json({ success: false, error: upstream });
     return NextResponse.json({ success: false, error: `连接失败(${response.status})`, code: 'CONN_FAILED', status: response.status });
 }
+
+export const POST = withApiResources('/api/ai/test', handlePOST);

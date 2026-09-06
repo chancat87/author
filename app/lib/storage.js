@@ -3,6 +3,7 @@
 // 章节按作品(workId)隔离存储
 
 import { persistGet, persistSet, persistDel } from './persistence';
+import { countWords } from './word-count.js';
 
 const LEGACY_STORAGE_KEY = 'author-chapters';
 const chapterOperationQueues = new Map();
@@ -133,6 +134,45 @@ export async function updateChapter(id, updates, workId) {
         };
         await writeChapters(key, chapters);
         return chapters[index];
+    });
+}
+
+// Preserve concurrent versions in the same write as the author's draft. A
+// delayed autosave must not silently replace a newer imported/synced chapter.
+export function saveEditorChapter(id, { content, wordCount, baseContent, externalVersions = [], backupSuffix }, workId) {
+    return enqueueChapterOperation(workId, async () => {
+        const key = getStorageKey(workId);
+        const chapters = await readChapters(key);
+        const index = chapters.findIndex(ch => ch.id === id);
+        if (index === -1) throw new Error('The edited chapter no longer exists');
+        const current = chapters[index];
+        const versions = [...externalVersions];
+        if ((current.content ?? '') !== baseContent && (current.content ?? '') !== content) {
+            versions.push(current.content ?? '');
+        }
+        const backups = [];
+        for (const version of new Set(versions)) {
+            if (version === content || chapters.some(ch => ch.editorConflictOf === id && ch.content === version)) continue;
+            const backup = {
+                ...current,
+                id: generateId(),
+                title: `${current.title || ''} (${backupSuffix || 'External version backup'})`,
+                content: version,
+                wordCount: countWords(typeof DOMParser === 'function'
+                    ? new DOMParser().parseFromString(String(version), 'text/html').body.textContent
+                    : String(version).replace(/<[^>]*>/g, '')),
+                numberingIgnored: true,
+                editorConflictOf: id,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+            };
+            backups.push(backup);
+            chapters.push(backup);
+        }
+        const chapter = { ...current, content, wordCount, updatedAt: new Date().toISOString() };
+        chapters[index] = chapter;
+        await writeChapters(key, chapters);
+        return { chapter, backups };
     });
 }
 

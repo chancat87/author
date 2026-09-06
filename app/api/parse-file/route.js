@@ -1,61 +1,23 @@
-/**
- * API Route: 解析 DOC / PDF 文件为纯文本
- * POST /api/parse-file
- * Body: FormData { file: File }
- * Response: { text: string } | { error: string }
- */
+import { withApiResources, readBoundedBody, MAX_UPLOAD_BYTES, ApiResourceError, resourceErrorResponse } from '../../lib/api-resource-guard.js';
+import { parseFileUpload } from '../../lib/file-upload.js';
+import { parseFileIsolated } from '../../lib/file-parser.js';
 
-import { NextResponse } from 'next/server';
-import { redactSensitiveText } from '@/app/lib/server-security.mjs';
-
-// 提高 body 大小限制，避免大 PDF/DOC 文件上传时返回 413
-export const maxDuration = 60; // 秒
+export const runtime = 'nodejs';
+export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
-const MAX_FILE_BYTES = 50 * 1024 * 1024;
-
-export async function POST(request) {
+async function handlePOST(request) {
     try {
-        const formData = await request.formData();
-        const file = formData.get('file');
-
-        if (!file || typeof file === 'string') {
-            return NextResponse.json({ error: '未提供文件', code: 'NO_FILE' }, { status: 400 });
-        }
-
-        if (file.size > MAX_FILE_BYTES) {
-            return NextResponse.json({ error: '文件体积过大', code: 'FILE_TOO_LARGE' }, { status: 413 });
-        }
-
-        const fileName = file.name.toLowerCase();
-        const buffer = Buffer.from(await file.arrayBuffer());
-
-        let text = '';
-
-        if (fileName.endsWith('.pdf')) {
-            // PDF 解析 — 直接引用内部模块，避免 index.js 加载测试文件
-            const pdfParse = (await import('pdf-parse/lib/pdf-parse.js')).default;
-            const pdfData = await pdfParse(buffer);
-            text = pdfData.text || '';
-        } else if (fileName.endsWith('.doc') && !fileName.endsWith('.docx')) {
-            // DOC 解析（旧版 Word 二进制格式）
-            const WordExtractor = (await import('word-extractor')).default;
-            const extractor = new WordExtractor();
-            const doc = await extractor.extract(buffer);
-            text = doc.getBody() || '';
-        } else {
-            return NextResponse.json({ error: '不支持的文件格式', code: 'UNSUPPORTED_FORMAT' }, { status: 400 });
-        }
-
-        if (!text.trim()) {
-            return NextResponse.json({ text: '', warning: '文件中未能提取到文本内容（可能是扫描件或图片PDF）', code: 'PARSE_NO_TEXT' });
-        }
-        return NextResponse.json({ text });
-    } catch (err) {
-        console.error('parse-file error:', redactSensitiveText(err?.message || err, 200));
-        return NextResponse.json(
-            { error: '解析失败', code: 'PARSE_FAILED' },
-            { status: 500 }
-        );
+        const bytes = await readBoundedBody(request, MAX_UPLOAD_BYTES);
+        const { buffer, format } = parseFileUpload(bytes, request.headers.get('content-type'));
+        const text = await parseFileIsolated(buffer, format, { signal: request.signal });
+        if (!text.trim()) return Response.json({ text: '', warning: '文件中未能提取到文本内容（可能是扫描件或图片PDF）', code: 'PARSE_NO_TEXT' });
+        return Response.json({ text });
+    } catch (error) {
+        if (error instanceof ApiResourceError) return resourceErrorResponse(error);
+        console.error('parse-file error:', error?.code || error?.name || 'UNKNOWN');
+        return Response.json({ error: '解析失败', code: 'PARSE_FAILED' }, { status: 422 });
     }
 }
+
+export const POST = withApiResources('/api/parse-file', handlePOST);

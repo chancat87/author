@@ -1,3 +1,4 @@
+import { withApiResources } from '../../lib/api-resource-guard.js';
 import { NextResponse } from 'next/server';
 
 const RELEASE_API = 'https://api.github.com/repos/YuanShiJiLoong/author/releases/latest';
@@ -12,7 +13,7 @@ function findAndroidAsset(assets = []) {
     }) || assets.find((asset) => String(asset?.name || '').toLowerCase().endsWith('.apk'));
 }
 
-export async function GET() {
+async function handleGET() {
     try {
         const res = await fetch(RELEASE_API, {
             headers: {
@@ -36,3 +37,5 @@ export async function GET() {
 
     return NextResponse.redirect(RELEASE_PAGE, 302);
 }
+
+export const GET = withApiResources('/api/android-download', handleGET);

@@ -1,8 +1,9 @@
 'use client';
 
 import { useEditor, EditorContent } from '@tiptap/react';
+import { createDocument } from '@tiptap/core';
 import { countWords } from '../lib/word-count';
-import { EditorState, Selection, TextSelection } from '@tiptap/pm/state';
+import { EditorState, TextSelection } from '@tiptap/pm/state';
 import { redoDepth, undoDepth } from '@tiptap/pm/history';
 import { DOMParser as PmDOMParser, DOMSerializer } from '@tiptap/pm/model';
 import StarterKit from '@tiptap/starter-kit';
@@ -46,6 +47,13 @@ import {
     completeLocalSave,
     failLocalSave,
 } from '../lib/local-save-status';
+import {
+    createEditorContentSession, receiveEditorContent, editorContentAction,
+    acceptEditorContent, acknowledgeEditorSave, editorSaveIsObsolete,
+} from '../lib/editor-content-state';
+import {
+    clampEditorDocPosition as clampDocPosition, createEditorPositionRecord, restoreEditorTextSelection,
+} from '../lib/editor-selection';
 
 // ==================== 虚拟分页常量 ====================
 const PAGE_HEIGHT = 1056; // A4 纸 @ 96dpi
@@ -96,12 +104,7 @@ function loadEditorPositions(workId) {
 function saveEditorPositionRecord(workId, chapterId, position) {
     if (typeof window === 'undefined' || !chapterId) return;
     const data = loadEditorPositions(workId);
-    data[chapterId] = {
-        from: Number.isFinite(position.from) ? Math.max(0, Math.round(position.from)) : 0,
-        to: Number.isFinite(position.to) ? Math.max(0, Math.round(position.to)) : 0,
-        scrollTop: Number.isFinite(position.scrollTop) ? Math.max(0, Math.round(position.scrollTop)) : 0,
-        updatedAt: Date.now(),
-    };
+    data[chapterId] = createEditorPositionRecord(position);
 
     const entries = Object.entries(data)
         .sort((a, b) => (b[1]?.updatedAt || 0) - (a[1]?.updatedAt || 0))
@@ -116,12 +119,6 @@ function loadEditorPositionRecord(workId, chapterId) {
     return record;
 }
 
-function clampDocPosition(doc, pos) {
-    const max = Math.max(0, doc.content.size);
-    if (!Number.isFinite(pos)) return max;
-    return Math.max(0, Math.min(Math.round(pos), max));
-}
-
 function getMountedEditorView(targetEditor) {
     if (!targetEditor || targetEditor.isDestroyed) return null;
     const view = targetEditor.editorView;
@@ -134,13 +131,11 @@ function focusMountedEditor(targetEditor) {
     if (!view) return false;
 
     try {
-        view.dom.focus({ preventScroll: true });
+        // ProseMirror also synchronizes the DOM selection and prevents scrolling.
+        // Raw DOM focus can replace a restored selection with the browser's old cursor.
+        view.focus();
     } catch {
-        try {
-            view.focus();
-        } catch {
-            return false;
-        }
+        return false;
     }
 
     return true;
@@ -197,6 +192,8 @@ function saveEditorPositionSnapshot(targetEditor, workId, chapterId, container) 
     saveEditorPositionRecord(workId, chapterId, {
         from: selection.from,
         to: selection.to,
+        anchor: selection.anchor,
+        head: selection.head,
         scrollTop: container?.scrollTop || 0,
     });
 }
@@ -211,30 +208,15 @@ function restoreEditorPositionSnapshot(targetEditor, workId, chapterId, containe
 
     const { state } = view;
     const { doc } = state;
-    const from = clampDocPosition(doc, record.from);
-    const to = clampDocPosition(doc, record.to ?? record.from);
-    const safeFrom = Math.min(from, to);
-    const safeTo = Math.max(from, to);
-
     try {
-        const selection = TextSelection.create(doc, safeFrom, safeTo);
+        const selection = restoreEditorTextSelection(doc, record);
         view.dispatch(
             state.tr
                 .setSelection(selection)
                 .setMeta('addToHistory', false),
         );
     } catch {
-        try {
-            const resolved = doc.resolve(safeFrom);
-            const selection = Selection.near(resolved, -1);
-            view.dispatch(
-                state.tr
-                    .setSelection(selection)
-                    .setMeta('addToHistory', false),
-            );
-        } catch {
-            return false;
-        }
+        return false;
     }
 
     const rememberedScrollTop = Number.isFinite(record.scrollTop)
@@ -250,13 +232,16 @@ function restoreEditorPositionSnapshot(targetEditor, workId, chapterId, containe
     if (container && rememberedScrollTop !== null) {
         container.scrollTop = rememberedScrollTop;
         requestAnimationFrame(() => {
-            container.scrollTop = rememberedScrollTop;
+            // A late frame must not restore the previous chapter's scroll position.
+            if (getMountedEditorView(targetEditor) === view && view.state.doc === doc) {
+                container.scrollTop = rememberedScrollTop;
+            }
         });
     }
     return true;
 }
 
-const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-default', onUpdate, editable = true, onAiRequest, onArchiveGeneration, chapterNumberingIgnored = false, onToggleSpecialChapter, onSplitChapter, onMergeNextChapter, contextItems, contextSelection, setContextSelection }, ref) {
+const Editor = forwardRef(function Editor({ content, contentReceipt = null, chapterId, workId = 'work-default', onUpdate, editable = true, onAiRequest, onArchiveGeneration, chapterNumberingIgnored = false, onToggleSpecialChapter, onSplitChapter, onMergeNextChapter, contextItems, contextSelection, setContextSelection }, ref) {
     const { text, language } = useI18n();
     const currentLineHighlight = useAppStore((state) => state.currentLineHighlight);
     const clipPathId = useId();
@@ -267,8 +252,11 @@ const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-d
     const restoredPositionKeyRef = useRef(null);
     const saveQueueRef = useRef(Promise.resolve({ changed: false }));
     const queuedSaveKeyRef = useRef(null);
-    const lastCompletedSaveKeyRef = useRef(null);
     const isLoadingContentRef = useRef(false);
+    const contentSessionRef = useRef(null);
+    const initialContentRef = useRef(content);
+    const reconcileContentRef = useRef(null);
+    const compositionRef = useRef(false);
     const contentRef = useRef(null);
     const containerRef = useRef(null);
     const workspaceRef = useRef(null);
@@ -326,6 +314,8 @@ const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-d
             html,
             text,
             wordCount: countWords(text),
+            session: contentSessionRef.current,
+            contentGeneration: contentSessionRef.current?.generation,
         };
     }, []);
 
@@ -337,11 +327,10 @@ const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-d
             workId: payload.workId || null,
             html: payload.html || '',
             wordCount: payload.wordCount || 0,
+            sessionId: payload.session?.id,
+            contentGeneration: payload.contentGeneration,
+            externalVersions: payload.session?.pending.map(version => version.content),
         });
-
-        if (saveKey === lastCompletedSaveKeyRef.current) {
-            return Promise.resolve({ changed: false });
-        }
 
         if (saveKey === queuedSaveKeyRef.current) {
             return saveQueueRef.current;
@@ -351,12 +340,28 @@ const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-d
         const nextSave = saveQueueRef.current
             .catch(() => ({ changed: false }))
             .then(async () => {
-                if (saveKey === lastCompletedSaveKeyRef.current) {
+                if (payload.session && editorSaveIsObsolete(payload.session, payload.contentGeneration)) return { changed: false };
+                if (payload.session?.savedHtml === payload.html && !payload.session.pending.length) {
                     return { changed: false };
                 }
 
-                await Promise.resolve(onUpdate(payload));
-                lastCompletedSaveKeyRef.current = saveKey;
+                const session = payload.session;
+                // Read the baseline at execution time: earlier queued writes may
+                // have completed since this payload was captured.
+                const preservedVersions = [...(session?.pending || [])];
+                if (session) session.saving++;
+                try {
+                    await Promise.resolve(onUpdate({
+                        ...payload,
+                        baseContent: session?.baseContent,
+                        externalVersions: preservedVersions.map(version => version.content),
+                        receipt: { sessionId: session?.id, html: payload.html },
+                    }));
+                    if (session) acknowledgeEditorSave(session, payload.html, preservedVersions);
+                } finally {
+                    if (session) session.saving--;
+                }
+                if (session === contentSessionRef.current) queueMicrotask(() => reconcileContentRef.current?.());
                 return { changed: true };
             })
             .finally(() => {
@@ -546,12 +551,14 @@ const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-d
         onUpdate: ({ editor }) => {
             // 跳过程序化 setContent 触发的 onUpdate（章节/作品切换）
             if (isLoadingContentRef.current) return;
+            if (!contentSessionRef.current) return;
             scheduleCurrentEditorPosition(editor);
             if (!debouncedSaveOperationRef.current) {
                 debouncedSaveOperationRef.current = beginLocalSave('editor-debounce');
             }
             if (debounceRef.current) clearTimeout(debounceRef.current);
             debounceRef.current = setTimeout(() => {
+                if (compositionRef.current || editor.view.composing) return;
                 debounceRef.current = null;
                 const operationId = takeDebouncedSaveOperation();
                 queueTrackedSave(buildSavePayload(editor), operationId).catch(err => {
@@ -566,6 +573,13 @@ const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-d
 
     const flushPendingSave = useCallback(async () => {
         if (!editor || isLoadingContentRef.current) return { changed: false };
+        // Never serialize an unfinished IME composition or write a clean stale
+        // document merely because a snapshot/exit requested a flush.
+        if (compositionRef.current || editor.view.composing) {
+            throw new Error(text('请先完成当前输入，再重试。', 'Finish the current input, then retry.', 'Завершите ввод и повторите попытку.'));
+        }
+        const session = contentSessionRef.current;
+        if (!session || (editor.getHTML() === session.savedHtml && !debounceRef.current && !session.pending.some(version => version.needsBackup))) return saveQueueRef.current;
         if (debounceRef.current) {
             clearTimeout(debounceRef.current);
             debounceRef.current = null;
@@ -574,7 +588,7 @@ const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-d
         const payload = buildSavePayload(editor);
         const operationId = takeDebouncedSaveOperation();
         return await queueTrackedSave(payload, operationId);
-    }, [buildSavePayload, editor, queueTrackedSave, takeDebouncedSaveOperation]);
+    }, [buildSavePayload, editor, queueTrackedSave, takeDebouncedSaveOperation, text]);
 
     const buildSplitDraft = useCallback(() => {
         if (!editor) return null;
@@ -612,10 +626,10 @@ const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-d
             currentHtml: payload?.html || '',
             currentWordCount: payload?.wordCount || 0,
         }));
-        if (result?.content) {
-            isLoadingContentRef.current = true;
-            editor.commands.setContent(result.content, false);
-            isLoadingContentRef.current = false;
+        // The parent publishes the persisted result as an external revision.
+        // Reconcile it through the same path as imports and synchronization.
+        if (result && contentSessionRef.current) {
+            editor.commands.blur();
         }
     }, [buildSavePayload, editor, flushPendingSave, onMergeNextChapter]);
 
@@ -633,6 +647,45 @@ const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-d
     // 切换章节时重置编辑器内容（替代 key={chapterId} 强制重挂载，避免闪白）
     const prevChapterIdRef = useRef(chapterId);
     const prevWorkIdRef = useRef(normalizedWorkId);
+    const replaceLoadedContent = useCallback((nextContent) => {
+        isLoadingContentRef.current = true;
+        try {
+            editor.commands.setContent(nextContent, { emitUpdate: false });
+            if (!resetEditorDocumentHistory(editor)) {
+                editor.setEditable(false);
+                useAppStore.getState().showToast?.(
+                    text('撤销历史隔离失败。为保护内容，编辑器已暂停，请刷新后继续。', 'Undo history could not be isolated. Editing was paused; please reload.', 'Не удалось изолировать историю отмены. Редактирование приостановлено; перезагрузите приложение.'),
+                    'error',
+                );
+            }
+        } finally {
+            isLoadingContentRef.current = false;
+        }
+    }, [editor, text]);
+
+    const reconcileExternalContent = useCallback(() => {
+        if (!editor || editor.isDestroyed) return;
+        const session = contentSessionRef.current;
+        if (!session) return;
+        const action = editorContentAction(session, editor.getHTML(), {
+            focused: editor.isFocused,
+            composing: compositionRef.current || editor.view.composing,
+        });
+        if (action === 'apply') {
+            const version = session.pending.at(-1);
+            if (editor.getHTML() !== version.html) replaceLoadedContent(version.content);
+            acceptEditorContent(session, version, editor.getHTML());
+        } else if (action === 'conflict') {
+            // The save writes the draft and copies of external versions together.
+            flushPendingSave().catch(error => console.error('Failed to preserve concurrent editor versions:', error));
+        }
+    }, [editor, flushPendingSave, replaceLoadedContent]);
+
+    useEffect(() => {
+        reconcileContentRef.current = reconcileExternalContent;
+        return () => { reconcileContentRef.current = null; };
+    }, [reconcileExternalContent]);
+
     useEffect(() => {
         if (!editor || content === undefined) return;
 
@@ -654,48 +707,52 @@ const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-d
             prevChapterIdRef.current = chapterId;
             prevWorkIdRef.current = normalizedWorkId;
             // 设置静默标记，阻止 setContent 触发 onUpdate → saveChapters
-            isLoadingContentRef.current = true;
-            editor.commands.setContent(content || '', false);
+            compositionRef.current = false;
+            replaceLoadedContent(content ?? '');
             loadedDocumentTargetRef.current = { workId: normalizedWorkId, chapterId };
-            const historyIsolated = resetEditorDocumentHistory(editor);
-            isLoadingContentRef.current = false;
-            if (!historyIsolated) {
-                // Fail closed: an editor with unverified cross-chapter history
-                // must not accept an undo that could replace the whole chapter.
-                editor.setEditable(false);
-                useAppStore.getState().showToast?.(
-                    language === 'en'
-                        ? 'Chapter undo history could not be isolated. Editing was paused to protect your content; please reload.'
-                        : language === 'ru'
-                            ? 'Не удалось изолировать историю отмены главы. Редактирование приостановлено для защиты текста; перезагрузите приложение.'
-                            : '章节撤销历史隔离失败。为保护内容，编辑器已暂停，请刷新后继续。',
-                    'error',
-                );
-            }
+            contentSessionRef.current = createEditorContentSession(content, editor.getHTML());
             restoredPositionKeyRef.current = null;
             restoreCurrentEditorPosition(editor, chapterId, normalizedWorkId);
             return;
         }
 
-        // 同一章节内的内容变更：仅当差异显著时才替换（防止用户打字时重置）
-        const currentHtml = editor.getHTML();
-        if (content && content !== currentHtml) {
-            // 核心修复：如果用户正在活跃输入（光标在编辑器内），绝对不能用外部旧 props 强行覆盖 DOM
-            // 否则在长按换行（急速输入）时，由于父组件 React State 存在延迟，会导致严重的光标乱跳和吞字
-            if (editor.isFocused) return;
-
-            if (Math.abs(content.length - currentHtml.length) > 50 || !currentHtml.includes(content.substring(0, 50))) {
-                isLoadingContentRef.current = true;
-                editor.commands.setContent(content || '', false);
-                resetEditorDocumentHistory(editor);
-                isLoadingContentRef.current = false;
-            }
+        if (!contentSessionRef.current) {
+            contentSessionRef.current = createEditorContentSession(initialContentRef.current, editor.getHTML());
         }
+        const parsed = createDocument(content ?? '', editor.schema);
+        const normalizedHtml = serializeFragmentToHtml(editor.schema, parsed.content);
+        receiveEditorContent(contentSessionRef.current, content, normalizedHtml, contentReceipt);
+        reconcileExternalContent();
 
         if (restoredPositionKeyRef.current !== currentIdentity) {
             restoreCurrentEditorPosition(editor, chapterId, normalizedWorkId);
         }
-    }, [buildSavePayload, chapterId, content, editor, flushCurrentEditorPosition, language, normalizedWorkId, queueTrackedSave, restoreCurrentEditorPosition, takeDebouncedSaveOperation]);
+    }, [buildSavePayload, chapterId, content, contentReceipt, editor, flushCurrentEditorPosition, normalizedWorkId, queueTrackedSave, reconcileExternalContent, replaceLoadedContent, restoreCurrentEditorPosition, takeDebouncedSaveOperation]);
+
+    useEffect(() => {
+        if (!editor) return;
+        const dom = editor.view.dom;
+        let endTimer;
+        const start = () => { compositionRef.current = true; };
+        const end = () => {
+            compositionRef.current = false;
+            clearTimeout(endTimer);
+            // Let ProseMirror finish its composition transaction first.
+            endTimer = setTimeout(() => {
+                reconcileExternalContent();
+                if (debounceRef.current) flushPendingSave().catch(error => console.error('Editor composition save failed:', error));
+            }, 0);
+        };
+        editor.on('blur', reconcileExternalContent);
+        dom.addEventListener('compositionstart', start);
+        dom.addEventListener('compositionend', end);
+        return () => {
+            clearTimeout(endTimer);
+            editor.off('blur', reconcileExternalContent);
+            dom.removeEventListener('compositionstart', start);
+            dom.removeEventListener('compositionend', end);
+        };
+    }, [editor, flushPendingSave, reconcileExternalContent]);
 
     useEffect(() => {
         if (!editor) return;
@@ -1190,6 +1247,8 @@ function FindBar({ editor, visible, onClose }) {
         if (!editor || !matchList.length || idx < 0 || idx >= matchList.length) return;
         const { from, to } = matchList[idx];
         try {
+            const doc = editor.state.doc;
+            if (!doc.resolve(from).parent.inlineContent || !doc.resolve(to).parent.inlineContent) return;
             const tr = editor.state.tr.setSelection(TextSelection.create(editor.state.doc, from, to));
             editor.view.dispatch(tr);
         } catch (e) {
@@ -1728,7 +1787,7 @@ function InlineAI({ editor, onAiRequest, onArchiveGeneration, contextItems, cont
             if (deleteMarkType) {
                 let tr = editor.state.tr.addMark(from, to, deleteMarkType.create());
                 const safeTo = clampDocPosition(tr.doc, to);
-                tr = tr.setSelection(TextSelection.create(tr.doc, safeTo));
+                tr = tr.setSelection(restoreEditorTextSelection(tr.doc, { from: safeTo }));
                 tr.removeStoredMark(deleteMarkType);
                 editor.view.dispatch(tr);
             } else {

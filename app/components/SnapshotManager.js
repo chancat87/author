@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { X, Star } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { useI18n } from '../lib/useI18n';
-import { getSnapshots, createSnapshot, restoreSnapshot, deleteSnapshot } from '../lib/snapshots';
+import { getSnapshots, createSnapshot, restoreSnapshot, deleteSnapshot, getPendingSnapshotRestore } from '../lib/snapshots';
 import { promptInput } from '../lib/promptInput';
+import { waitForLocalSaves } from '../lib/local-save-status';
 
 export default function SnapshotManager({ onRestored }) {
     const { showSnapshots: open, setShowSnapshots } = useAppStore();
@@ -17,22 +18,29 @@ export default function SnapshotManager({ onRestored }) {
     const [selectedId, setSelectedId] = useState(null);
     const [isRestoring, setIsRestoring] = useState(false);
     const [isCreating, setIsCreating] = useState(false);
+    const [pendingRestore, setPendingRestore] = useState(null);
+    const [loadError, setLoadError] = useState('');
 
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         setLoading(true);
-        const data = await getSnapshots();
-        setSnapshots(data);
-        if (data.length > 0 && !selectedId) {
-            setSelectedId(data[0].id);
+        try {
+            const [data, pending] = await Promise.all([getSnapshots(), getPendingSnapshotRestore()]);
+            setSnapshots(data);
+            setPendingRestore(pending);
+            setLoadError('');
+            setSelectedId(previous => data.some(snap => snap.id === previous) ? previous : data[0]?.id || null);
+        } catch {
+            setLoadError(t('snapshot.loadFailed'));
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
-    };
+    }, [t]);
 
     useEffect(() => {
         if (open) {
             loadData();
         }
-    }, [open]);
+    }, [open, loadData]);
 
     if (!open) return null;
 
@@ -66,11 +74,17 @@ export default function SnapshotManager({ onRestored }) {
         setIsRestoring(true);
         try {
             await restoreSnapshot(snap.id);
+            // Restored conversations can schedule a local autosave. Finish it
+            // before reloading, or Electron's unload guard cancels the refresh
+            // and leaves the editor showing the pre-restore document.
+            await waitForLocalSaves();
             alert(t('snapshot.restoreSuccess'));
             if (onRestored) onRestored();
             else window.location.reload();
         } catch (e) {
             alert(t('snapshot.restoreFailed') + e.message);
+            await loadData();
+        } finally {
             setIsRestoring(false);
         }
     };
@@ -104,11 +118,22 @@ export default function SnapshotManager({ onRestored }) {
                     <button className="btn btn-ghost btn-icon" onClick={onClose}><X size={16} /></button>
                 </div>
 
+                {loadError && <div role="alert" style={{ padding: 12, color: 'var(--error)' }}>{loadError}</div>}
+                {pendingRestore && (
+                    <div role="alert" style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-light)', background: 'var(--bg-primary)' }}>
+                        <p style={{ margin: '0 0 8px', fontSize: 13 }}>{t('snapshot.interruptedRestore')}</p>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            <button className="btn btn-ghost" disabled={isRestoring} onClick={() => setSelectedId(pendingRestore.backupId)}>{t('snapshot.selectRecoveryBackup')}</button>
+                            <button className="btn btn-ghost" disabled={isRestoring} onClick={() => setSelectedId(pendingRestore.snapshotId)}>{t('snapshot.selectRestoreTarget')}</button>
+                        </div>
+                    </div>
+                )}
+
                 <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
                     {/* 左侧列表 */}
                     <div style={{ width: 300, borderRight: '1px solid var(--border-light)', display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)' }}>
                         <div style={{ padding: '16px', borderBottom: '1px solid var(--border-light)', display: 'flex', gap: 10 }}>
-                            <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleCreateManual} disabled={isCreating}>
+                            <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleCreateManual} disabled={isCreating || isRestoring || !!loadError}>
                                 {isCreating ? t('snapshot.creating') : t('snapshot.createBtn')}
                             </button>
                         </div>
@@ -146,6 +171,7 @@ export default function SnapshotManager({ onRestored }) {
                                         {/* 删除按钮 */}
                                         <button
                                             onClick={(e) => handleDelete(s.id, e)}
+                                            disabled={isRestoring || isCreating || !!loadError || [pendingRestore?.snapshotId, pendingRestore?.backupId].includes(s.id)}
                                             style={{
                                                 position: 'absolute', right: 10, bottom: 10,
                                                 background: 'none', border: 'none', color: 'var(--error)',
@@ -206,7 +232,7 @@ export default function SnapshotManager({ onRestored }) {
                                         className="btn btn-primary"
                                         style={{ background: 'var(--error)', borderColor: 'var(--error)', padding: '10px 24px', fontSize: 14 }}
                                         onClick={handleRestore}
-                                        disabled={isRestoring}
+                                        disabled={isRestoring || isCreating || loading || !!loadError}
                                     >
                                         {isRestoring ? t('snapshot.restoring') : t('snapshot.restoreBtn')}
                                     </button>

@@ -1,8 +1,9 @@
+import { withApiResources } from '../../lib/api-resource-guard.js';
 import { NextResponse } from 'next/server';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-export async function GET() {
+async function handleGET() {
     try {
         const pkgPath = join(process.cwd(), 'package.json');
         const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
@@ -17,3 +18,5 @@ export async function GET() {
         );
     }
 }
+
+export const GET = withApiResources('/api/app-version', handleGET);

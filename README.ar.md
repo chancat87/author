@@ -173,7 +173,7 @@ NEXT_PUBLIC_BASE_PATH=/app
 
 ### مستخدمو تطبيق ويندوز لسطح المكتب (Desktop Client Users)
 
-قم بتحميل أحدث إصدار لمثبت التحديث من خلال صفحة [الإصدارات (Releases)](https://github.com/YuanShiJiLoong/author/releases/latest) وقم بتنصيبه فوق النسخة الحالية المتواجدة لديك. بياناتك ومسوداتك القديمة محتفظ بها داخلياً في ملف مسار المتصفح (Browser/Electron profile) ولن تتعرض للضياع.
+حمّل أحدث إصدار من المثبّت من صفحة [الإصدارات (Releases)](https://github.com/YuanShiJiLoong/author/releases/latest) وثبّته فوق الإصدار الحالي. تُحفظ بياناتك في ملف تعريف المتصفح/Electron. صدّر نسخة احتياطية قبل التحديث، واحتفظ بعنوان الوصول الحالي ومجلد بيانات المستخدم.
 
 ### مستخدمو أصل الكود (Self-Deployed Users)
 

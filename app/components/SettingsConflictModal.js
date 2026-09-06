@@ -5,6 +5,7 @@ import { ClipboardList, Bot, Sparkles, XCircle, FolderOpen, Download, CheckCircl
 import { getProjectSettings } from '../lib/settings';
 import { useI18n } from '../lib/useI18n';
 import { resolveAiEndpoint } from '../lib/ai-provider-compat';
+import { readAiEvents } from '../lib/ai-stream.js';
 import { aiFetch } from '../lib/ai-direct';
 import { localizeApiError } from '../lib/api-error-i18n';
 
@@ -167,28 +168,9 @@ ${importedFields}
                 throw new Error(localizeApiError(err, text) || text('请求失败', 'Request failed', 'Запрос не выполнен'));
             }
 
-            // 读取 SSE 流
-            const reader = res.body.getReader();
-            const decoder = new TextDecoder();
-            let buffer = '';
             let fullText = '';
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                buffer += decoder.decode(value, { stream: true });
-                const events = buffer.split('\n\n');
-                buffer = events.pop() || '';
-                for (const event of events) {
-                    const trimmed = event.trim();
-                    if (!trimmed || trimmed === 'data: [DONE]') continue;
-                    if (trimmed.startsWith('data: ')) {
-                        try {
-                            const json = JSON.parse(trimmed.slice(6));
-                            if (json.text) fullText += json.text;
-                        } catch { }
-                    }
-                }
+            for await (const json of readAiEvents(res, undefined, text)) {
+                if (json.text) fullText += json.text;
             }
 
             // 解析 AI 返回的 JSON
@@ -222,7 +204,7 @@ ${importedFields}
                 [index]: { ...prev[index], loading: false, error: err.message },
             }));
         }
-    }, [conflicts, mergeStates]);
+    }, [conflicts, mergeStates, text]);
 
     // === 确认 ===
     const handleConfirm = () => {

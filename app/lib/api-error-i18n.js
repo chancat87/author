@@ -90,6 +90,16 @@ export function localizeApiError(payload, text) {
             return text('Embedding 请求失败', 'Embedding request failed.', 'Запрос Embedding не удался.');
 
         // —— 主 AI 路由（写作/聊天时的上游错误）——
+        case 'AI_GENERATION_CANCELLED':
+            return text('已停止生成。', 'Generation stopped.', 'Генерация остановлена.');
+        case 'AI_GENERATION_TIMEOUT':
+            return text('生成超时，内容尚未完成，请重试。', 'Generation timed out and is incomplete. Please retry.', 'Время генерации истекло, текст не завершён. Повторите попытку.');
+        case 'AI_STREAM_INCOMPLETE':
+        case 'AI_STREAM_INVALID':
+        case 'AI_STREAM_TOO_LARGE':
+            return text('生成中断，内容未完成，请重试。', 'Generation was interrupted and is incomplete. Please retry.', 'Генерация прервалась, текст не завершён. Повторите попытку.');
+        case 'AI_STREAM_FAILED':
+            return text('AI 服务在生成途中报错，内容未完成，请重试。', 'The AI service failed during generation. Content is incomplete. Please retry.', 'Сервис ИИ сообщил об ошибке во время генерации. Текст не завершён. Повторите попытку.');
         case 'AI_INVALID_KEY':
             return text('API Key 无效或已过期，请检查后重新填写', 'API Key is invalid or expired. Please check and re-enter it.', 'Ключ API недействителен или истёк. Проверьте и введите заново.');
         case 'AI_RATE_LIMIT':
@@ -110,6 +120,23 @@ export function localizeApiError(payload, text) {
             return text('Anthropic API 过载，请稍后再试', 'Anthropic API is overloaded. Please try again later.', 'Anthropic API перегружен. Повторите позже.');
 
         // —— 文件解析 / 同步 ——
+        case 'REQUEST_TOO_LARGE':
+        case 'FILE_TOO_LARGE':
+            return text('请求或文件体积过大，请分段或拆分文件后重试。', 'The request or file is too large. Split it and retry.', 'Запрос или файл слишком большой. Разделите его и повторите попытку.');
+        case 'RATE_LIMITED':
+        case 'SERVER_BUSY':
+            return text('当前请求较多，请稍后重试。', 'Too many active requests. Please retry shortly.', 'Слишком много запросов. Повторите попытку чуть позже.');
+        case 'REQUEST_TIMEOUT':
+            return text('上传或请求读取超时，请重试。', 'Upload or request reading timed out. Please retry.', 'Время загрузки или чтения запроса истекло. Повторите попытку.');
+        case 'REQUEST_CANCELLED':
+            return text('请求已取消。', 'Request cancelled.', 'Запрос отменён.');
+        case 'INVALID_UPLOAD':
+            return text('请上传一个有效的 PDF 或 DOC 文件。', 'Please upload one valid PDF or DOC file.', 'Загрузите один корректный файл PDF или DOC.');
+        case 'PARSE_TIMEOUT':
+        case 'PARSE_RESOURCE_LIMIT':
+            return text('文件解析超过时间或资源限制，请拆分文件后重试。', 'File parsing exceeded its time or resource limit. Split the file and retry.', 'Превышен лимит времени или ресурсов обработки. Разделите файл и повторите попытку.');
+        case 'PARSE_UNAVAILABLE':
+            return text('文件解析服务暂不可用，请稍后重试。', 'File parsing is temporarily unavailable. Please retry later.', 'Обработка файлов временно недоступна. Повторите попытку позже.');
         case 'NO_FILE':
             return text('未提供文件', 'No file provided.', 'Файл не предоставлен.');
         case 'UNSUPPORTED_FORMAT':

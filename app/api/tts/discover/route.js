@@ -1,3 +1,4 @@
+import { withApiResources } from '../../../lib/api-resource-guard.js';
 export const runtime = 'nodejs';
 
 import { proxyFetch } from '../../../lib/proxy-fetch';
@@ -171,7 +172,7 @@ async function fetchCandidates(urls, headers, proxyUrl, kind) {
     return { ok: reachedEndpoint, items: [], detail: lastDetail, failures };
 }
 
-export async function POST(request) {
+async function handlePOST(request) {
     try {
         const body = await request.json();
         const provider = String(body?.provider || '');
@@ -238,3 +239,5 @@ export async function POST(request) {
         return jsonError('TTS 连接失败', 500);
     }
 }
+
+export const POST = withApiResources('/api/tts/discover', handlePOST);

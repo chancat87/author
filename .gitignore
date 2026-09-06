@@ -20,6 +20,8 @@
 
 # testing
 /coverage
+/output/
+/.venv/
 
 # next.js
 /.next/

@@ -1,5 +1,36 @@
 # 🐳 Docker Deployment Guide
 
+## Runtime and image verification
+
+Source builds use Node 24 LTS, matching the CI major version. The Dockerfile pins
+`node:24.20.0-alpine3.24` to the multi-platform index digest
+`sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf`.
+Review tag and digest updates together and repeat the image checks below. A pinned digest does not receive updates automatically.
+Use `docker buildx imagetools inspect node:24-alpine` to discover updates, then verify the exact version tag.
+See the [Node release schedule](https://nodejs.org/en/about/previous-releases) and
+[Docker pinning guidance](https://docs.docker.com/build/building/best-practices/#pin-base-image-versions).
+
+Docker dependency installation uses npm's `replace-registry-host` option to fetch npmmirror lockfile URLs
+from the official npm registry, retaining locked versions and integrity checks without changing host npm settings.
+See the [npm configuration reference](https://docs.npmjs.com/using-npm/config/#replace-registry-host).
+
+```bash
+docker build --tag author:smoke .
+node scripts/docker-smoke.mjs author:smoke
+```
+
+The script checks the final image's Node runtime and standalone server: startup, non-root execution, writable data,
+eight legal pages, PDF/DOC parsing, body limits, SSE completion and upstream disconnection on cancellation.
+It separately checks public defaults and a trusted integration configuration with a synthetic desktop capability.
+Both finite test containers use `--network none`, a read-only root filesystem and independent data volumes.
+They mount no host directories, publish no ports and call no real AI providers.
+Stopped test containers and synthetic volumes are retained for inspection; the script does not delete resources.
+CI runs the image checks, and the publishing workflow pushes the same image only after they pass.
+
+The runtime keeps `USER node` and a writable `/app/data` volume. Server file storage remains disabled by default.
+Set `AUTHOR_ENABLE_FILE_STORAGE=true` only for trusted single-user deployments; use browser storage or authenticated cloud sync for public multi-user deployments.
+See [API_RESOURCE_LIMITS.md](API_RESOURCE_LIMITS.md) for upload and ingress limits.
+
 ## Quick Start
 
 ### Option 1: Pull from Docker Hub (Recommended)

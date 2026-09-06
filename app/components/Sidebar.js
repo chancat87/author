@@ -19,6 +19,7 @@ import ExitSyncModal from './ExitSyncModal';
 import { buildChapterSynopsisText, getChapterSynopsis, hasChapterSynopsis, normalizeChapterSynopsis, parseGeneratedSynopsis, stripChapterHtml } from '../lib/chapter-synopsis';
 import { buildChapterMemoryGroupText, buildChapterSourceText, getChapterMemoryGroups, hasChapterMemoryGroup, normalizeChapterMemoryGroup, saveChapterMemoryGroups } from '../lib/chapter-memory-groups';
 import { resolveAiEndpoint } from '../lib/ai-provider-compat';
+import { readAiEvents } from '../lib/ai-stream.js';
 import { aiFetch } from '../lib/ai-direct';
 import { localizeApiError } from '../lib/api-error-i18n';
 import { tt } from '../lib/runtime-i18n';
@@ -187,31 +188,9 @@ async function readAiTextStream(response) {
         throw new Error(localizeApiError(data, tt) || tt('请求失败', 'Request failed', 'Запрос не выполнен'));
     }
 
-    const reader = response.body?.getReader();
-    if (!reader) return '';
-    const decoder = new TextDecoder();
-    let buffer = '';
     let fullText = '';
-
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const events = buffer.split('\n\n');
-        buffer = events.pop() || '';
-
-        for (const event of events) {
-            const trimmed = event.trim();
-            if (!trimmed || trimmed === 'data: [DONE]') continue;
-            if (!trimmed.startsWith('data: ')) continue;
-            try {
-                const json = JSON.parse(trimmed.slice(6));
-                if (json.text) fullText += json.text;
-            } catch {
-                // Ignore malformed stream fragments.
-            }
-        }
+    for await (const json of readAiEvents(response, undefined, tt)) {
+        if (json.text) fullText += json.text;
     }
 
     return fullText.trim();
@@ -3285,6 +3264,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
  * 导入作品时的目标作品选择弹窗
  */
 function ImportWorkModal({ chapters, totalWords, onClose, onImport, t }) {
+    const { text } = useI18n();
     const [works, setWorks] = useState([]);
     const [newWorkName, setNewWorkName] = useState('');
     const [showNewInput, setShowNewInput] = useState(false);

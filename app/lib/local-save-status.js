@@ -10,6 +10,7 @@ const SERVER_SNAPSHOT = Object.freeze({
 });
 
 let nextOperationId = 1;
+let successfulWriteRevision = 0;
 let lastError = null;
 let lastSavedAt = null;
 let snapshot = SERVER_SNAPSHOT;
@@ -44,7 +45,7 @@ export function getLocalSaveServerSnapshot() {
 
 export function beginLocalSave(label = 'local-write') {
     const operationId = nextOperationId++;
-    pendingOperations.set(operationId, label);
+    pendingOperations.set(operationId, { label, previousError: lastError, successfulWriteRevision });
     // A new write is the retry path after an error. It becomes saved only if
     // every pending local write completes successfully.
     lastError = null;
@@ -54,6 +55,7 @@ export function beginLocalSave(label = 'local-write') {
 
 export function completeLocalSave(operationId) {
     if (!pendingOperations.delete(operationId)) return;
+    successfulWriteRevision++;
     if (pendingOperations.size === 0 && !lastError) {
         lastSavedAt = Date.now();
     }
@@ -66,14 +68,26 @@ export function failLocalSave(operationId, error) {
     publish();
 }
 
-export async function trackLocalSave(operation, label) {
+function cancelLocalSave(operationId) {
+    const operation = pendingOperations.get(operationId);
+    if (!operation) return;
+    pendingOperations.delete(operationId);
+    // Cancelling an obsolete request is neither a storage failure nor a successful retry.
+    if (!lastError && operation.successfulWriteRevision === successfulWriteRevision) {
+        lastError = operation.previousError;
+    }
+    publish();
+}
+
+export async function trackLocalSave(operation, label, { signal } = {}) {
     const operationId = beginLocalSave(label);
     try {
         const result = await operation();
         completeLocalSave(operationId);
         return result;
     } catch (error) {
-        failLocalSave(operationId, error);
+        if (signal?.aborted && error === signal.reason) cancelLocalSave(operationId);
+        else failLocalSave(operationId, error);
         throw error;
     }
 }
@@ -114,5 +128,6 @@ export function resetLocalSaveStatusForTests() {
     lastError = null;
     lastSavedAt = null;
     nextOperationId = 1;
+    successfulWriteRevision = 0;
     publish();
 }

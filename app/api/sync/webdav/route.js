@@ -1,3 +1,4 @@
+import { withApiResources } from '../../../lib/api-resource-guard.js';
 import { NextResponse } from 'next/server';
 import { proxyFetch } from '../../../lib/proxy-fetch';
 import { isAuthorizedDesktopRequest, isOutboundRequestBlocked, redactSensitiveText } from '../../../lib/server-security.mjs';
@@ -181,7 +182,7 @@ function safeErrorMessage(result) {
     return `WebDAV 请求失败 (${result.status})`;
 }
 
-export async function POST(request) {
+async function handlePOST(request) {
     try {
         const payload = await request.json();
         const result = await proxyWebDav(payload || {}, {
@@ -198,3 +199,5 @@ export async function POST(request) {
         return NextResponse.json({ error: redactSensitiveText(error?.message || 'WebDAV 请求失败', 200) }, { status: 400 });
     }
 }
+
+export const POST = withApiResources('/api/sync/webdav', handlePOST);

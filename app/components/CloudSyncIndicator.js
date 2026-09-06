@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { Cloud, CloudOff, LogOut, RefreshCw, CheckCircle2, User, ArrowRightLeft, Settings } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { useI18n } from '../lib/useI18n';
+import { getCustomAuthContext } from '../lib/custom-auth';
 
 /**
  * 顶栏云同步状态指示器
@@ -49,12 +50,14 @@ export default function CloudSyncIndicator() {
     };
 
     const handleSignOut = async () => {
+        const authContext = getCustomAuthContext();
+        if (!authContext) return;
         try {
             await useAppStore.getState().flushPendingLocalSave();
             const { stopCloudSync } = await import('../lib/persistence');
-            await stopCloudSync();
+            await stopCloudSync({ authContext });
             const { signOutCustom } = await import('../lib/custom-auth');
-            await signOutCustom();
+            await signOutCustom({ authContext });
         } catch (err) {
             console.error('Sign out error:', err);
         }

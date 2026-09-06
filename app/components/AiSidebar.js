@@ -17,6 +17,7 @@ import { FolderOpen, Plus, X, Pencil, Trash2, RefreshCw, GitBranch, CornerDownLe
 import { useI18n } from '../lib/useI18n';
 import { copyTextToClipboard } from '../lib/clipboard';
 import { resolveAiEndpoint } from '../lib/ai-provider-compat';
+import { readAiEvents } from '../lib/ai-stream.js';
 import { aiFetch } from '../lib/ai-direct';
 import { localizeApiError } from '../lib/api-error-i18n';
 import {
@@ -1124,51 +1125,35 @@ export default function AiSidebar({ onInsertText }) {
             throw new Error(localizeApiError(data, tx) || tx('请求失败', 'Request failed', 'Запрос не выполнен'));
         }
 
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
         let fullText = '';
         let fullThinking = '';
         let usageData = null;
-        let toolCalls = []; // 收集工具调用结果
+        const toolCalls = [];
         const inlineThinking = createInlineThinkingFilter();
 
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            const events = buffer.split('\n\n');
-            buffer = events.pop() || '';
-            let hasUpdate = false;
-            for (const event of events) {
-                const trimmed = event.trim();
-                if (!trimmed || trimmed === 'data: [DONE]') continue;
-                if (trimmed.startsWith('data: ')) {
-                    try {
-                        const json = JSON.parse(trimmed.slice(6));
-                        if (json.thinking) { fullThinking += json.thinking; hasUpdate = true; }
-                        if (json.text) {
-                            const parsed = inlineThinking.consume(json.text);
-                            if (parsed.text) fullText += parsed.text;
-                            if (parsed.thinking) fullThinking += parsed.thinking;
-                            hasUpdate = hasUpdate || !!parsed.text || !!parsed.thinking;
-                        }
-                        if (json.usage) { usageData = json.usage; }
-                        // 工具调用事件
-                        if (json.codeExec) { toolCalls.push({ type: 'codeExec', ...json.codeExec }); hasUpdate = true; }
-                        if (json.codeResult) { toolCalls.push({ type: 'codeResult', ...json.codeResult }); hasUpdate = true; }
-                        if (json.grounding) { toolCalls.push({ type: 'grounding', ...json.grounding }); hasUpdate = true; }
-                    } catch { }
+        try {
+            for await (const json of readAiEvents(res, signal, tx)) {
+                let hasUpdate = false;
+                if (json.thinking) { fullThinking += json.thinking; hasUpdate = true; }
+                if (json.text) {
+                    const parsed = inlineThinking.consume(json.text);
+                    if (parsed.text) fullText += parsed.text;
+                    if (parsed.thinking) fullThinking += parsed.thinking;
+                    hasUpdate = hasUpdate || !!parsed.text || !!parsed.thinking;
                 }
+                if (json.usage) usageData = json.usage;
+                if (json.codeExec) { toolCalls.push({ type: 'codeExec', ...json.codeExec }); hasUpdate = true; }
+                if (json.codeResult) { toolCalls.push({ type: 'codeResult', ...json.codeResult }); hasUpdate = true; }
+                if (json.grounding) { toolCalls.push({ type: 'grounding', ...json.grounding }); hasUpdate = true; }
+                if (hasUpdate) onUpdate(fullText, fullThinking, toolCalls);
             }
-            if (hasUpdate) onUpdate(fullText, fullThinking, toolCalls);
-        }
-
-        const flushed = inlineThinking.flush();
-        if (flushed.text || flushed.thinking) {
-            fullText += flushed.text;
-            fullThinking += flushed.thinking;
-            onUpdate(fullText, fullThinking, toolCalls);
+        } finally {
+            // Do not lose the filter's final buffered text on stop or failure.
+            const tail = inlineThinking.flush();
+            if (tail.text || tail.thinking) {
+                fullText += tail.text; fullThinking += tail.thinking;
+                onUpdate(fullText, fullThinking, toolCalls);
+            }
         }
 
         // 记录 token 统计
@@ -1258,7 +1243,7 @@ export default function AiSidebar({ onInsertText }) {
             if (historyForApi) contextSnapshot[tx('对话历史', 'Chat History', 'История чата')] = historyForApi;
             contextSnapshot[tx('当前提问', 'Current Question', 'Текущий вопрос')] = `${t('aiSidebar.roleYou')}: ${text}`;
 
-            const aiPlaceholder = { id: aiMsgId, role: 'assistant', content: '', thinking: '', toolCalls: [], timestamp: Date.now(), _context: contextSnapshot, _rawRequest: null, _workId: targetWorkId };
+            const aiPlaceholder = { id: aiMsgId, role: 'assistant', generationStatus: 'streaming', content: '', thinking: '', toolCalls: [], timestamp: Date.now(), _context: contextSnapshot, _rawRequest: null, _workId: targetWorkId };
             setSessionStore(prev => addMessage(prev, aiPlaceholder));
 
             const returnedBody = await streamResponse(apiEndpoint, systemPrompt, userPrompt, apiConfig,
@@ -1276,7 +1261,7 @@ export default function AiSidebar({ onInsertText }) {
                             ...prev, sessions: prev.sessions.map(s => {
                                 if (s.id !== targetSessionId) return s;
                                 return {
-                                    ...s, messages: s.messages.map(m => m.id === aiMsgId ? { ...m, content: finalText || tx('（AI 未返回内容）', '(AI returned no content)', '(ИИ не вернул содержимое)'), thinking: finalThinking, toolCalls: finalToolCalls } : m),
+                                    ...s, messages: s.messages.map(m => m.id === aiMsgId ? { ...m, generationStatus: 'done', content: finalText || tx('（AI 未返回内容）', '(AI returned no content)', '(ИИ не вернул содержимое)'), thinking: finalThinking, toolCalls: finalToolCalls } : m),
                                     updatedAt: Date.now(),
                                 };
                             }),
@@ -1310,7 +1295,7 @@ export default function AiSidebar({ onInsertText }) {
                             return {
                                 ...s, messages: s.messages.map(m => {
                                     if (m.id !== aiMsgId) return m;
-                                    return { ...m, content: (m.content || '') + tx('\n\n*（已终止生成）*', '\n\n*(Generation stopped)*', '\n\n*(Генерация остановлена)*') };
+                                    return { ...m, generationStatus: 'cancelled', content: (m.content || '') + tx('\n\n*（已终止生成）*', '\n\n*(Generation stopped)*', '\n\n*(Генерация остановлена)*') };
                                 }), updatedAt: Date.now(),
                             };
                         }),
@@ -1319,13 +1304,16 @@ export default function AiSidebar({ onInsertText }) {
                     return store;
                 });
             } else {
-                const errorMsg = { id: `msg-${Date.now()}-e`, role: 'assistant', content: `❌ ${err.message}`, timestamp: Date.now() };
+                const generationStatus = err.payload?.status === 'failed' ? 'failed' : 'incomplete';
+                const errorMsg = { generationStatus, id: aiMsgId, role: 'assistant', content: `❌ ${err.message}`, timestamp: Date.now() };
                 setSessionStore(prev => {
                     const store = {
                         ...prev,
                         sessions: prev.sessions.map(s => (
                             s.id === targetSessionId
-                                ? { ...s, messages: [...s.messages, errorMsg], updatedAt: Date.now() }
+                                ? { ...s, messages: s.messages.some(m => m.id === aiMsgId)
+                                    ? s.messages.map(m => m.id === aiMsgId ? { ...m, generationStatus, content: (m.content || '') + `\n\n❌ ${err.message}` } : m)
+                                    : [...s.messages, errorMsg], updatedAt: Date.now() }
                                 : s
                         )),
                     };
@@ -1382,7 +1370,7 @@ export default function AiSidebar({ onInsertText }) {
                         ...s, messages: s.messages.map(m => {
                             if (m.id !== aiMsgId) return m;
                             const variants = m.variants || [{ content: m.content, thinking: m.thinking || '', timestamp: m.timestamp }];
-                            return { ...m, variants, content: '', thinking: '', toolCalls: [] };
+                            return { ...m, variants, generationStatus: 'streaming', content: '', thinking: '', toolCalls: [] };
                         }),
                     };
                 }),
@@ -1418,6 +1406,7 @@ export default function AiSidebar({ onInsertText }) {
                                             ...m,
                                             variants,
                                             activeVariant: variants.length - 1,
+                                            generationStatus: 'done',
                                             content: variantData.content,
                                             thinking: variantData.thinking || '',
                                             toolCalls: finalToolCalls,
@@ -1442,7 +1431,7 @@ export default function AiSidebar({ onInsertText }) {
                             return {
                                 ...s, messages: s.messages.map(m => {
                                     if (m.id !== aiMsgId) return m;
-                                    return { ...m, content: (m.content || '') + tx('\n\n*（已终止生成）*', '\n\n*(Generation stopped)*', '\n\n*(Генерация остановлена)*') };
+                                    return { ...m, generationStatus: 'cancelled', content: (m.content || '') + tx('\n\n*（已终止生成）*', '\n\n*(Generation stopped)*', '\n\n*(Генерация остановлена)*') };
                                 }), updatedAt: Date.now(),
                             };
                         }),
@@ -1455,7 +1444,7 @@ export default function AiSidebar({ onInsertText }) {
                     const store = {
                         ...prev, sessions: prev.sessions.map(s => {
                             if (s.id !== targetSessionId) return s;
-                            return { ...s, messages: s.messages.map(m => m.id === aiMsgId ? { ...m, content: `❌ ${err.message}` } : m), updatedAt: Date.now() };
+                            return { ...s, messages: s.messages.map(m => m.id === aiMsgId ? { ...m, content: (m.content || '') + `\n\n❌ ${err.message}`, generationStatus: err.payload?.status === 'failed' ? 'failed' : 'incomplete' } : m), updatedAt: Date.now() };
                         }),
                     };
                     saveSessionStore(store);

@@ -1,3 +1,4 @@
+import { withApiResources } from '../../lib/api-resource-guard.js';
 // OpenAI 兼容 API — 文本向量化 (Text Embeddings)
 
 export const runtime = 'nodejs';
@@ -72,7 +73,7 @@ function getDefaultEmbeddingModel(provider) {
     return '';
 }
 
-export async function POST(request) {
+async function handlePOST(request) {
     try {
         const { text, apiConfig } = await request.json();
         const proxyUrl = apiConfig?.proxyUrl || '';
@@ -150,3 +151,5 @@ export async function POST(request) {
         return Response.json({ error: 'Embedding 请求失败', code: 'EMBED_REQUEST_FAILED' }, { status: 500 });
     }
 }
+
+export const POST = withApiResources('/api/embed', handlePOST);

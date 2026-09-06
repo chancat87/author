@@ -1,3 +1,4 @@
+import { withApiResources } from '../../lib/api-resource-guard.js';
 import { NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
@@ -111,14 +112,6 @@ function wait(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function unlinkIfExists(filePath) {
-    try {
-        await fs.unlink(filePath);
-    } catch (e) {
-        if (e.code !== 'ENOENT') throw e;
-    }
-}
-
 async function replaceFileWithRetry(tmpPath, filePath, maxRetries = 5) {
     for (let i = 0; i < maxRetries; i++) {
         try {
@@ -129,14 +122,8 @@ async function replaceFileWithRetry(tmpPath, filePath, maxRetries = 5) {
                 throw e;
             }
 
+            // 文件被占用时只重试原子替换，不能先删除唯一的已提交版本。
             await wait(40 * (i + 1));
-            try {
-                await unlinkIfExists(filePath);
-            } catch (unlinkError) {
-                if (!WINDOWS_REPLACE_RETRY_CODES.has(unlinkError.code) || i === maxRetries - 1) {
-                    throw unlinkError;
-                }
-            }
         }
     }
 }
@@ -145,16 +132,22 @@ async function atomicWriteJson(filePath, value) {
     const tmpPath = filePath + '.tmp.' + crypto.randomBytes(4).toString('hex');
     await fs.writeFile(tmpPath, JSON.stringify(value, null, 2), 'utf-8');
 
-    try {
-        await replaceFileWithRetry(tmpPath, filePath);
-    } catch (e) {
-        await unlinkIfExists(tmpPath).catch(() => {});
-        throw e;
-    }
+    // 替换失败时保留原文件及完整临时稿，供管理员恢复；临时稿不会被 GET 读取。
+    await replaceFileWithRetry(tmpPath, filePath);
+}
+
+const storageMutations = new Map();
+
+function mutateFile(filePath, operation) {
+    const pending = (storageMutations.get(filePath) || Promise.resolve()).catch(() => {}).then(operation);
+    storageMutations.set(filePath, pending);
+    const cleanup = () => { if (storageMutations.get(filePath) === pending) storageMutations.delete(filePath); };
+    pending.then(cleanup, cleanup);
+    return pending;
 }
 
 // GET /api/storage?key=xxx — 读取数据
-export async function GET(request) {
+async function handleGET(request) {
     if (!FILE_STORAGE_ENABLED) return disabledResponse();
     try {
         const userId = getUserId(request);
@@ -248,7 +241,7 @@ async function tryAdoptOrphanData(currentUserId) {
 }
 
 // POST /api/storage — 写入数据 { key, value }
-export async function POST(request) {
+async function handlePOST(request) {
     if (!FILE_STORAGE_ENABLED) return disabledResponse();
     try {
         const userId = getUserId(request);
@@ -262,10 +255,12 @@ export async function POST(request) {
         }
 
         const filePath = resolveFilePath(userId, key);
-        await ensureDir(path.dirname(filePath));
-
-        // 原子写入：先写临时文件，再重命名，防止并发读取到半截数据
-        await atomicWriteJson(filePath, value);
+        await mutateFile(filePath, async () => {
+            await ensureDir(path.dirname(filePath));
+            // 原子写入：先写临时文件，再重命名，防止并发读取到半截数据。
+            // 同一文件的旧重试必须先结束，不能在较新保存之后落盘。
+            await atomicWriteJson(filePath, value);
+        });
 
         return json({ ok: true });
     } catch (error) {
@@ -278,7 +273,7 @@ export async function POST(request) {
 }
 
 // DELETE /api/storage?key=xxx — 删除数据
-export async function DELETE(request) {
+async function handleDELETE(request) {
     if (!FILE_STORAGE_ENABLED) return disabledResponse();
     try {
         const userId = getUserId(request);
@@ -294,11 +289,13 @@ export async function DELETE(request) {
 
         const filePath = resolveFilePath(userId, key);
 
-        try {
-            await fs.unlink(filePath);
-        } catch (e) {
-            if (e.code !== 'ENOENT') throw e;
-        }
+        await mutateFile(filePath, async () => {
+            try {
+                await fs.unlink(filePath);
+            } catch (e) {
+                if (e.code !== 'ENOENT') throw e;
+            }
+        });
 
         return json({ ok: true });
     } catch (error) {
@@ -309,3 +306,7 @@ export async function DELETE(request) {
         return json({ error: 'Storage operation failed' }, { status: 500 });
     }
 }
+
+export const GET = withApiResources('/api/storage', handleGET);
+export const POST = withApiResources('/api/storage', handlePOST);
+export const DELETE = withApiResources('/api/storage', handleDELETE);

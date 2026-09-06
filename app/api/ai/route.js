@@ -1,4 +1,7 @@
-// OpenAI 兼容 API — SSE 流式转发（Edge Runtime 确保流式不被缓冲）
+import { withApiResources } from '../../lib/api-resource-guard.js';
+import { createGenerationLifecycle, generationAbortResponse } from '../../lib/ai-request-lifecycle.js';
+import { streamAiResponse, createOpenAiMapper } from '../../lib/ai-stream.js';
+// OpenAI 兼容 API — 按下游读取速度转发 SSE，并传递取消信号
 // 支持智谱、DeepSeek、OpenAI、Moonshot 等所有兼容 OpenAI 格式的 API
 // 支持 Function Calling 搜索循环 + OpenAI 内置搜索
 
@@ -8,7 +11,7 @@ export const maxDuration = 120;
 import { applyContentSafety } from '../../lib/content-safety';
 import { proxyFetch } from '../../lib/proxy-fetch';
 import { rotateKey } from '../../lib/keyRotator';
-import { isOutboundRequestBlocked, isServerCredentialBlocked, redactSensitiveText, resolveAiCredential, safeUpstreamDetail } from '../../lib/server-security.mjs';
+import { isOutboundRequestBlocked, isServerCredentialBlocked, resolveAiCredential, safeUpstreamDetail } from '../../lib/server-security.mjs';
 
 // Function Calling 搜索工具定义
 const WEB_SEARCH_TOOL = {
@@ -84,31 +87,31 @@ function buildBaseParams({ model, maxTokens, temperature, topP, reasoningEffort 
 }
 
 // ===== 内联搜索执行（避免 Edge Runtime 自引用 fetch 问题）=====
-async function executeSearch(query, searchConfig, proxyUrl) {
+async function executeSearch(query, searchConfig, proxyUrl, signal) {
     const provider = searchConfig.provider || 'tavily';
     searchConfig.apiKey = rotateKey(searchConfig.apiKey);
     switch (provider) {
         case 'tavily': {
             const tavilyBase = (searchConfig.baseUrl || 'https://api.tavily.com').replace(/\/$/, '');
             const res = await proxyFetch(`${tavilyBase}/search`, {
-                method: 'POST',
+                method: 'POST', signal,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ api_key: searchConfig.apiKey, query, max_results: 5, include_answer: false }),
             }, proxyUrl);
 
-            if (!res.ok) { console.error('Tavily Search error:', res.status); return []; }
+            if (!res.ok) { await res.body?.cancel().catch(() => {}); console.error('Tavily Search error:', res.status); return []; }
             const data = await res.json();
             return (data.results || []).map(item => ({ title: item.title || '', url: item.url || '', snippet: item.content || '' }));
         }
         case 'exa': {
             const exaBase = (searchConfig.baseUrl || 'https://api.exa.ai').replace(/\/$/, '');
             const res = await proxyFetch(`${exaBase}/search`, {
-                method: 'POST',
+                method: 'POST', signal,
                 headers: { 'Content-Type': 'application/json', 'x-api-key': searchConfig.apiKey },
                 body: JSON.stringify({ query, type: 'auto', numResults: 5, contents: { highlights: { numSentences: 3 } } }),
             }, proxyUrl);
 
-            if (!res.ok) { console.error('Exa Search error:', res.status); return []; }
+            if (!res.ok) { await res.body?.cancel().catch(() => {}); console.error('Exa Search error:', res.status); return []; }
             const data = await res.json();
             return (data.results || []).map(item => ({ title: item.title || '', url: item.url || '', snippet: (item.highlights || []).join(' ') || item.text || '' }));
         }
@@ -116,8 +119,11 @@ async function executeSearch(query, searchConfig, proxyUrl) {
     }
 }
 
-export async function POST(request) {
+async function handlePOST(request) {
+    const lifecycle = createGenerationLifecycle(request.signal);
+    const { signal } = lifecycle;
     try {
+        signal.throwIfAborted();
         const { systemPrompt, userPrompt, apiConfig, maxTokens, temperature, topP, reasoningEffort, tools: toolsConfig } = await request.json();
         const proxyUrl = apiConfig?.proxyUrl || '';
 
@@ -170,7 +176,7 @@ export async function POST(request) {
             }
             // 第 1 轮：非流式请求，附带搜索工具定义
             const round1Res = await proxyFetch(url, {
-                method: 'POST',
+                method: 'POST', signal,
                 headers,
                 body: JSON.stringify({
                     model, messages, ...baseParams,
@@ -185,6 +191,7 @@ export async function POST(request) {
             }
 
             const round1Data = await round1Res.json();
+            signal.throwIfAborted();
             const assistantMsg = round1Data.choices?.[0]?.message;
 
             // 检查模型是否要求搜索
@@ -213,7 +220,7 @@ export async function POST(request) {
 
                         // 直接内联执行搜索（不通过 HTTP 调用自身）
                         try {
-                            const results = await executeSearch(searchQuery, toolsConfig.searchConfig, proxyUrl);
+                            const results = await executeSearch(searchQuery, toolsConfig.searchConfig, proxyUrl, signal);
 
                             const resultText = results.length > 0
                                 ? results.map((r, i) => `[${i + 1}] ${r.title}\n${r.url}\n${r.snippet}`).join('\n\n')
@@ -229,6 +236,7 @@ export async function POST(request) {
                                 allSources.push({ title: r.title, uri: r.url });
                             }
                         } catch (searchErr) {
+                            signal.throwIfAborted();
                             console.error('搜索执行失败:', searchErr?.code || searchErr?.name || 'UNKNOWN');
                             extendedMessages.push({
                                 role: 'tool',
@@ -241,7 +249,7 @@ export async function POST(request) {
 
                 // 第 2 轮：流式请求，让模型根据搜索结果回复
                 const round2Res = await proxyFetch(url, {
-                    method: 'POST',
+                    method: 'POST', signal,
                     headers,
                     body: JSON.stringify({
                         model, messages: extendedMessages, ...baseParams,
@@ -257,7 +265,7 @@ export async function POST(request) {
                 }
 
                 // 流式转发 + 前置发送搜索来源
-                return streamWithGrounding(round2Res, allSources);
+                return streamWithGrounding(round2Res, allSources, lifecycle);
             }
 
             // 模型没调用工具 → 直接把非流式结果包装成 SSE 返回
@@ -284,7 +292,11 @@ export async function POST(request) {
                             }
                         })}\n\n`));
                     }
-                    controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+                    if (!assistantMsg || (round1Data.choices?.[0]?.finish_reason && round1Data.choices[0].finish_reason !== 'stop')) {
+                        controller.enqueue(encoder.encode('data: {"status":"incomplete","code":"AI_STREAM_INCOMPLETE","error":"生成未完成。"}\n\n'));
+                    } else {
+                        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+                    }
                     controller.close();
                 },
             });
@@ -293,7 +305,7 @@ export async function POST(request) {
 
         // ===== 普通模式（含 OpenAI 内置搜索） =====
         const response = await proxyFetch(url, {
-            method: 'POST',
+            method: 'POST', signal,
             headers,
             body: JSON.stringify({
                 model, messages, ...baseParams,
@@ -309,9 +321,11 @@ export async function POST(request) {
             return errorResponse(response.status, errorText);
         }
 
-        return streamWithGrounding(response, []);
+        return streamWithGrounding(response, [], lifecycle);
 
     } catch (error) {
+        const aborted = generationAbortResponse(lifecycle);
+        if (aborted) return aborted;
         console.error('AI接口错误:', error?.code || error?.name || 'UNKNOWN');
         if (isServerCredentialBlocked(error)) {
             return new Response(
@@ -329,6 +343,8 @@ export async function POST(request) {
             JSON.stringify({ error: '网络连接失败，请检查 API 地址是否正确', code: 'NETWORK_ERROR_CHECK' }),
             { status: 500, headers: { 'Content-Type': 'application/json' } }
         );
+    } finally {
+        if (!lifecycle.streaming) lifecycle.dispose();
     }
 }
 
@@ -383,97 +399,9 @@ function errorResponse(status, errorText = '') {
 }
 
 /** 流式转发上游 SSE 并可选前置 grounding 来源 */
-function streamWithGrounding(upstreamRes, preSources) {
-    const encoder = new TextEncoder();
-    const decoder = new TextDecoder();
-
-    const stream = new ReadableStream({
-        async start(controller) {
-            // 先发送搜索来源（如果有）
-            if (preSources.length > 0) {
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-                    grounding: { searchQueries: [], sources: preSources, supports: [] }
-                })}\n\n`));
-            }
-
-            const reader = upstreamRes.body.getReader();
-            let buffer = '';
-
-            try {
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-
-                    buffer += decoder.decode(value, { stream: true });
-                    const lines = buffer.split('\n');
-                    buffer = lines.pop() || '';
-
-                    for (const line of lines) {
-                        const trimmed = line.trim();
-                        if (!trimmed || trimmed.startsWith(':')) continue;
-
-                        if (trimmed === 'data: [DONE]') {
-                            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-                            continue;
-                        }
-
-                        if (trimmed.startsWith('data: ')) {
-                            try {
-                                const json = JSON.parse(trimmed.slice(6));
-                                const delta = json.choices?.[0]?.delta;
-
-                                // 转发思维链内容（DeepSeek reasoning_content）
-                                const reasoning = delta?.reasoning_content;
-                                if (reasoning) {
-                                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({ thinking: reasoning })}\n\n`));
-                                }
-
-                                // 转发文本 delta
-                                const content = delta?.content;
-                                if (content) {
-                                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: content })}\n\n`));
-                                }
-
-                                // usage 信息
-                                if (json.usage) {
-                                    const cachedTokens = getCachedPromptTokens(json.usage);
-                                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-                                        usage: {
-                                            promptTokens: json.usage.prompt_tokens || 0,
-                                            completionTokens: json.usage.completion_tokens || 0,
-                                            totalTokens: json.usage.total_tokens || 0,
-                                            cachedTokens,
-                                            cacheMissTokens: getCacheMissPromptTokens(json.usage, cachedTokens),
-                                        }
-                                    })}\n\n`));
-                                }
-
-                                // OpenAI 内置搜索注释
-                                const annotations = delta?.annotations;
-                                if (annotations && annotations.length > 0) {
-                                    const urlCitations = annotations
-                                        .filter(a => a.type === 'url_citation' && a.url_citation)
-                                        .map(a => ({ title: a.url_citation.title || '', uri: a.url_citation.url || '' }));
-                                    if (urlCitations.length > 0) {
-                                        controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-                                            grounding: { searchQueries: [], sources: urlCitations, supports: [] }
-                                        })}\n\n`));
-                                    }
-                                }
-                            } catch {
-                                // 解析失败的行直接跳过
-                            }
-                        }
-                    }
-                }
-            } catch (err) {
-                console.error('Stream 读取错误:', redactSensitiveText(err?.message || err, 200));
-            } finally {
-                controller.close();
-                reader.releaseLock();
-            }
-        }
-    });
-
-    return new Response(stream, { headers: sseHeaders() });
+function streamWithGrounding(response, sources, lifecycle) {
+    return streamAiResponse(response, lifecycle, createOpenAiMapper(), sources?.length
+        ? [{ grounding: { searchQueries: [], sources, supports: [] } }] : []);
 }
+
+export const POST = withApiResources('/api/ai', handlePOST);

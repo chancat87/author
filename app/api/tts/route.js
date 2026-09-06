@@ -1,3 +1,4 @@
+import { withApiResources } from '../../lib/api-resource-guard.js';
 export const runtime = 'nodejs';
 
 import { proxyFetch } from '../../lib/proxy-fetch';
@@ -157,7 +158,7 @@ async function requestCustom(input, config, apiKey, provider) {
     return audioResponse(Buffer.from(await response.arrayBuffer()), response.headers.get('content-type') || config.contentType || 'audio/mpeg');
 }
 
-export async function POST(request) {
+async function handlePOST(request) {
     try {
         const body = await request.json();
         const input = String(body?.input || '').trim();
@@ -176,3 +177,5 @@ export async function POST(request) {
         return errorResponse('TTS 请求失败', 500);
     }
 }
+
+export const POST = withApiResources('/api/tts', handlePOST);

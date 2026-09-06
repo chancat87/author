@@ -1,3 +1,6 @@
+import { withApiResources } from '../../../lib/api-resource-guard.js';
+import { createGenerationLifecycle, generationAbortResponse } from '../../../lib/ai-request-lifecycle.js';
+import { streamAiResponse, createClaudeMapper } from '../../../lib/ai-stream.js';
 // Claude 兼容 Messages API — SSE 流式转发
 // 使用 Anthropic 兼容格式 (/v1/messages)
 
@@ -7,7 +10,7 @@ export const maxDuration = 120;
 import { applyContentSafety } from '../../../lib/content-safety';
 import { proxyFetch } from '../../../lib/proxy-fetch';
 import { rotateKey } from '../../../lib/keyRotator';
-import { isOutboundRequestBlocked, isServerCredentialBlocked, redactSensitiveText, resolveAiCredential, safeUpstreamDetail } from '../../../lib/server-security.mjs';
+import { isOutboundRequestBlocked, isServerCredentialBlocked, resolveAiCredential, safeUpstreamDetail } from '../../../lib/server-security.mjs';
 
 // Anthropic 格式的搜索工具定义
 const WEB_SEARCH_TOOL = {
@@ -23,29 +26,29 @@ const WEB_SEARCH_TOOL = {
 };
 
 // 内联搜索执行（与 /api/ai/route.js 共享逻辑）
-async function executeSearch(query, searchConfig, proxyUrl) {
+async function executeSearch(query, searchConfig, proxyUrl, signal) {
     const provider = searchConfig.provider || 'tavily';
     searchConfig.apiKey = rotateKey(searchConfig.apiKey);
     switch (provider) {
         case 'tavily': {
             const tavilyBase = (searchConfig.baseUrl || 'https://api.tavily.com').replace(/\/$/, '');
             const res = await proxyFetch(`${tavilyBase}/search`, {
-                method: 'POST',
+                method: 'POST', signal,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ api_key: searchConfig.apiKey, query, max_results: 5, include_answer: false }),
             }, proxyUrl);
-            if (!res.ok) { console.error('Tavily Search error:', res.status); return []; }
+            if (!res.ok) { await res.body?.cancel().catch(() => {}); console.error('Tavily Search error:', res.status); return []; }
             const data = await res.json();
             return (data.results || []).map(item => ({ title: item.title || '', url: item.url || '', snippet: item.content || '' }));
         }
         case 'exa': {
             const exaBase = (searchConfig.baseUrl || 'https://api.exa.ai').replace(/\/$/, '');
             const res = await proxyFetch(`${exaBase}/search`, {
-                method: 'POST',
+                method: 'POST', signal,
                 headers: { 'Content-Type': 'application/json', 'x-api-key': searchConfig.apiKey },
                 body: JSON.stringify({ query, type: 'auto', numResults: 5, contents: { highlights: { numSentences: 3 } } }),
             }, proxyUrl);
-            if (!res.ok) { console.error('Exa Search error:', res.status); return []; }
+            if (!res.ok) { await res.body?.cancel().catch(() => {}); console.error('Exa Search error:', res.status); return []; }
             const data = await res.json();
             return (data.results || []).map(item => ({ title: item.title || '', url: item.url || '', snippet: (item.highlights || []).join(' ') || item.text || '' }));
         }
@@ -53,8 +56,11 @@ async function executeSearch(query, searchConfig, proxyUrl) {
     }
 }
 
-export async function POST(request) {
+async function handlePOST(request) {
+    const lifecycle = createGenerationLifecycle(request.signal);
+    const { signal } = lifecycle;
     try {
+        signal.throwIfAborted();
         const { systemPrompt, userPrompt, apiConfig, maxTokens, temperature, topP, reasoningEffort, tools: toolsConfig } = await request.json();
         const proxyUrl = apiConfig?.proxyUrl || '';
 
@@ -130,7 +136,7 @@ export async function POST(request) {
 
             // 第 1 轮：非流式请求，附带搜索工具定义
             const round1Res = await proxyFetch(url, {
-                method: 'POST',
+                method: 'POST', signal,
                 headers: commonHeaders,
                 body: JSON.stringify({
                     ...baseParams,
@@ -146,6 +152,7 @@ export async function POST(request) {
             }
 
             const round1Data = await round1Res.json();
+            signal.throwIfAborted();
 
             // 检查模型是否使用了 tool_use
             const toolUseBlocks = (round1Data.content || []).filter(b => b.type === 'tool_use');
@@ -160,7 +167,7 @@ export async function POST(request) {
                         const searchQuery = toolBlock.input?.query || userPrompt;
 
                         try {
-                            const results = await executeSearch(searchQuery, toolsConfig.searchConfig, proxyUrl);
+                            const results = await executeSearch(searchQuery, toolsConfig.searchConfig, proxyUrl, signal);
 
                             const resultText = results.length > 0
                                 ? results.map((r, i) => `[${i + 1}] ${r.title}\n${r.url}\n${r.snippet}`).join('\n\n')
@@ -176,6 +183,7 @@ export async function POST(request) {
                                 allSources.push({ title: r.title, uri: r.url });
                             }
                         } catch (searchErr) {
+                            signal.throwIfAborted();
                             console.error('搜索执行失败:', searchErr?.code || searchErr?.name || 'UNKNOWN');
                             toolResults.push({
                                 type: 'tool_result',
@@ -194,7 +202,7 @@ export async function POST(request) {
                 ];
 
                 const round2Res = await proxyFetch(url, {
-                    method: 'POST',
+                    method: 'POST', signal,
                     headers: commonHeaders,
                     body: JSON.stringify({
                         ...baseParams,
@@ -210,7 +218,7 @@ export async function POST(request) {
                 }
 
                 // 流式转发 + 前置发送搜索来源
-                return streamClaudeResponse(round2Res, allSources);
+                return streamClaudeResponse(round2Res, allSources, lifecycle);
             }
 
             // 模型没调用工具 → 直接把非流式结果包装成 SSE 返回
@@ -236,7 +244,11 @@ export async function POST(request) {
                             }
                         })}\n\n`));
                     }
-                    controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+                    if (!Array.isArray(round1Data.content) || (round1Data.stop_reason && !['end_turn', 'stop_sequence'].includes(round1Data.stop_reason))) {
+                        controller.enqueue(encoder.encode('data: {"status":"incomplete","code":"AI_STREAM_INCOMPLETE","error":"生成未完成。"}\n\n'));
+                    } else {
+                        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+                    }
                     controller.close();
                 },
             });
@@ -253,7 +265,7 @@ export async function POST(request) {
         };
 
         const response = await proxyFetch(url, {
-            method: 'POST',
+            method: 'POST', signal,
             headers: commonHeaders,
             body: JSON.stringify(requestBody),
         }, proxyUrl);
@@ -264,9 +276,11 @@ export async function POST(request) {
             return errorResponse(response.status, errorText);
         }
 
-        return streamClaudeResponse(response);
+        return streamClaudeResponse(response, [], lifecycle);
 
     } catch (error) {
+        const aborted = generationAbortResponse(lifecycle);
+        if (aborted) return aborted;
         console.error('Claude 兼容接口错误:', error?.code || error?.name || 'UNKNOWN');
         if (isServerCredentialBlocked(error)) {
             return new Response(
@@ -284,6 +298,8 @@ export async function POST(request) {
             JSON.stringify({ error: '网络连接失败，请检查 API 地址是否正确', code: 'NETWORK_ERROR_CHECK' }),
             { status: 500, headers: { 'Content-Type': 'application/json' } }
         );
+    } finally {
+        if (!lifecycle.streaming) lifecycle.dispose();
     }
 }
 
@@ -323,104 +339,9 @@ function errorResponse(status, errorText = '') {
 }
 
 // ===== 流式转发 Claude SSE 响应（可选前置搜索来源）=====
-function streamClaudeResponse(response, sources = null) {
-    const encoder = new TextEncoder();
-    const decoder = new TextDecoder();
-
-    const stream = new ReadableStream({
-        async start(controller) {
-            // 先发送搜索来源（如果有）
-            if (sources && sources.length > 0) {
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ grounding: sources })}\n\n`));
-            }
-
-            const reader = response.body.getReader();
-            let buffer = '';
-
-            try {
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-
-                    buffer += decoder.decode(value, { stream: true });
-                    const lines = buffer.split('\n');
-                    buffer = lines.pop() || '';
-
-                    for (const line of lines) {
-                        const trimmed = line.trim();
-                        if (!trimmed || trimmed.startsWith(':')) continue;
-
-                        if (trimmed.startsWith('data: ')) {
-                            try {
-                                const json = JSON.parse(trimmed.slice(6));
-                                const eventType = json.type;
-
-                                // 文本内容 delta
-                                if (eventType === 'content_block_delta') {
-                                    const delta = json.delta;
-                                    if (delta?.type === 'text_delta' && delta.text) {
-                                        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: delta.text })}\n\n`));
-                                    }
-                                    // 思维链 delta (extended thinking)
-                                    if (delta?.type === 'thinking_delta' && delta.thinking) {
-                                        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ thinking: delta.thinking })}\n\n`));
-                                    }
-                                }
-
-                                // 消息结束 — 提取 usage（含缓存 token）
-                                if (eventType === 'message_delta') {
-                                    const usage = json.usage;
-                                    if (usage) {
-                                        controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-                                            usage: {
-                                                promptTokens: 0,
-                                                completionTokens: usage.output_tokens || 0,
-                                                totalTokens: usage.output_tokens || 0,
-                                            }
-                                        })}\n\n`));
-                                    }
-                                }
-
-                                // message_start 事件中包含 input tokens + 缓存 tokens
-                                if (eventType === 'message_start') {
-                                    const usage = json.message?.usage;
-                                    if (usage?.input_tokens) {
-                                        const cachedTokens = usage.cache_read_input_tokens || 0;
-                                        controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-                                            usage: {
-                                                promptTokens: usage.input_tokens || 0,
-                                                completionTokens: 0,
-                                                totalTokens: usage.input_tokens || 0,
-                                                cachedTokens,
-                                            }
-                                        })}\n\n`));
-                                    }
-                                }
-
-                                // 消息停止
-                                if (eventType === 'message_stop') {
-                                    controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-                                }
-                            } catch {
-                                // 解析失败的行直接跳过
-                            }
-                        }
-                    }
-                }
-            } catch (err) {
-                console.error('Claude Stream 读取错误:', redactSensitiveText(err?.message || err, 200));
-            } finally {
-                controller.close();
-                reader.releaseLock();
-            }
-        }
-    });
-
-    return new Response(stream, {
-        headers: {
-            'Content-Type': 'text/event-stream',
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
-        },
-    });
+function streamClaudeResponse(response, sources, lifecycle) {
+    return streamAiResponse(response, lifecycle, createClaudeMapper(), sources?.length
+        ? [{ grounding: { searchQueries: [], sources, supports: [] } }] : []);
 }
+
+export const POST = withApiResources('/api/ai/claude', handlePOST);

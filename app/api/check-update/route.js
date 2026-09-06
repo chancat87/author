@@ -1,3 +1,4 @@
+import { withApiResources } from '../../lib/api-resource-guard.js';
 import { NextResponse } from 'next/server';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
@@ -57,7 +58,7 @@ async function fetchLatestVersion() {
     return null; // 所有源都失败
 }
 
-export async function GET() {
+async function handleGET() {
     try {
         // 读取当前版本号
         let currentVersion;
@@ -99,3 +100,5 @@ export async function GET() {
         );
     }
 }
+
+export const GET = withApiResources('/api/check-update', handleGET);

@@ -2,5 +2,17 @@
 # Replace author.example.com with your domain
 
 author.example.com {
-    reverse_proxy author-app:3000
+    # 50 MiB file + up to 2 MiB multipart overhead; the app also counts bytes.
+    request_body {
+        max_size 54525952
+    }
+    reverse_proxy author-app:3000 {
+        # Set the same random (at least 32-character) AUTHOR_PROXY_TOKEN in
+        # Caddy and Author. With no token, Author uses a shared rate bucket.
+        header_up X-Author-Proxy-Token "{$AUTHOR_PROXY_TOKEN:unconfigured}"
+        header_up X-Author-Client-IP {remote_host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up -X-Vercel-Forwarded-For
+    }
 }

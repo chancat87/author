@@ -9,6 +9,7 @@ import { createPortal } from 'react-dom';
 import { promptInput } from '../lib/promptInput';
 import { resolveAiEndpoint } from '../lib/ai-provider-compat';
 import { aiFetch } from '../lib/ai-direct';
+import { readAiEvents } from '../lib/ai-stream.js';
 import { localizeApiError } from '../lib/api-error-i18n';
 import {
     X, Maximize2, Minimize2, BookOpen, Users, MapPin, Globe, Gem, ClipboardList, Ruler,
@@ -418,7 +419,7 @@ function ImageCropper({ imageSrc, onConfirm, onCancel }) {
                     <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{text('拖动选框调整区域，拖动角点缩放', 'Drag the selection to reposition it; drag corners to resize', 'Перетащите область для перемещения, углы - для изменения размера')}</span>
                 </div>
                 <div ref={containerRef} style={{ position: 'relative', display: 'inline-block', maxHeight: '65vh', overflow: 'hidden', borderRadius: 8, lineHeight: 0 }}>
-                    <img ref={imgRef} src={imageSrc} onLoad={onImgLoad}
+                    <img ref={imgRef} src={imageSrc} onLoad={onImgLoad} alt={text('待裁剪的封面', 'Cover to crop', 'Обложка для обрезки')}
                         style={{ maxWidth: '70vw', maxHeight: '65vh', display: 'block', userSelect: 'none', pointerEvents: 'none' }}
                         draggable={false}
                     />
@@ -1111,26 +1112,13 @@ export default function BookInfoPanel() {
                                                         const contentType = res.headers.get('content-type') || '';
                                                         let fullText = '';
                                                         if (contentType.includes('text/event-stream')) {
-                                                            const reader = res.body.getReader();
-                                                            const decoder = new TextDecoder();
-                                                            let buffer = '';
-                                                            while (true) {
-                                                                const { done, value } = await reader.read();
-                                                                if (done) break;
-                                                                buffer += decoder.decode(value, { stream: true });
-                                                                const events = buffer.split('\n\n');
-                                                                buffer = events.pop() || '';
-                                                                for (const event of events) {
-                                                                    const trimmed = event.trim();
-                                                                    if (!trimmed || trimmed === 'data: [DONE]') continue;
-                                                                    if (trimmed.startsWith('data: ')) {
-                                                                        try { const json = JSON.parse(trimmed.slice(6)); if (json.text) fullText += json.text; } catch (_e) {}
-                                                                    }
-                                                                }
+                                                            for await (const json of readAiEvents(res, undefined, text)) {
+                                                                if (json.text) fullText += json.text;
                                                             }
                                                         } else {
                                                             const data = await res.json();
-                                                            fullText = data.text || localizeApiError(data, text) || '';
+                                                            if (!res.ok || data.error) throw new Error(localizeApiError(data, text));
+                                                            fullText = data.text || '';
                                                         }
                                                         const jsonMatch = fullText.match(/\{[\s\S]*\}/);
                                                         if (jsonMatch) {

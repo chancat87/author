@@ -175,7 +175,7 @@ NEXT_PUBLIC_BASE_PATH=/app
 
 ### 桌面客户端用户
 
-前往 [Releases](https://github.com/YuanShiJiLoong/author/releases/latest) 页面下载最新版本安装包，覆盖安装即可。你的数据存储在浏览器/Electron 用户配置中，不会丢失。
+前往 [Releases](https://github.com/YuanShiJiLoong/author/releases/latest) 页面下载最新版本安装包，覆盖安装。数据存储在浏览器/Electron 用户配置中；升级前请导出作品备份，并保留原有访问地址和用户数据目录。
 
 > 💬 无法访问 GitHub？[加入 QQ 交流群：1087016949](https://qm.qq.com/q/wjRDkotw0E)，群文件中下载最新版本。
 

@@ -6,11 +6,17 @@ const path = require('node:path');
 const forbiddenPrefixes = [
   'mobile/',
   'mobile_ios/',
+  'output/',
+  '.tmp/',
+  '.venv/',
 ];
 
 const forbiddenExact = new Set([
   'mobile',
   'mobile_ios',
+  'output',
+  '.tmp',
+  '.venv',
 ]);
 
 const forbiddenRootPatterns = [
@@ -43,7 +49,7 @@ const forbiddenPathPatterns = [
   /(?:^|\/)(?:内部|后端)[^/]*(?:计划|路线)(?:[-_. /]|$)/i,
 ];
 
-function trackedFiles() {
+function repositoryFiles() {
   const repoRoot = process.cwd();
   const result = spawnSync(
     'git',
@@ -52,7 +58,7 @@ function trackedFiles() {
   );
   if (result.error || result.status !== 0) {
     const detail = result.error?.message || result.stderr?.trim() || `exit code ${result.status}`;
-    throw new Error(`Unable to enumerate tracked files: ${detail}`);
+    throw new Error(`Unable to enumerate public candidate files: ${detail}`);
   }
   const output = result.stdout;
   return output.split('\0').filter(Boolean).map((file) => file.replace(/\\/g, '/'));
@@ -84,16 +90,16 @@ function reasonFor(file) {
   return null;
 }
 
-const violations = trackedFiles()
+const violations = repositoryFiles()
   .map((file) => ({ file, reason: reasonFor(file) }))
   .filter((item) => item.reason);
 
 if (violations.length > 0) {
-  console.error('Public repository safety check failed. Remove these tracked files from the public repository:');
+  console.error('Public repository path check failed. These tracked or nonignored new files are not eligible for the public repository:');
   for (const violation of violations) {
     console.error(`- ${violation.file} (${violation.reason})`);
   }
   process.exit(1);
 }
 
-console.log('Public repository safety check passed.');
+console.log('Public repository path check passed (content and history are checked separately by check:secrets).');

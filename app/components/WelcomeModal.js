@@ -5,10 +5,9 @@ import { useAppStore } from '../store/useAppStore';
 import { useI18n } from '../lib/useI18n';
 
 export default function WelcomeModal() {
-    const { language, setLanguage, visualTheme, setVisualTheme, setShowLoginModal } = useAppStore();
+    const { language, setLanguage, visualTheme, setVisualTheme, setShowLoginModal, showWelcomeModal: isVisible, setShowWelcomeModal: setIsVisible } = useAppStore();
     const { t, text } = useI18n();
     const [step, setStep] = useState(1);
-    const [isVisible, setIsVisible] = useState(false);
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
@@ -21,7 +20,7 @@ export default function WelcomeModal() {
                 setStep(2);
             }
         }
-    }, [language, visualTheme]);
+    }, [language, visualTheme, setIsVisible]);
 
     if (!mounted || !isVisible) return null;
 
@@ -51,10 +50,10 @@ export default function WelcomeModal() {
 
     const handleLoginNow = () => {
         setIsVisible(false);
+        setShowLoginModal(true);
         if (!localStorage.getItem('author-onboarding-done')) {
             useAppStore.getState().setStartTour(true);
         }
-        setTimeout(() => setShowLoginModal(true), 300);
     };
 
     return (

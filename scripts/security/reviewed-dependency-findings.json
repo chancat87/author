@@ -1,0 +1,292 @@
+{
+  "scannerVersion": "8.30.1",
+  "description": "Reviewed public constants, incomplete documentation placeholders and JavaScript identifiers. Match exact file path suffix, SHA-256, rule and location. Any file change requires review.",
+  "files": [
+    {
+      "file": "node_modules/@firebase/messaging/dist/esm/index.esm.js",
+      "sha256": "27a9f1892b5aef9ec0816619fe5f3ae5e2f1500301c72afbe59d8f1970dbae58",
+      "findings": [
+        {
+          "rule": "generic-api-key",
+          "line": 25,
+          "endLine": 25,
+          "column": 8,
+          "endColumn": 116,
+          "reason": "firebase-public-vapid-key"
+        }
+      ]
+    },
+    {
+      "file": "node_modules/@firebase/messaging/dist/esm/index.sw.esm.js",
+      "sha256": "b6bc96f48110ae04b8ec01e42cf0d37a525d5e2ffda919e3ccfd2c61f35f9225",
+      "findings": [
+        {
+          "rule": "generic-api-key",
+          "line": 23,
+          "endLine": 23,
+          "column": 8,
+          "endColumn": 116,
+          "reason": "firebase-public-vapid-key"
+        }
+      ]
+    },
+    {
+      "file": "node_modules/@firebase/messaging/dist/index.cjs.js",
+      "sha256": "3cd90f3c66962cbbc789fe338c1784981e71e097d2e099f566aa16e82cd50743",
+      "findings": [
+        {
+          "rule": "generic-api-key",
+          "line": 29,
+          "endLine": 29,
+          "column": 8,
+          "endColumn": 116,
+          "reason": "firebase-public-vapid-key"
+        }
+      ]
+    },
+    {
+      "file": "node_modules/@firebase/messaging/dist/index.sw.cjs",
+      "sha256": "453ec22389771c1ddb26ec92312bf8546bfb13cbc1a3c1d88ef96ca652257071",
+      "findings": [
+        {
+          "rule": "generic-api-key",
+          "line": 27,
+          "endLine": 27,
+          "column": 8,
+          "endColumn": 116,
+          "reason": "firebase-public-vapid-key"
+        }
+      ]
+    },
+    {
+      "file": "node_modules/firebase/firebase-compat.js.map",
+      "sha256": "32882bc2ed682df45ee12f59b1d40f6cc91c02821af5e9adb90e12bf4ba24bfd",
+      "findings": [
+        {
+          "rule": "generic-api-key",
+          "line": 1,
+          "endLine": 1,
+          "column": 961,
+          "endColumn": 988,
+          "reason": "source-map-symbol-name"
+        }
+      ]
+    },
+    {
+      "file": "node_modules/firebase/firebase-messaging-sw.js.map",
+      "sha256": "424676dee58a663da1306a565c5ac4513782dd678cc580dc4b7c11b20b0ab59d",
+      "findings": [
+        {
+          "rule": "generic-api-key",
+          "line": 1,
+          "endLine": 1,
+          "column": 1484,
+          "endColumn": 1511,
+          "reason": "source-map-symbol-name"
+        }
+      ]
+    },
+    {
+      "file": "node_modules/firebase/firebase-messaging.js.map",
+      "sha256": "1a0f7f0b4db02d740c4b97f0639acd826fb0313f6917024695f0e7c526e0cfaa",
+      "findings": [
+        {
+          "rule": "generic-api-key",
+          "line": 1,
+          "endLine": 1,
+          "column": 3368,
+          "endColumn": 3395,
+          "reason": "source-map-symbol-name"
+        }
+      ]
+    },
+    {
+      "file": "node_modules/next/dist/bundle-analyzer/_next/static/chunks/0qgq.-.c2spwh.js",
+      "sha256": "9a9b3ac18409b2b9742e77ae0a241a1e5b051f8bf83ab8720547a2f2691eb6d7",
+      "findings": [
+        {
+          "rule": "generic-api-key",
+          "line": 1,
+          "endLine": 1,
+          "column": 111486,
+          "endColumn": 111540,
+          "reason": "javascript-variable-assignment"
+        },
+        {
+          "rule": "generic-api-key",
+          "line": 1,
+          "endLine": 1,
+          "column": 112624,
+          "endColumn": 112660,
+          "reason": "javascript-variable-assignment"
+        }
+      ]
+    },
+    {
+      "file": "node_modules/next/dist/bundle-analyzer/_next/static/chunks/0u_y6vsc_oa5w.js",
+      "sha256": "36a512a3001526cde3e2feb8900d7ed27d7cdece2956325f5436496444102768",
+      "findings": [
+        {
+          "rule": "generic-api-key",
+          "line": 1,
+          "endLine": 1,
+          "column": 37710,
+          "endColumn": 37737,
+          "reason": "javascript-variable-assignment"
+        }
+      ]
+    },
+    {
+      "file": "node_modules/next/dist/compiled/jsonwebtoken/index.js",
+      "sha256": "056c2dddba96faa35f4dc0740228a241990561290ff3bd5456c7c7dbc5a7a6b9",
+      "findings": [
+        {
+          "rule": "generic-api-key",
+          "line": 1,
+          "endLine": 1,
+          "column": 21509,
+          "endColumn": 21547,
+          "reason": "javascript-variable-assignment"
+        }
+      ]
+    },
+    {
+      "file": "node_modules/next/dist/compiled/next-server/app-page-experimental.runtime.dev.js",
+      "sha256": "9646e73fe8721c6c77b10991989b4303230a208b7088c3edf38bb7792d3a4b32",
+      "findings": [
+        {
+          "rule": "generic-api-key",
+          "line": 50,
+          "endLine": 50,
+          "column": 28174,
+          "endColumn": 28210,
+          "reason": "javascript-variable-assignment"
+        },
+        {
+          "rule": "generic-api-key",
+          "line": 50,
+          "endLine": 50,
+          "column": 774,
+          "endColumn": 828,
+          "reason": "javascript-variable-assignment"
+        }
+      ]
+    },
+    {
+      "file": "node_modules/next/dist/compiled/next-server/app-page-turbo-experimental.runtime.dev.js",
+      "sha256": "7dd81869ccdeb9ec0104f47f967ebf89873af6c148044bbfe8083b965c324227",
+      "findings": [
+        {
+          "rule": "generic-api-key",
+          "line": 50,
+          "endLine": 50,
+          "column": 28071,
+          "endColumn": 28107,
+          "reason": "javascript-variable-assignment"
+        },
+        {
+          "rule": "generic-api-key",
+          "line": 50,
+          "endLine": 50,
+          "column": 671,
+          "endColumn": 725,
+          "reason": "javascript-variable-assignment"
+        }
+      ]
+    },
+    {
+      "file": "node_modules/next/dist/compiled/next-server/app-page-turbo.runtime.dev.js",
+      "sha256": "ff667f0669ea54e35deaad2627597cf2463ed2da0b5a1cebc19e37f6d730f04b",
+      "findings": [
+        {
+          "rule": "generic-api-key",
+          "line": 50,
+          "endLine": 50,
+          "column": 14652,
+          "endColumn": 14688,
+          "reason": "javascript-variable-assignment"
+        },
+        {
+          "rule": "generic-api-key",
+          "line": 50,
+          "endLine": 50,
+          "column": 15924,
+          "endColumn": 15978,
+          "reason": "javascript-variable-assignment"
+        }
+      ]
+    },
+    {
+      "file": "node_modules/next/dist/compiled/next-server/app-page.runtime.dev.js",
+      "sha256": "9e0cd2f6fc6aed36518f50cb100c042ddb7e281b3333ac859cd1ee2199768921",
+      "findings": [
+        {
+          "rule": "generic-api-key",
+          "line": 50,
+          "endLine": 50,
+          "column": 14755,
+          "endColumn": 14791,
+          "reason": "javascript-variable-assignment"
+        },
+        {
+          "rule": "generic-api-key",
+          "line": 50,
+          "endLine": 50,
+          "column": 16027,
+          "endColumn": 16081,
+          "reason": "javascript-variable-assignment"
+        }
+      ]
+    },
+    {
+      "file": "node_modules/next/dist/compiled/node-html-parser/index.js",
+      "sha256": "8c6facd042a250d26ae32a2739b6c86a8e383cca92311320804cd87e2a65ae39",
+      "findings": [
+        {
+          "rule": "generic-api-key",
+          "line": 1,
+          "endLine": 1,
+          "column": 3734,
+          "endColumn": 3779,
+          "reason": "javascript-variable-assignment"
+        },
+        {
+          "rule": "generic-api-key",
+          "line": 1,
+          "endLine": 1,
+          "column": 8955,
+          "endColumn": 9002,
+          "reason": "javascript-variable-assignment"
+        }
+      ]
+    },
+    {
+      "file": "node_modules/next/dist/docs/01-app/02-guides/environment-variables.md",
+      "sha256": "bf33d9fa113f800d5fa40cd638b25b20db52e53772eb09d205386e2ad4cab9aa",
+      "findings": [
+        {
+          "rule": "private-key",
+          "line": 53,
+          "endLine": 60,
+          "column": 17,
+          "endColumn": 47,
+          "reason": "next-docs-incomplete-key-placeholder"
+        }
+      ]
+    },
+    {
+      "file": "node_modules/pdf-parse/lib/pdf.js/v2.0.550/build/pdf.worker.js.map",
+      "sha256": "2491033b8b78e801466640701e2bf08604c54cdbc47ec0e08d42155d6f98175f",
+      "findings": [
+        {
+          "rule": "generic-api-key",
+          "line": 1,
+          "endLine": 1,
+          "column": 35980,
+          "endColumn": 36005,
+          "reason": "source-map-symbol-name"
+        }
+      ]
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, dialog, ipcMain, safeStorage, Menu, session } = require('electron');
+const { app, BrowserWindow, shell, dialog, ipcMain, safeStorage, session } = require('electron');
 const path = require('path');
 const { createHmac, randomBytes, timingSafeEqual } = require('crypto');
 const http = require('http');
@@ -10,6 +10,7 @@ const {
     isTrustedDesktopUrl,
     selectStableDesktopPort,
 } = require('./origin-policy.cjs');
+const { createExitController } = require('./exit-controller.cjs');
 
 // 加载 .env.local（轻量实现，无需 dotenv 依赖）
 (function loadEnvFile() {
@@ -174,6 +175,7 @@ if (!gotTheLock) {
 let mainWindow;
 let splashWindow;
 let serverProcess;
+const exitController = createExitController(() => mainWindow);
 
 const isDev = process.argv.includes('--dev');
 const BASE_PORT = parseInt(process.env.PORT, 10) || 3000;
@@ -447,8 +449,6 @@ ipcMain.on('cloud-session-tokens-delete', (event) => {
 });
 
 function createWindow() {
-    Menu.setApplicationMenu(null);
-
     const openExternalHttpUrl = (rawUrl) => {
         try {
             const parsed = new URL(rawUrl);
@@ -479,11 +479,6 @@ function createWindow() {
         backgroundColor: '#faf8f5',
         show: false,
     });
-
-    // Windows 原生标题栏偶发闪烁通常来自菜单栏显隐或网页标题反复同步。
-    // 桌面端不需要原生菜单，窗口标题也保持固定，避免触发系统标题栏重绘。
-    mainWindow.setMenu(null);
-    mainWindow.setMenuBarVisibility(false);
 
     mainWindow.loadURL(getServerUrl());
 
@@ -589,6 +584,7 @@ function createWindow() {
                 cancelId: 2,
             };
             const btnIdx = dialog.showMessageBoxSync(mainWindow, options);
+            exitController.approveNativeExit();
             if (btnIdx === 0) {
                 app.relaunch();
                 app.quit();
@@ -619,6 +615,7 @@ function createWindow() {
             showLogFileInFolder(reportPath || logFile);
         } else if (btnIdx === 2) {
             writeCrashReport('renderer-force-restart', { url: mainWindow.webContents.getURL() });
+            exitController.approveNativeExit();
             app.relaunch();
             app.quit();
         }
@@ -628,28 +625,18 @@ function createWindow() {
         log('[Health] Renderer process became responsive again.');
     });
 
-    let isForceClosing = false;
-
     // 拦截关闭事件，询问是否需要同步
-    mainWindow.on('close', (e) => {
-        if (!isForceClosing && mainWindow && !mainWindow.isDestroyed()) {
-            e.preventDefault();
-            mainWindow.webContents.send('confirm-exit-sync');
-        }
-    });
+    mainWindow.on('close', exitController.handleClose);
 
     ipcMain.on('allow-close', (event) => {
         try { assertTrustedIpcSender(event); } catch { return; }
-        isForceClosing = true;
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.close();
-        }
+        exitController.approve();
     });
 
     // 用户在退出弹窗点击"取消"时，重置状态，允许下次再弹窗
     ipcMain.on('cancel-close', (event) => {
         try { assertTrustedIpcSender(event); } catch { return; }
-        isForceClosing = false;
+        exitController.cancel();
     });
 
     mainWindow.on('closed', () => {
@@ -1271,6 +1258,16 @@ function setupAutoUpdater() {
     autoUpdater.autoInstallOnAppQuit = true;  // 退出时自动安装已下载的更新
     autoUpdater.logger = { info: log, warn: log, error: log, debug: log };
 
+    let installingUpdate = false;
+    const requestUpdateInstall = () => exitController.request(() => {
+        installingUpdate = true;
+        try {
+            autoUpdater.quitAndInstall(false, true);
+        } catch (error) {
+            autoUpdater.emit('error', error);
+        }
+    });
+
     // ---- 事件转发到渲染进程 ----
     autoUpdater.on('update-available', (info) => {
         log(`Update available: v${info.version}`);
@@ -1307,6 +1304,10 @@ function setupAutoUpdater() {
     });
 
     autoUpdater.on('error', (err) => {
+        if (installingUpdate) {
+            installingUpdate = false;
+            exitController.cancel();
+        }
         log('Auto-updater error: ' + err.message);
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('update-error', {
@@ -1342,16 +1343,9 @@ function setupAutoUpdater() {
         assertTrustedIpcSender(event);
         try {
             log('download-and-install-update: starting download...');
-            // 注册一次性监听器，下载完成后自动安装
-            autoUpdater.once('update-downloaded', () => {
-                log('download-and-install-update: download complete, quitting and installing...');
-                if (serverProcess) {
-                    serverProcess.kill();
-                    serverProcess = null;
-                }
-                autoUpdater.quitAndInstall(false, true);
-            });
             await autoUpdater.downloadUpdate();
+            log('download-and-install-update: download complete, requesting saved exit...');
+            requestUpdateInstall();
             return { success: true };
         } catch (err) {
             log('download-and-install-update error: ' + err.message);
@@ -1362,11 +1356,7 @@ function setupAutoUpdater() {
     ipcMain.handle('quit-and-install', (event) => {
         assertTrustedIpcSender(event);
         log('User requested quit-and-install');
-        if (serverProcess) {
-            serverProcess.kill();
-            serverProcess = null;
-        }
-        autoUpdater.quitAndInstall(false, true); // isSilent=false, isForceRunAfter=true
+        requestUpdateInstall();
     });
 
     // 窗口显示后 5 秒自动检查一次更新
@@ -1386,10 +1376,13 @@ app.on('second-instance', () => {
 });
 
 app.on('window-all-closed', () => {
-    if (serverProcess) serverProcess.kill();
     app.quit();
 });
 
-app.on('before-quit', () => {
-    if (serverProcess) serverProcess.kill();
+// before-quit runs before the cancelable close/save handshake. Stop the backend
+// only after all windows have closed, so cancel/save/sync IPC stays trusted.
+app.on('will-quit', () => {
+    const stoppedServer = serverProcess;
+    serverProcess = null;
+    if (stoppedServer) stoppedServer.kill();
 });

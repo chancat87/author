@@ -1,3 +1,4 @@
+import { withApiResources } from '../../lib/api-resource-guard.js';
 import { NextResponse } from 'next/server';
 import { proxyFetch } from '../../lib/proxy-fetch';
 import { rotateKey } from '../../lib/keyRotator';
@@ -11,7 +12,7 @@ export const runtime = 'nodejs';
 // 2. 供应商专用接口（DeepSeek/SiliconFlow/OpenRouter/Moonshot）
 // 3. 都失败 → 返回 unsupported
 
-export async function POST(request) {
+async function handlePOST(request) {
     try {
         let { provider, apiKey, baseUrl, proxyUrl } = await request.json();
         apiKey = rotateKey(apiKey);
@@ -266,3 +267,5 @@ async function fetchWithTimeout(url, options, timeoutMs = 8000, proxyUrl) {
         clearTimeout(timer);
     }
 }
+
+export const POST = withApiResources('/api/balance', handlePOST);
