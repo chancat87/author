@@ -108,6 +108,8 @@ const nextConfig = {
   outputFileTracingIncludes: {
     '*': [
       'node_modules/next/dist/**/*',
+      // Vercel's Next.js launcher loads these helpers before route code runs.
+      ...(isVercelBuild ? ['node_modules/@swc/helpers/**/*', 'node_modules/tslib/**/*'] : []),
     ],
     '/api/parse-file': [
       './app/lib/file-parser-child.cjs',
