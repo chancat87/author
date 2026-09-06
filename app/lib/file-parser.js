@@ -11,14 +11,16 @@ const MAX_TEXT_CHARS = 4 * 1024 * 1024;
 // the standalone child and its parser dependencies in the deployed output.
 const { fork } = process.getBuiltinModule('node:child_process');
 
-async function residentBytes(pid) {
+async function residentBytes(pid, { initial = false } = {}) {
     if (process.platform === 'linux') {
         const status = await readFile(`/proc/${pid}/status`, 'utf8');
         const match = status.match(/^VmRSS:\s+(\d+)\s+kB/m);
         if (!match) throw new Error('Cannot read parser memory');
         return Number(match[1]) * 1024;
     }
-    const options = { windowsHide: true, timeout: 2000, maxBuffer: 4096 };
+    // A cold PowerShell startup can exceed two seconds. No document is sent
+    // until the initial check succeeds; the overall parsing deadline still applies.
+    const options = { windowsHide: true, timeout: initial && process.platform === 'win32' ? 8000 : 2000, maxBuffer: 4096 };
     const { stdout } = process.platform === 'win32'
         ? await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `(Get-Process -Id ${pid} -ErrorAction Stop).WorkingSet64`], options)
         : await run('ps', ['-o', 'rss=', '-p', String(pid)], options);
@@ -55,11 +57,11 @@ export async function parseFileIsolated(buffer, format, {
         };
         const abort = () => fail('REQUEST_CANCELLED', 499, 'Request cancelled');
         const timer = setTimeout(() => fail('PARSE_TIMEOUT', 408, 'File parsing timed out'), timeoutMs);
-        const inspectMemory = async () => {
+        const inspectMemory = async (initial = false) => {
             if (sampling || finished || failure) return;
             sampling = true;
             try {
-                if (await sampleMemory(child.pid) > maxResidentBytes) fail('PARSE_RESOURCE_LIMIT', 422, 'File exceeds parser resource limits');
+                if (await sampleMemory(child.pid, { initial }) > maxResidentBytes) fail('PARSE_RESOURCE_LIMIT', 422, 'File exceeds parser resource limits');
             } catch {
                 if (!finished && child.exitCode === null && child.signalCode === null) fail('PARSE_UNAVAILABLE', 503, 'Parser memory isolation is unavailable');
             } finally { sampling = false; }
@@ -86,7 +88,7 @@ export async function parseFileIsolated(buffer, format, {
         child.once('exit', complete);
         signal?.addEventListener('abort', abort, { once: true });
         if (signal?.aborted) abort();
-        else inspectMemory().then(() => {
+        else inspectMemory(true).then(() => {
             if (!failure && !finished) child.send({ format, buffer }, error => { if (error) fail('PARSE_UNAVAILABLE', 503, 'Parser communication failed'); });
         });
     });

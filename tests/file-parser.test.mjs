@@ -33,6 +33,23 @@ test('cancelled parse terminates its child', async () => {
     assert.equal((await result).code, 'REQUEST_CANCELLED');
 });
 
+test('initial memory measurement failure prevents parsing and leaves the next parse available', async () => {
+    await assert.rejects(parseFileIsolated(makePdf(), 'pdf', {
+        sampleMemory: async () => { throw new Error('Synthetic OS measurement failure'); },
+    }), { code: 'PARSE_UNAVAILABLE' });
+    assert.match(await parseFileIsolated(makePdf(), 'pdf'), /synthetic PDF/);
+});
+
+test('the parsing deadline includes a slow initial memory measurement', async () => {
+    let releaseMeasurement;
+    const pendingMeasurement = new Promise(resolve => { releaseMeasurement = resolve; });
+    try {
+        await assert.rejects(parseFileIsolated(makePdf(), 'pdf', {
+            timeoutMs: 100, sampleMemory: () => pendingMeasurement,
+        }), { code: 'PARSE_TIMEOUT' });
+    } finally { releaseMeasurement(0); }
+});
+
 test('oversized output and child crashes cannot return success', async () => {
     for (const format of ['oversized', 'crash']) {
         await assert.rejects(parseFileIsolated(Buffer.alloc(0), format, { workerPath, sampleMemory: async () => 0 }), { code: 'PARSE_RESOURCE_LIMIT' });

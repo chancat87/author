@@ -41,6 +41,27 @@ jobs:
       - name: Verify Electron package scanner
         run: npm run test:electron-secret-scanner
 
+  windows:
+    name: author-windows-verify
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test on Windows
+        run: npm test
+
   secrets:
     name: author-secret-scan
     runs-on: ubuntu-latest
@@ -93,12 +114,13 @@ jobs:
   required:
     name: author-required
     if: always()
-    needs: [verify, secrets, docker-smoke]
+    needs: [verify, windows, secrets, docker-smoke]
     runs-on: ubuntu-latest
     steps:
       - name: Require every verification job to succeed
         env:
           VERIFY: ${{ needs.verify.result }}
+          WINDOWS: ${{ needs.windows.result }}
           SECRETS: ${{ needs.secrets.result }}
           DOCKER: ${{ needs.docker-smoke.result }}
-        run: test "$VERIFY" = success && test "$SECRETS" = success && test "$DOCKER" = success
+        run: test "$VERIFY" = success && test "$WINDOWS" = success && test "$SECRETS" = success && test "$DOCKER" = success

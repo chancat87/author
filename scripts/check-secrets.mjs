@@ -113,6 +113,10 @@ export async function checkSecrets(mode, input, root = projectRoot, { alreadyExt
     const report = { scanner: `gitleaks ${pin.version}`, scope, status: blockingFindings.length ? 'findings' : 'passed', findings, expectedRuntimeKeys, reviewedDependencyFindings, blockingFindings };
     writeFileSync(path.join(reportDirectory, 'summary.json'), `${JSON.stringify(report, null, 2)}\n`);
     console.log(`Secret scan (${mode}): ${blockingFindings.length} blocking finding(s), ${expectedRuntimeKeys.length} expected Next.js runtime key(s), ${reviewedDependencyFindings.length} reviewed dependency finding(s). Metadata report: ${path.join(reportDirectory, 'summary.json')}`);
+    for (const finding of blockingFindings) {
+        // Report locations only; never print the matched value or surrounding text.
+        console.log(JSON.stringify({ rule: finding.rule, file: path.relative(mode === 'artifact' ? scope.directory : target, finding.file).replaceAll('\\', '/'), line: finding.line, column: finding.column }));
+    }
     return report;
 }
 

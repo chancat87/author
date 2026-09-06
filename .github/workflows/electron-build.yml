@@ -22,6 +22,11 @@ on:
     tags:
       - 'v1.2.*'
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Publish the verified installer to a GitHub release
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -142,6 +147,7 @@ jobs:
           fi
 
       - name: Create Release
+        if: github.event_name == 'push' || inputs.publish_release
         uses: softprops/action-gh-release@c12583777ecdfd3be55c69cf75464299dc01057e # v3
         with:
           name: Author ${{ github.ref_name }} — ${{ steps.notes.outputs.title_desc }}

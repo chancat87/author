@@ -20,6 +20,11 @@ on:
     tags:
       - 'v1.2.*'
   workflow_dispatch:
+    inputs:
+      publish_image:
+        description: Publish the verified image to Docker Hub
+        type: boolean
+        default: false
 
 jobs:
   verify:
@@ -98,12 +103,14 @@ jobs:
         run: npm run check:secrets:docker -- "yuanshijiloong/author:${IMAGE_VERSION}"
 
       - name: Login to Docker Hub
+        if: github.event_name == 'push' || inputs.publish_image
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Push the tested image
+        if: github.event_name == 'push' || inputs.publish_image
         env:
           IMAGE_VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
