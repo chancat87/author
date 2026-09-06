@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { git, repositoryFiles } from '../../scripts/repository-files.mjs';
 import { scanWithGitleaks, snapshotSource, checkSecrets } from '../../scripts/check-secrets.mjs';
 import { installGitleaks, installArtifactConfig } from '../../scripts/security/gitleaks.mjs';
-import { expectedNextRuntimeKey, expectedFirebaseClientKey } from '../../scripts/security/artifact-policy.mjs';
+import { expectedNextRuntimeKey } from '../../scripts/security/artifact-policy.mjs';
 
 // Generated, never valid credentials. Fixtures and metadata stay in the ignored workspace.
 const fixtures = path.resolve('.tmp/secret-scanner-tests');
@@ -108,34 +108,4 @@ test('only exact unused Next.js runtime fields are classified; adjacent credenti
     actions.node.syntheticAction = {};
     writeFileSync(manifest, JSON.stringify(actions, null, 2));
     assert.equal(findings.filter(f => expectedNextRuntimeKey(f, artifact)).length, 0, 'enabled Server Actions must force a policy review');
-});
-
-test('Firebase classification requires the exact supplied web config and preserves adjacent key findings', () => {
-    const artifact = directory('firebase-artifact');
-    const chunks = path.join(artifact, '.next/static/immutable/chunks');
-    mkdirSync(chunks, { recursive: true });
-    const key = 'AIza' + randomBytes(26).toString('base64url').slice(0, 35);
-    const otherKey = 'AIza' + randomBytes(26).toString('base64url').slice(0, 35);
-    const config = { apiKey: key, authDomain: 'synthetic.firebaseapp.com', projectId: 'synthetic', storageBucket: 'synthetic.firebasestorage.app', messagingSenderId: '123456789', appId: '1:123456789:web:0123456789abcdef' };
-    const env = Object.fromEntries(['API_KEY', 'AUTH_DOMAIN', 'PROJECT_ID', 'STORAGE_BUCKET', 'MESSAGING_SENDER_ID', 'APP_ID'].map((name, index) => [`NEXT_PUBLIC_FIREBASE_${name}`, Object.values(config)[index]]));
-    const bundle = `const label="合成";const config=${JSON.stringify(config)};const extra="${otherKey}";const token="${canary}";`;
-    writeFileSync(path.join(chunks, 'config.js'), bundle);
-    const serverChunks = path.join(artifact, '.next/server/chunks/ssr');
-    mkdirSync(serverChunks, { recursive: true });
-    writeFileSync(path.join(serverChunks, 'config.js'), bundle.replace(/"(apiKey|authDomain|projectId|storageBucket|messagingSenderId|appId)":/g, '$1:'));
-    writeFileSync(path.join(artifact, 'outside.js'), bundle);
-    const findings = scan('artifact', artifact, 'firebase-report');
-    const reviewed = findings.filter(finding => expectedFirebaseClientKey(finding, artifact, env));
-    assert.equal(reviewed.length, 2);
-    assert.ok(findings.some(finding => finding.rule === 'gcp-api-key' && !reviewed.includes(finding)));
-    assert.ok(findings.some(finding => finding.rule === 'github-pat' && !reviewed.includes(finding)));
-    assert.equal(findings.filter(finding => expectedFirebaseClientKey(finding, artifact, {})).length, 0);
-    assert.equal(findings.filter(finding => expectedFirebaseClientKey(finding, artifact, { ...env, NEXT_PUBLIC_FIREBASE_PROJECT_ID: 'different' })).length, 0);
-    assert.equal(findings.filter(finding => expectedFirebaseClientKey(finding, artifact, { ...env, NEXT_PUBLIC_FIREBASE_API_KEY: otherKey })).length, 0);
-    assert.equal(expectedFirebaseClientKey({ ...reviewed[0], column: reviewed[0].column + 1 }, artifact, env), false);
-    assert.equal(expectedFirebaseClientKey({ ...reviewed[0], endColumn: reviewed[0].endColumn + 100 }, artifact, env), false);
-    writeFileSync(path.join(chunks, 'config.js'), `const apiKey="${key}";`);
-    writeFileSync(path.join(serverChunks, 'config.js'), `const apiKey="${key}";`);
-    const noConfig = scan('artifact', artifact, 'firebase-no-config-report');
-    assert.equal(noConfig.filter(finding => expectedFirebaseClientKey(finding, artifact, env)).length, 0);
 });

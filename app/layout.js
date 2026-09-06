@@ -5,7 +5,6 @@ import { BASE_PATH, apiPath } from './lib/api-base';
 import { useEffect, useState } from "react";
 import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/next';
-import FirebaseAnalytics from './components/FirebaseAnalytics';
 
 // 内联脚本：在 HTML 解析阶段同步读取 theme，避免 hydration 不匹配和闪烁
 const themeInitScript = `
@@ -44,7 +43,6 @@ export default function RootLayout({ children }) {
       </head>
       <body suppressHydrationWarning>
         {children}
-        <FirebaseAnalytics />
         {/* Vercel 统计仅在 Vercel 平台部署时有意义;其余部署(官方 /app、自托管、桌面)不加载其脚本 */}
         {process.env.NEXT_PUBLIC_VERCEL_URL ? (
           <>

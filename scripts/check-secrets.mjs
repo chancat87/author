@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { git, repositoryFiles } from './repository-files.mjs';
 import { installGitleaks, installArtifactConfig, pin } from './security/gitleaks.mjs';
-import { expectedNextRuntimeKey, expectedFirebaseClientKey } from './security/artifact-policy.mjs';
+import { expectedNextRuntimeKey } from './security/artifact-policy.mjs';
 import { snapshotArtifact, writeArtifactConfig } from './security/artifact-snapshot.mjs';
 import { createDependencyReviewer } from './security/reviewed-dependencies.mjs';
 
@@ -95,10 +95,9 @@ export async function checkSecrets(mode, input, root = projectRoot, { alreadyExt
     }
     const findings = scanWithGitleaks(executable, { mode, target, reportDirectory });
     const expectedRuntimeKeys = mode === 'artifact' ? findings.filter(finding => expectedNextRuntimeKey(finding, target)) : [];
-    const expectedPublicClientKeys = mode === 'artifact' ? findings.filter(finding => expectedFirebaseClientKey(finding, target)) : [];
     const reviewDependency = artifactFiles ? createDependencyReviewer(artifactFiles) : () => false;
     const reviewedReasons = new Map(findings.map(finding => [finding, reviewDependency(finding)]).filter(([, reason]) => reason));
-    const blockingFindings = findings.filter(finding => !expectedRuntimeKeys.includes(finding) && !expectedPublicClientKeys.includes(finding) && !reviewedReasons.has(finding));
+    const blockingFindings = findings.filter(finding => !expectedRuntimeKeys.includes(finding) && !reviewedReasons.has(finding));
     if (artifactFiles) {
         const originalPaths = new Map(artifactFiles.map(file => [path.resolve(file.snapshot), file.source]));
         for (const finding of findings) {
@@ -111,9 +110,9 @@ export async function checkSecrets(mode, input, root = projectRoot, { alreadyExt
         }
     }
     const reviewedDependencyFindings = [...reviewedReasons].map(([finding, reason]) => ({ ...finding, reason }));
-    const report = { scanner: `gitleaks ${pin.version}`, scope, status: blockingFindings.length ? 'findings' : 'passed', findings, expectedRuntimeKeys, expectedPublicClientKeys, reviewedDependencyFindings, blockingFindings };
+    const report = { scanner: `gitleaks ${pin.version}`, scope, status: blockingFindings.length ? 'findings' : 'passed', findings, expectedRuntimeKeys, reviewedDependencyFindings, blockingFindings };
     writeFileSync(path.join(reportDirectory, 'summary.json'), `${JSON.stringify(report, null, 2)}\n`);
-    console.log(`Secret scan (${mode}): ${blockingFindings.length} blocking finding(s), ${expectedRuntimeKeys.length} expected Next.js runtime key(s), ${expectedPublicClientKeys.length} verified public Firebase client key(s), ${reviewedDependencyFindings.length} reviewed dependency finding(s). Metadata report: ${path.join(reportDirectory, 'summary.json')}`);
+    console.log(`Secret scan (${mode}): ${blockingFindings.length} blocking finding(s), ${expectedRuntimeKeys.length} expected Next.js runtime key(s), ${reviewedDependencyFindings.length} reviewed dependency finding(s). Metadata report: ${path.join(reportDirectory, 'summary.json')}`);
     for (const finding of blockingFindings) {
         // Report locations only; never print the matched value or surrounding text.
         console.log(JSON.stringify({ rule: finding.rule, file: path.relative(mode === 'artifact' ? scope.directory : target, finding.file).replaceAll('\\', '/'), line: finding.line, column: finding.column }));

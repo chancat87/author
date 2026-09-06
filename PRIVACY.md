@@ -56,13 +56,10 @@ To understand overall product usage, discover and fix defects, and improve stabi
 
 | Service (provider) | Applicable platforms | Data collected | Purpose | Data location |
 |---|---|---|---|---|
-| Firebase Analytics (Google) | Web version, desktop version, mobile app | App-open events, page/screen paths, app version numbers, coarse device and system categories | Understanding overall usage | Outside mainland China (Google) |
-| Firebase Crashlytics (Google) | Mobile app | Crash stacks, device model and system version, app runtime state at the time of the crash | Locating and fixing crashes | Outside mainland China (Google) |
-| Firebase Performance (Google) | Mobile app | Metrics such as app startup time, network request latency, and page rendering performance | Monitoring and optimizing performance | Outside mainland China (Google) |
 | Vercel Analytics (Vercel) | Only web versions hosted on the Vercel platform | Page views, referrers, coarse geographic region (country/region level) | Understanding access overview | Outside mainland China (Vercel) |
 | Vercel Speed Insights (Vercel) | Only web versions hosted on the Vercel platform | Page load and interaction performance metrics | Monitoring web performance | Outside mainland China (Vercel) |
 
-The above services process data in accordance with the respective third parties' own privacy policies, and the related data may be stored on servers outside mainland China. The data collected by these services consists solely of aggregate-level operational data; it does not involve your creative content, API Keys, or synced data, is by default not associated with your account identity, and is not used to profile you as an individual or to serve advertising. It should be specifically noted that the official web version at free.author2.com/app does **not** load the Vercel statistics services; we also plan, in step with the migration away from legacy Firebase, to gradually reduce our reliance on the above overseas services. If we adjust the way we collect statistics, we will update this Policy and inform you.
+These services process data under their own privacy policies and may store it outside mainland China. They operate only in web deployments hosted on Vercel. The current desktop and mobile clients do not load the third-party statistics and diagnostics SDKs listed in this section. These services are not used to upload your creative content, API Keys, or synced data, associate visits with your account identity, or serve advertising. The official web version at free.author2.com/app does not load Vercel statistics services. If our statistics practices change, we will update this Policy and inform you.
 
 ### (6) Special Notes on AI Features
 
@@ -96,7 +93,7 @@ The above services process data in accordance with the respective third parties'
 | Cloud infrastructure provider (Tencent Cloud) | Account information, Synced Content, network logs | Providing server and storage infrastructure | Within mainland China |
 | Email delivery service | Email address, verification codes | Sending registration verification codes and service notices; **the delivery path may pass through nodes in Hong Kong, China** | See left |
 | Legacy cloud sync (Google Firebase, **migration transition period**) | Legacy Firebase user identifier (UID), registration email, the display name and avatar you previously obtained via third-party login, login provider identifier, historical sync data | Migration and service continuity (see Section 8 for details) | **Outside mainland China** (Google) |
-| Statistics and diagnostics services (Google Firebase, Vercel, etc.) | Aggregate-level operational, crash, and performance data | Understanding usage, fixing defects, optimizing performance (see Section (5) for the details of each service) | **Outside mainland China** |
+| Statistics and diagnostics services (Vercel) | Aggregate-level website usage and performance data | Understanding usage, fixing defects, optimizing performance (see Section (5) for the details of each service) | **Outside mainland China** |
 | Code hosting (GitHub) | None of your personal information is involved | Publishing open-source code | Outside mainland China |
 
 For entrusted processors, we agree with them on data protection obligations, requiring them to process personal information in accordance with our instructions, this Policy, and the corresponding confidentiality and security measures.

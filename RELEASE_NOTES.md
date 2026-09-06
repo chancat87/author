@@ -14,11 +14,13 @@
 - 修复 Windows 源码部署“一键更新”启动 npm 时可能出现的错误。
 - 更新桌面运行时与相关依赖，完善构建检查及自部署入口配置。
 - 更新多语言保存、快照恢复和升级说明。
+- 精简后台统计依赖，同步更新隐私说明。
 
 #### Android 端
 
 - 调整 AI 聊天提示的显示时长与排队处理，减少重复提示和旧提示持续堆积。
 - 改进键盘开合时输入框与发送按钮的布局，并统一复制等操作的提示反馈。
+- 精简应用启动和后台诊断依赖。
 
 #### 使用提示
 
@@ -42,11 +44,13 @@
 - Fixed npm startup errors in the Windows source-deployment update flow.
 - Updated the desktop runtime and dependencies, with improved build checks and self-hosted ingress configuration.
 - Updated multilingual guidance for saving, snapshot recovery, and upgrades.
+- Reduced background analytics dependencies and updated the privacy information.
 
 #### Android
 
 - Adjusted AI chat notification timing and queue handling to reduce repeated and lingering messages.
 - Improved input and send-button layout when the keyboard opens or closes, with consistent feedback for actions such as copying messages.
+- Simplified app startup and background diagnostics dependencies.
 
 #### Usage Notes
 
